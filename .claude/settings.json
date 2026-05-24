@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker-compose *)",
+      "Bash(docker-compose exec web python manage.py *)",
+      "Bash(find /Users/avinesh/Projects/GymApp *)",
+      "Bash(grep * /Users/avinesh/Projects/GymApp/*)"
+    ]
+  }
+}

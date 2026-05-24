@@ -1,0 +1,106 @@
+{
+  "name": "CoverRequest",
+  "type": "object",
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "description": "Reference to TimetableEvent"
+    },
+    "event_details": {
+      "type": "object",
+      "description": "Snapshot of event info for display"
+    },
+    "original_instructor_id": {
+      "type": "string"
+    },
+    "original_instructor_name": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "open",
+        "offered",
+        "accepted",
+        "expired",
+        "cancelled",
+        "filled_by_admin"
+      ],
+      "default": "open"
+    },
+    "urgency": {
+      "type": "string",
+      "enum": [
+        "low",
+        "medium",
+        "high",
+        "critical"
+      ],
+      "default": "medium"
+    },
+    "eligible_instructor_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Computed eligible instructors"
+    },
+    "current_offer_tier": {
+      "type": "number",
+      "default": 1
+    },
+    "offers_sent": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "instructor_id": {
+            "type": "string"
+          },
+          "instructor_name": {
+            "type": "string"
+          },
+          "sent_at": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "number"
+          },
+          "response": {
+            "type": "string"
+          },
+          "response_at": {
+            "type": "string"
+          },
+          "decline_reason": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "accepted_by_instructor_id": {
+      "type": "string"
+    },
+    "accepted_by_instructor_name": {
+      "type": "string"
+    },
+    "accepted_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "bonus_amount": {
+      "type": "number",
+      "description": "Optional bonus for hard-to-fill shifts"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "expires_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "event_id"
+  ]
+}

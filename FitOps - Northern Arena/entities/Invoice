@@ -1,0 +1,123 @@
+{
+  "name": "Invoice",
+  "type": "object",
+  "properties": {
+    "instructor_id": {
+      "type": "string",
+      "description": "Reference to Staff"
+    },
+    "instructor_name": {
+      "type": "string"
+    },
+    "invoice_number": {
+      "type": "string"
+    },
+    "period_start": {
+      "type": "string",
+      "format": "date"
+    },
+    "period_end": {
+      "type": "string",
+      "format": "date"
+    },
+    "total_amount": {
+      "type": "number",
+      "description": "Computed total"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "draft",
+        "submitted",
+        "manager_approved",
+        "payroll_approved",
+        "paid",
+        "rejected"
+      ],
+      "default": "draft"
+    },
+    "line_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "event_id": {
+            "type": "string"
+          },
+          "class_type_name": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string"
+          },
+          "time": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "rate": {
+            "type": "number"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "amount": {
+            "type": "number"
+          },
+          "attendance_count": {
+            "type": "number"
+          },
+          "is_cover": {
+            "type": "boolean"
+          },
+          "bonus_amount": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "attachment_url": {
+      "type": "string",
+      "description": "Uploaded invoice PDF"
+    },
+    "manager_approver_id": {
+      "type": "string"
+    },
+    "manager_approver_name": {
+      "type": "string"
+    },
+    "manager_approved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payroll_approver_id": {
+      "type": "string"
+    },
+    "payroll_approver_name": {
+      "type": "string"
+    },
+    "payroll_approved_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "paid_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "payment_reference": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "rejection_reason": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "instructor_id",
+    "period_start",
+    "period_end"
+  ]
+}

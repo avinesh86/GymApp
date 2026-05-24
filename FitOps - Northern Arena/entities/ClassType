@@ -1,0 +1,107 @@
+{
+  "name": "ClassType",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Class name (e.g., F2 Strength, Yoga)"
+    },
+    "description": {
+      "type": "string"
+    },
+    "duration_minutes": {
+      "type": "number",
+      "default": 60
+    },
+    "location": {
+      "type": "string",
+      "description": "Default studio/location"
+    },
+    "required_qualifications": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Required tags/certifications to teach"
+    },
+    "red_min": {
+      "type": "number",
+      "default": 0,
+      "description": "Min attendance for red (below this is critical)"
+    },
+    "amber_min": {
+      "type": "number",
+      "default": 5,
+      "description": "Min attendance for amber"
+    },
+    "green_min": {
+      "type": "number",
+      "default": 10,
+      "description": "Min attendance for green"
+    },
+    "purple_min": {
+      "type": "number",
+      "default": 20,
+      "description": "Min attendance for purple (excellent)"
+    },
+    "attendance_required": {
+      "type": "boolean",
+      "default": true,
+      "description": "Whether attendance submission is required"
+    },
+    "cover_lead_time_hours": {
+      "type": "number",
+      "default": 24,
+      "description": "Minimum hours notice for cover requests"
+    },
+    "color": {
+      "type": "string",
+      "default": "#6366f1",
+      "description": "Display color for calendar"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "inactive"
+      ],
+      "default": "active"
+    },
+    "bonus_rules": {
+      "type": "array",
+      "description": "Automatic bonus rules applied during invoice generation",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "Label shown on invoice (e.g. Full House Bonus)"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "attendance_threshold",
+              "flat_bonus",
+              "per_head_above"
+            ],
+            "description": "attendance_threshold: bonus when attendance >= threshold; flat_bonus: always added; per_head_above: per-head rate for attendance above threshold"
+          },
+          "threshold": {
+            "type": "number",
+            "description": "Minimum attendance to trigger (for threshold types)"
+          },
+          "amount": {
+            "type": "number",
+            "description": "Bonus amount (fixed or per-head)"
+          }
+        }
+      }
+    }
+  },
+  "required": [
+    "name"
+  ]
+}

@@ -1,0 +1,216 @@
+{
+  "name": "TimetableEvent",
+  "type": "object",
+  "properties": {
+    "class_type_id": {
+      "type": "string",
+      "description": "Reference to ClassType"
+    },
+    "class_type_name": {
+      "type": "string",
+      "description": "Denormalized class name for display"
+    },
+    "start_datetime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "end_datetime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "location": {
+      "type": "string"
+    },
+    "site": {
+      "type": "string",
+      "description": "Site/branch name for multi-site organisations (e.g. Main Site, North Branch)"
+    },
+    "assigned_instructor_id": {
+      "type": "string",
+      "description": "Reference to Staff"
+    },
+    "assigned_instructor_name": {
+      "type": "string",
+      "description": "Denormalized instructor name"
+    },
+    "original_instructor_id": {
+      "type": "string",
+      "description": "Original instructor before cover"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "scheduled",
+        "unfilled",
+        "needs_cover",
+        "covered",
+        "cancelled",
+        "completed"
+      ],
+      "default": "scheduled"
+    },
+    "archive_status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "closed",
+        "archived"
+      ],
+      "default": "active",
+      "description": "active = normal; closed = 4-12 weeks past (held for reporting); archived = 12+ weeks past (excluded from live queries)"
+    },
+    "archived_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when record was archived"
+    },
+    "attendance_count": {
+      "type": "number",
+      "description": "Submitted attendance count. Null means not yet recorded. 0 is a valid recorded count."
+    },
+    "attendance_status": {
+      "type": "string",
+      "enum": [
+        "recorded",
+        "not_recorded"
+      ],
+      "description": "recorded = a count was submitted (including 0); not_recorded = explicitly marked as no attendance taken"
+    },
+    "attendance_submitted_by": {
+      "type": "string"
+    },
+    "attendance_submitted_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "viability_color": {
+      "type": "string",
+      "enum": [
+        "red",
+        "amber",
+        "green",
+        "purple",
+        "pending"
+      ],
+      "default": "pending",
+      "description": "Computed from attendance vs thresholds"
+    },
+    "amber_min": {
+      "type": "number",
+      "description": "Per-event override: min attendance for amber."
+    },
+    "green_min": {
+      "type": "number",
+      "description": "Per-event override: min attendance for green."
+    },
+    "purple_min": {
+      "type": "number",
+      "description": "Per-event override: min attendance for purple (excellent)."
+    },
+    "internal_notes": {
+      "type": "string",
+      "description": "Admin-only notes"
+    },
+    "instructor_notes": {
+      "type": "string",
+      "description": "Notes visible to instructor"
+    },
+    "cancellation_reason": {
+      "type": "string"
+    },
+    "is_recurring": {
+      "type": "boolean",
+      "default": false
+    },
+    "recurring_pattern_id": {
+      "type": "string",
+      "description": "Link to recurring pattern if applicable"
+    }
+  },
+  "required": [
+    "class_type_id",
+    "start_datetime",
+    "end_datetime"
+  ],
+  "rls": {
+    "create": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "owner"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "gym_manager"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "team_leader"
+          }
+        }
+      ]
+    },
+    "read": {},
+    "update": {
+      "$or": [
+        {
+          "data.assigned_instructor_id": "{{user.id}}",
+          "data.status": {
+            "$ne": "cancelled"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "owner"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "gym_manager"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "team_leader"
+          }
+        }
+      ]
+    },
+    "delete": {
+      "$or": [
+        {
+          "user_condition": {
+            "role": "admin"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "owner"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "gym_manager"
+          }
+        },
+        {
+          "user_condition": {
+            "role": "team_leader"
+          }
+        }
+      ]
+    }
+  }
+}

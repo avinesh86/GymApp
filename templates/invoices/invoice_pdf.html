@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Invoice {{ invoice.invoice_number }}</title>
+    <style>
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            color: #1a202c;
+            font-size: 13px;
+            margin: 0;
+            padding: 40px;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 40px;
+            border-bottom: 2px solid {% if branding %}{{ branding.primary_color }}{% else %}#2563EB{% endif %};
+            padding-bottom: 20px;
+        }
+        .company-name {
+            font-size: 24px;
+            font-weight: bold;
+            color: {% if branding %}{{ branding.primary_color }}{% else %}#2563EB{% endif %};
+        }
+        .invoice-meta {
+            text-align: right;
+        }
+        .invoice-number {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            background-color: {% if branding %}{{ branding.primary_color }}{% else %}#2563EB{% endif %};
+            color: white;
+            font-size: 11px;
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
+        .section {
+            margin-bottom: 30px;
+        }
+        .section-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #6b7280;
+            margin-bottom: 8px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        thead tr {
+            background-color: #f3f4f6;
+        }
+        th {
+            padding: 10px 12px;
+            text-align: left;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: #6b7280;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        th.right, td.right { text-align: right; }
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        tr.bonus td { color: #059669; }
+        tr.flagged td { color: #dc2626; }
+        .total-row td {
+            font-weight: bold;
+            font-size: 14px;
+            border-top: 2px solid #e5e7eb;
+            padding-top: 16px;
+        }
+        .footer {
+            margin-top: 60px;
+            font-size: 11px;
+            color: #9ca3af;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div>
+            <div class="company-name">{% if branding %}{{ branding.app_name }}{% else %}FitOps{% endif %}</div>
+            <div>{{ invoice.tenant.name }}</div>
+        </div>
+        <div class="invoice-meta">
+            <div class="invoice-number">{{ invoice.invoice_number }}</div>
+            <div><span class="status-badge">{{ invoice.get_status_display }}</span></div>
+            <div style="margin-top: 8px; color: #6b7280;">
+                Period: {{ invoice.period_start|date:"d M Y" }} — {{ invoice.period_end|date:"d M Y" }}
+            </div>
+        </div>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; margin-bottom: 30px;">
+        <div class="section">
+            <div class="section-title">Invoice To</div>
+            <div><strong>{{ invoice.instructor.name }}</strong></div>
+            <div>{{ invoice.instructor.email }}</div>
+            {% if invoice.instructor.phone %}<div>{{ invoice.instructor.phone }}</div>{% endif %}
+        </div>
+        <div class="section" style="text-align: right;">
+            <div class="section-title">Invoice Details</div>
+            <div>Generated: {{ invoice.created_at|date:"d M Y" }}</div>
+            {% if invoice.submitted_at %}
+            <div>Submitted: {{ invoice.submitted_at|date:"d M Y" }}</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Line Items</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Description</th>
+                    <th class="right">Qty</th>
+                    <th class="right">Rate</th>
+                    <th class="right">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in line_items %}
+                <tr class="{% if item.is_bonus %}bonus{% elif item.is_flagged %}flagged{% endif %}">
+                    <td>
+                        {{ item.description }}
+                        {% if item.is_bonus %} ★ Bonus{% endif %}
+                        {% if item.is_flagged %} ⚠ {{ item.flag_reason }}{% endif %}
+                    </td>
+                    <td class="right">{{ item.quantity }}</td>
+                    <td class="right">{% if branding %}{{ branding.currency }}{% else %}AUD{% endif %} {{ item.rate }}</td>
+                    <td class="right">{% if branding %}{{ branding.currency }}{% else %}AUD{% endif %} {{ item.amount }}</td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="4" style="color: #9ca3af; text-align: center;">No line items.</td></tr>
+                {% endfor %}
+                <tr class="total-row">
+                    <td colspan="3" class="right">Total</td>
+                    <td class="right">{% if branding %}{{ branding.currency }}{% else %}AUD{% endif %} {{ invoice.total_amount }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    {% if invoice.notes %}
+    <div class="section">
+        <div class="section-title">Notes</div>
+        <p>{{ invoice.notes }}</p>
+    </div>
+    {% endif %}
+
+    <div class="footer">
+        Generated by {% if branding %}{{ branding.app_name }}{% else %}FitOps{% endif %} — {{ invoice.invoice_number }}
+    </div>
+</body>
+</html>

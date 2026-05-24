@@ -1,0 +1,52 @@
+{
+  "name": "Absence",
+  "type": "object",
+  "properties": {
+    "instructor_id": {
+      "type": "string",
+      "description": "Reference to Staff"
+    },
+    "instructor_name": {
+      "type": "string"
+    },
+    "start_datetime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "end_datetime": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "approved",
+        "rejected"
+      ],
+      "default": "pending"
+    },
+    "affected_event_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Auto-linked affected TimetableEvents"
+    },
+    "approved_by": {
+      "type": "string"
+    },
+    "approved_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "instructor_id",
+    "start_datetime",
+    "end_datetime"
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "name": "Notification",
+  "type": "object",
+  "properties": {
+    "recipient_id": {
+      "type": "string",
+      "description": "Staff ID of recipient"
+    },
+    "recipient_email": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "cover_request",
+        "cover_accepted",
+        "cover_expired",
+        "attendance_reminder",
+        "invoice_submitted",
+        "invoice_approved",
+        "invoice_rejected",
+        "invoice_paid",
+        "timetable_change",
+        "absence_approved"
+      ],
+      "description": "Notification type"
+    },
+    "title": {
+      "type": "string"
+    },
+    "message": {
+      "type": "string"
+    },
+    "link": {
+      "type": "string",
+      "description": "Link to relevant page"
+    },
+    "is_read": {
+      "type": "boolean",
+      "default": false
+    },
+    "is_urgent": {
+      "type": "boolean",
+      "default": false
+    },
+    "related_entity_type": {
+      "type": "string"
+    },
+    "related_entity_id": {
+      "type": "string"
+    },
+    "email_sent": {
+      "type": "boolean",
+      "default": false
+    },
+    "email_sent_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": [
+    "recipient_id",
+    "type",
+    "title",
+    "message"
+  ]
+}
