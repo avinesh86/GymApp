@@ -2,6 +2,7 @@ import React from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
+import { SetupBanner } from './SetupBanner'
 
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard':     'Dashboard',
@@ -26,6 +27,7 @@ export function AppLayout() {
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <TopBar title={title} />
+        <SetupBanner />
 
         <main className="flex-1 overflow-y-auto p-6 bg-[#F0F2F5]">
           <Outlet />

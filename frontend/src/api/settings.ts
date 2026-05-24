@@ -1,5 +1,5 @@
 import apiClient from './client'
-import type { TenantSettings, TenantBranding, WhatsAppAccount, Site, User, PaginatedResponse } from '../types'
+import type { TenantSettings, TenantBranding, WhatsAppAccount, Site, User, PaginatedResponse, SetupStatus } from '../types'
 
 function unwrapList<T>(data: T[] | PaginatedResponse<T>): T[] {
   return Array.isArray(data) ? data : data.results
@@ -86,4 +86,11 @@ export async function updateUser(id: number, data: Partial<User>): Promise<User>
 
 export async function deactivateUser(id: number): Promise<void> {
   await apiClient.patch(`users/${id}/`, { is_active: false })
+}
+
+// ─── Setup status ─────────────────────────────────────────────────────────────
+
+export async function getSetupStatus(): Promise<SetupStatus> {
+  const response = await apiClient.get<SetupStatus>('tenants/setup-status/')
+  return response.data
 }

@@ -181,6 +181,11 @@ FIELD_ENCRYPTION_KEY = config("FIELD_ENCRYPTION_KEY", default="")
 # Meta / WhatsApp
 META_APP_SECRET = config("META_APP_SECRET", default="")
 
+# Stripe
+STRIPE_SECRET_KEY = config("STRIPE_SECRET_KEY", default="")
+STRIPE_PUBLISHABLE_KEY = config("STRIPE_PUBLISHABLE_KEY", default="")
+STRIPE_WEBHOOK_SECRET = config("STRIPE_WEBHOOK_SECRET", default="")
+
 # DRF Spectacular
 SPECTACULAR_SETTINGS = {
     "TITLE": "FitOps API",

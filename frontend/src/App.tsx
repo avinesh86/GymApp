@@ -26,6 +26,7 @@ import { InstructorCalendarPage } from './pages/schedule/InstructorCalendarPage'
 import { AttendanceEntryPage } from './pages/attendance/AttendanceEntryPage'
 import { ProfilePage } from './pages/profile/ProfilePage'
 import { AcceptCoverPage } from './pages/cover/AcceptCoverPage'
+import { SignupPage } from './pages/auth/SignupPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -105,6 +106,7 @@ export default function App() {
         <Routes>
           {/* Public */}
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/signup" element={<SignupPage />} />
           <Route path="/cover/accept/:code" element={<AcceptCoverPage />} />
 
           {/* Protected */}

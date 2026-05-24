@@ -21,6 +21,7 @@ import { Button } from '../../components/ui/Button'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { PageSpinner } from '../../components/ui/Spinner'
 import { RoleGuard } from '../../components/shared/RoleGuard'
+import { SetupGuard } from '../../components/shared/SetupGuard'
 
 // ─── Debounce hook ────────────────────────────────────────────────────────────
 
@@ -132,13 +133,15 @@ export function TimetablePage() {
         title="Timetable"
         actions={
           <RoleGuard permission="timetable">
-            <Button
-              leftIcon={<Plus className="h-4 w-4" />}
-              onClick={() => setShowAddModal(true)}
-              className="bg-cyan-500 hover:bg-cyan-600 text-white"
-            >
-              Add Class
-            </Button>
+            <SetupGuard>
+              <Button
+                leftIcon={<Plus className="h-4 w-4" />}
+                onClick={() => setShowAddModal(true)}
+                className="bg-cyan-500 hover:bg-cyan-600 text-white"
+              >
+                Add Class
+              </Button>
+            </SetupGuard>
           </RoleGuard>
         }
       />

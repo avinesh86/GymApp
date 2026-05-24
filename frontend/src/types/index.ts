@@ -458,3 +458,32 @@ export interface DashboardStats {
   pending_covers: number
   pending_invoices: number
 }
+
+// ─── Signup / SaaS onboarding ────────────────────────────────────────────────
+
+export interface SignupPayload {
+  business_name: string
+  email: string
+  first_name: string
+  last_name: string
+  phone?: string
+  password: string
+  payment_method_id: string
+}
+
+export interface SignupResponse {
+  access: string
+  refresh: string
+  tenant_slug: string
+  tenant_name: string
+  setup_completed: boolean
+  trial_ends_at: string | null
+}
+
+export interface SetupStatus {
+  setup_completed: boolean
+  has_location: boolean
+  has_class_type: boolean
+  trial_ends_at: string | null
+  subscription_status: string
+}
