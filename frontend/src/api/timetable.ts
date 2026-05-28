@@ -69,6 +69,31 @@ export async function cancelEvent(eventId: number, reason?: string): Promise<Tim
   return response.data
 }
 
+// ─── Recurring Rules ──────────────────────────────────────────────────────────
+
+export interface RecurringRulePayload {
+  class_type: number
+  site: number | null
+  instructor: number | null
+  /** 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun (Python weekday convention) */
+  day_of_week: number
+  start_time: string
+  valid_from: string
+  valid_to?: string | null
+}
+
+export async function createRecurringRule(data: RecurringRulePayload): Promise<{ id: number }> {
+  const response = await apiClient.post<{ id: number }>('timetable/recurring-rules/', data)
+  return response.data
+}
+
+export async function generateRuleEvents(ruleId: number): Promise<{ created: number }> {
+  const response = await apiClient.post<{ created: number }>(
+    `timetable/recurring-rules/${ruleId}/generate/`
+  )
+  return response.data
+}
+
 // ─── Class Types ─────────────────────────────────────────────────────────────
 
 export async function listClassTypes(): Promise<ClassType[]> {
