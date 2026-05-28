@@ -29,7 +29,7 @@ export function AddStaffModal({ isOpen, onClose }: AddStaffModalProps) {
   const [email, setEmail]         = useState('')
   const [phone, setPhone]         = useState('')
   const [role, setRole]           = useState('instructor')
-  const [isActive, setIsActive]   = useState('true')
+  const [status, setStatus]       = useState<'active' | 'inactive'>('active')
   const [payRate, setPayRate]     = useState('')
 
   const { mutate: addStaff, isPending } = useMutation({
@@ -39,7 +39,8 @@ export function AddStaffModal({ isOpen, onClose }: AddStaffModalProps) {
       if (payRate && Number(payRate) > 0) {
         try {
           await createPayRate(created.id, {
-            rate_per_hour: payRate,
+            amount: payRate,
+            rate_type: 'per_class',
             effective_from: new Date().toISOString().split('T')[0],
           })
         } catch {
@@ -61,19 +62,18 @@ export function AddStaffModal({ isOpen, onClose }: AddStaffModalProps) {
     setEmail('')
     setPhone('')
     setRole('instructor')
-    setIsActive('true')
+    setStatus('active')
     setPayRate('')
   }
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     addStaff({
-      first_name: firstName,
-      last_name: lastName,
+      name: [firstName, lastName].filter(Boolean).join(' '),
       email,
       phone: phone || undefined,
       role: role as never,
-      is_active: isActive === 'true',
+      status,
     })
   }
 
@@ -133,11 +133,11 @@ export function AddStaffModal({ isOpen, onClose }: AddStaffModalProps) {
 
         <Select
           label="Status"
-          value={isActive}
-          onChange={(e) => setIsActive(e.target.value)}
+          value={status}
+          onChange={(e) => setStatus(e.target.value as 'active' | 'inactive')}
           options={[
-            { value: 'true',  label: 'Active' },
-            { value: 'false', label: 'Inactive' },
+            { value: 'active',   label: 'Active' },
+            { value: 'inactive', label: 'Inactive' },
           ]}
         />
 

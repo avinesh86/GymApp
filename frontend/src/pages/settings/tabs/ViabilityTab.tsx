@@ -8,18 +8,18 @@ import { PageSpinner } from '../../../components/ui/Spinner'
 
 function ViabilityRow({ classType }: { classType: ClassType }) {
   const queryClient = useQueryClient()
-  const [red, setRed] = useState(classType.viability_red)
-  const [amber, setAmber] = useState(classType.viability_amber)
-  const [green, setGreen] = useState(classType.viability_green)
-  const [purple, setPurple] = useState(classType.viability_purple)
+  const [red, setRed] = useState(classType.red_threshold)
+  const [amber, setAmber] = useState(classType.amber_threshold)
+  const [green, setGreen] = useState(classType.green_threshold)
+  const [purple, setPurple] = useState(classType.purple_threshold)
 
   const { mutate: save, isPending } = useMutation({
     mutationFn: () =>
       updateClassType(classType.id, {
-        viability_red: red,
-        viability_amber: amber,
-        viability_green: green,
-        viability_purple: purple,
+        red_threshold: red,
+        amber_threshold: amber,
+        green_threshold: green,
+        purple_threshold: purple,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['class-types'] })

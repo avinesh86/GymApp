@@ -74,6 +74,7 @@ export async function inviteUser(data: {
   first_name: string
   last_name: string
   role: string
+  password?: string
 }): Promise<User> {
   const response = await apiClient.post<User>('users/', data)
   return response.data

@@ -3,10 +3,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { Plus, Edit2, Trash2 } from 'lucide-react'
 import { listClassTypes, createClassType, updateClassType, deleteClassType } from '../../../api/timetable'
+import { listSites } from '../../../api/settings'
 import type { ClassType } from '../../../types'
 import { Button } from '../../../components/ui/Button'
 import { Modal } from '../../../components/ui/Modal'
 import { Input } from '../../../components/ui/Input'
+import { Select } from '../../../components/ui/Select'
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog'
 import { PageSpinner } from '../../../components/ui/Spinner'
 
@@ -22,22 +24,19 @@ function ClassTypeFormModal({
   const queryClient = useQueryClient()
   const [name, setName] = useState(initial?.name ?? '')
   const [description, setDescription] = useState(initial?.description ?? '')
-  const [duration, setDuration] = useState(String(initial?.default_duration_minutes ?? 60))
-  const [capacity, setCapacity] = useState(String(initial?.default_capacity ?? 20))
+  const [duration, setDuration] = useState(String(initial?.duration_minutes ?? 60))
+  const [defaultLocation, setDefaultLocation] = useState(initial?.default_location ?? '')
+
+  const { data: sites = [] } = useQuery({
+    queryKey: ['sites'],
+    queryFn: listSites,
+  })
 
   const { mutate: save, isPending } = useMutation({
     mutationFn: () =>
       initial
-        ? updateClassType(initial.id, {
-            name, description,
-            default_duration_minutes: Number(duration),
-            default_capacity: Number(capacity),
-          })
-        : createClassType({
-            name, description,
-            default_duration_minutes: Number(duration),
-            default_capacity: Number(capacity),
-          }),
+        ? updateClassType(initial.id, { name, description, duration_minutes: Number(duration), default_location: defaultLocation })
+        : createClassType({ name, description, duration_minutes: Number(duration), default_location: defaultLocation }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['class-types'] })
       toast.success(initial ? 'Class type updated' : 'Class type created')
@@ -72,10 +71,14 @@ function ClassTypeFormModal({
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
           />
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Input label="Default Duration (min)" type="number" value={duration} onChange={(e) => setDuration(e.target.value)} />
-          <Input label="Default Capacity" type="number" value={capacity} onChange={(e) => setCapacity(e.target.value)} />
-        </div>
+        <Input label="Default Duration (min)" type="number" value={duration} onChange={(e) => setDuration(e.target.value)} />
+        <Select
+          label="Default Location"
+          value={defaultLocation}
+          onChange={(e) => setDefaultLocation(e.target.value)}
+          options={sites.map((site) => ({ value: site.name, label: site.name }))}
+          placeholder="No default location"
+        />
       </div>
     </Modal>
   )
@@ -122,7 +125,7 @@ export function ClassTypesTab() {
             <div>
               <p className="text-sm font-medium text-gray-900">{ct.name}</p>
               <p className="text-xs text-gray-400 mt-0.5">
-                {ct.default_duration_minutes}min · Capacity {ct.default_capacity}
+                {ct.duration_minutes}min{ct.default_location ? ` · ${ct.default_location}` : ''}
               </p>
             </div>
             <div className="flex items-center gap-2">

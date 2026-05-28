@@ -97,13 +97,15 @@ export interface Site {
 export interface ClassType {
   id: number
   name: string
+  color: string
   description: string
-  default_duration_minutes: number
-  default_capacity: number
-  viability_red: number
-  viability_amber: number
-  viability_green: number
-  viability_purple: number
+  duration_minutes: number
+  default_location: string
+  required_qualifications: string
+  red_threshold: number
+  amber_threshold: number
+  green_threshold: number
+  purple_threshold: number
   is_active: boolean
 }
 
