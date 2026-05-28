@@ -65,9 +65,25 @@ class TenantMiddleware:
             from rest_framework_simplejwt.tokens import AccessToken
 
             token = AccessToken(token_str)
+
+            # Fast path: new tokens embed tenant_id directly.
             tenant_id = token.get("tenant_id")
             if tenant_id:
                 return Tenant.objects.filter(id=tenant_id, is_active=True).first()
+
+            # Fallback for legacy tokens issued before tenant_id was added:
+            # look up the user and return their tenant.
+            user_id = token.get("user_id")
+            if user_id:
+                from apps.users.models import User
+
+                user = (
+                    User.objects.filter(id=user_id, is_active=True)
+                    .select_related("tenant")
+                    .first()
+                )
+                if user and user.tenant.is_active:
+                    return user.tenant
         except Exception:
             return None
         return None

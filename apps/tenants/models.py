@@ -101,6 +101,7 @@ class TenantSettings(models.Model):
     whatsapp_enabled = models.BooleanField(default=False)
     email_enabled = models.BooleanField(default=True)
     timezone = models.CharField(max_length=64, default="Australia/Sydney")
+    currency_symbol = models.CharField(max_length=10, default="$")
     cover_offer_expiry_hours = models.PositiveSmallIntegerField(default=24)
     auto_generate_invoices = models.BooleanField(default=True)
     # Outgoing email configuration for notifications

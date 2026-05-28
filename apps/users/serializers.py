@@ -4,7 +4,14 @@ from .models import User
 
 
 class UserSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, min_length=8)
+    # Optional on create: if omitted, a secure random password is generated.
+    # The admin must share the password with the new user out-of-band.
+    password = serializers.CharField(
+        write_only=True,
+        min_length=8,
+        required=False,
+        allow_blank=True,
+    )
 
     class Meta:
         model = User
@@ -21,9 +28,16 @@ class UserSerializer(serializers.ModelSerializer):
         read_only_fields = ["id", "date_joined"]
 
     def create(self, validated_data):
-        password = validated_data.pop("password")
+        import secrets
+        import string
+
+        raw_password = validated_data.pop("password", None)
+        if not raw_password:
+            alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+            raw_password = "".join(secrets.choice(alphabet) for _ in range(16))
+
         user = User(**validated_data)
-        user.set_password(password)
+        user.set_password(raw_password)
         user.save()
         return user
 

@@ -45,6 +45,7 @@ class TenantSettingsSerializer(serializers.ModelSerializer):
             "whatsapp_enabled",
             "email_enabled",
             "timezone",
+            "currency_symbol",
             "cover_offer_expiry_hours",
             "auto_generate_invoices",
             "notification_from_email",
