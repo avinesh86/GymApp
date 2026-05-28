@@ -1,13 +1,32 @@
 import React, { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { createEvent, listClassTypes } from '../../api/timetable'
+import { createEvent, createRecurringRule, generateRuleEvents, listClassTypes } from '../../api/timetable'
 import { listStaff } from '../../api/staff'
 import { listSites } from '../../api/settings'
 import { Modal } from '../../components/ui/Modal'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Select } from '../../components/ui/Select'
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Returns today's date as YYYY-MM-DD in the user's LOCAL timezone. */
+function localDateString(): string {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+/**
+ * Converts frontend day values (Mon=1…Sat=6, Sun=0) to Python's weekday()
+ * convention used by the backend (Mon=0…Sat=5, Sun=6).
+ */
+function toBackendDayOfWeek(frontendDay: number): number {
+  return frontendDay === 0 ? 6 : frontendDay - 1
+}
 
 // ─── Day of week checkboxes for recurring ────────────────────────────────────
 
@@ -25,15 +44,17 @@ interface AddClassModalProps {
   isOpen: boolean
   onClose: () => void
   defaultDate?: string
+  /** Called after successful creation so the parent can navigate to the event's week. */
+  onCreated?: (eventDate: string) => void
 }
 
-export function AddClassModal({ isOpen, onClose, defaultDate }: AddClassModalProps) {
+export function AddClassModal({ isOpen, onClose, defaultDate, onCreated }: AddClassModalProps) {
   const queryClient = useQueryClient()
 
   const [classTypeId, setClassTypeId] = useState('')
   const [instructorId, setInstructorId] = useState('')
   const [siteId, setSiteId] = useState('')
-  const [date, setDate] = useState(defaultDate ?? new Date().toISOString().split('T')[0])
+  const [date, setDate] = useState(defaultDate ?? localDateString())
   const [startTime, setStartTime] = useState('09:00')
   const [endTime, setEndTime] = useState('10:00')
   const [capacity, setCapacity] = useState('20')
@@ -41,6 +62,7 @@ export function AddClassModal({ isOpen, onClose, defaultDate }: AddClassModalPro
   const [isRecurring, setIsRecurring] = useState(false)
   const [recurringDays, setRecurringDays] = useState<number[]>([])
   const [recurringEndDate, setRecurringEndDate] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const { data: classTypes = [] } = useQuery({
     queryKey: ['class-types'],
@@ -57,11 +79,12 @@ export function AddClassModal({ isOpen, onClose, defaultDate }: AddClassModalPro
     queryFn: listSites,
   })
 
-  const { mutate: createClass, isPending } = useMutation({
+  const { mutate: createClass } = useMutation({
     mutationFn: createEvent,
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['timetable-events'] })
       toast.success('Class added to timetable')
+      onCreated?.(created.date)
       onClose()
       resetForm()
     },
@@ -72,7 +95,7 @@ export function AddClassModal({ isOpen, onClose, defaultDate }: AddClassModalPro
     setClassTypeId('')
     setInstructorId('')
     setSiteId('')
-    setDate(defaultDate ?? new Date().toISOString().split('T')[0])
+    setDate(defaultDate ?? localDateString())
     setStartTime('09:00')
     setEndTime('10:00')
     setCapacity('20')
@@ -82,17 +105,65 @@ export function AddClassModal({ isOpen, onClose, defaultDate }: AddClassModalPro
     setRecurringEndDate('')
   }
 
-  function handleSubmit(formEvent: React.FormEvent) {
+  async function handleSubmit(formEvent: React.FormEvent) {
     formEvent.preventDefault()
-    createClass({
-      class_type: Number(classTypeId),
-      instructor: instructorId ? Number(instructorId) : null,
-      site: Number(siteId),
-      start_datetime: `${date}T${startTime}:00`,
-      end_datetime: `${date}T${endTime}:00`,
-      capacity: Number(capacity),
-      notes,
-    })
+
+    if (!isRecurring) {
+      createClass({
+        class_type: Number(classTypeId),
+        instructor: instructorId ? Number(instructorId) : null,
+        site: Number(siteId),
+        start_datetime: `${date}T${startTime}:00`,
+        end_datetime: `${date}T${endTime}:00`,
+        capacity: Number(capacity),
+        notes,
+      })
+      return
+    }
+
+    // ── Recurring path ────────────────────────────────────────────────────────
+    if (recurringDays.length === 0) {
+      toast.error('Select at least one day for recurring classes')
+      return
+    }
+
+    setIsSubmitting(true)
+    let totalCreated = 0
+    let hadError = false
+
+    try {
+      for (const frontendDay of recurringDays) {
+        const rule = await createRecurringRule({
+          class_type: Number(classTypeId),
+          instructor: instructorId ? Number(instructorId) : null,
+          site: Number(siteId),
+          day_of_week: toBackendDayOfWeek(frontendDay),
+          start_time: `${startTime}:00`,
+          valid_from: date,
+          valid_to: recurringEndDate || null,
+        })
+
+        const result = await generateRuleEvents(rule.id)
+        totalCreated += result.created
+      }
+    } catch {
+      hadError = true
+      toast.error('Failed to create recurring classes')
+    } finally {
+      setIsSubmitting(false)
+    }
+
+    if (!hadError) {
+      queryClient.invalidateQueries({ queryKey: ['timetable-events'] })
+      toast.success(
+        totalCreated > 0
+          ? `Created ${totalCreated} recurring classes`
+          : 'Recurring rule saved — sessions will be generated automatically'
+      )
+      onCreated?.(date)
+      onClose()
+      resetForm()
+    }
   }
 
   function toggleRecurringDay(day: number) {
@@ -102,6 +173,7 @@ export function AddClassModal({ isOpen, onClose, defaultDate }: AddClassModalPro
   }
 
   const staffList = staffPage?.results ?? []
+  const isPending = isSubmitting
 
   return (
     <Modal
@@ -113,7 +185,7 @@ export function AddClassModal({ isOpen, onClose, defaultDate }: AddClassModalPro
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
           <Button type="submit" form="add-class-form" isLoading={isPending}>
-            Add Class
+            {isRecurring ? 'Create Recurring' : 'Add Class'}
           </Button>
         </div>
       }
@@ -149,7 +221,7 @@ export function AddClassModal({ isOpen, onClose, defaultDate }: AddClassModalPro
         />
 
         <Input
-          label="Date"
+          label={isRecurring ? 'Start From' : 'Date'}
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
@@ -228,14 +300,12 @@ export function AddClassModal({ isOpen, onClose, defaultDate }: AddClassModalPro
                 </div>
               </div>
               <Input
-                label="End Date"
+                label="End Date (optional)"
                 type="date"
                 value={recurringEndDate}
                 onChange={(e) => setRecurringEndDate(e.target.value)}
+                hint="Leave blank to generate 12 weeks of sessions"
               />
-              <p className="text-xs text-gray-400">
-                Note: recurring classes will be created individually by the server.
-              </p>
             </div>
           )}
         </div>

@@ -7,6 +7,7 @@ import {
   subWeeks,
   format,
   isSameWeek,
+  parseISO,
 } from 'date-fns'
 import { ChevronLeft, ChevronRight, Plus, LayoutGrid, List, Search } from 'lucide-react'
 import { listEvents, listEventsPaginated, listClassTypes } from '../../api/timetable'
@@ -118,6 +119,14 @@ export function TimetablePage() {
 
   function goToToday() {
     setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }))
+    setListPage(1)
+  }
+
+  function goToDateWeek(dateStr: string) {
+    // dateStr is YYYY-MM-DD (UTC date from API). Parse as local midnight so
+    // startOfWeek calculates in the user's timezone, not UTC.
+    const eventDate = parseISO(dateStr + 'T00:00:00')
+    setCurrentWeekStart(startOfWeek(eventDate, { weekStartsOn: 1 }))
     setListPage(1)
   }
 
@@ -292,6 +301,7 @@ export function TimetablePage() {
       <AddClassModal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
+        onCreated={goToDateWeek}
       />
     </div>
   )

@@ -1,5 +1,5 @@
 import React from 'react'
-import { format, addDays, isSameDay } from 'date-fns'
+import { format, addDays, isSameDay, parseISO } from 'date-fns'
 import { Clock, MapPin } from 'lucide-react'
 import type { TimetableEvent, TimetableEventStatus } from '../../types'
 
@@ -127,9 +127,17 @@ export function WeekView({ weekStart, events, onEventClick }: WeekViewProps) {
       {days.map((day) => {
         const isToday = isSameDay(day, today)
 
-        // Filter events for this day and sort by start time
+        // Filter events for this day.
+        // Use start_datetime when available (full ISO string, timezone-safe).
+        // Fall back to event.date but parse it as local midnight (append T00:00:00
+        // so date-fns treats it as local time, not UTC midnight).
         const dayEvents = events
-          .filter((event) => isSameDay(new Date(event.date), day))
+          .filter((event) => {
+            const eventDate = event.start_datetime
+              ? new Date(event.start_datetime)
+              : parseISO(event.date + 'T00:00:00')
+            return isSameDay(eventDate, day)
+          })
           .sort((a, b) => a.start_time.localeCompare(b.start_time))
 
         return (
