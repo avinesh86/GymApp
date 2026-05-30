@@ -36,6 +36,7 @@ export function AccessTab() {
   const [inviteFirst, setInviteFirst] = useState('')
   const [inviteLast, setInviteLast] = useState('')
   const [inviteRole, setInviteRole] = useState('instructor')
+  const [invitePassword, setInvitePassword] = useState('')
   const [editRole, setEditRole] = useState('instructor')
 
   const { data: users = [], isLoading } = useQuery({
@@ -44,16 +45,24 @@ export function AccessTab() {
   })
 
   const { mutate: invite, isPending: isInviting } = useMutation({
-    mutationFn: () => inviteUser({ email: inviteEmail, first_name: inviteFirst, last_name: inviteLast, role: inviteRole }),
+    mutationFn: () =>
+      inviteUser({
+        email: inviteEmail,
+        first_name: inviteFirst,
+        last_name: inviteLast,
+        role: inviteRole,
+        password: invitePassword,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
-      toast.success('User invited')
+      toast.success('User added successfully')
       setShowInvite(false)
       setInviteEmail('')
       setInviteFirst('')
       setInviteLast('')
+      setInvitePassword('')
     },
-    onError: () => toast.error('Failed to invite user'),
+    onError: () => toast.error('Failed to add user'),
   })
 
   const { mutate: changeRole, isPending: isUpdating } = useMutation({
@@ -164,6 +173,14 @@ export function AccessTab() {
           </div>
           <Input label="Email" type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} required />
           <Select label="Role" value={inviteRole} onChange={(e) => setInviteRole(e.target.value)} options={ROLE_OPTIONS} />
+          <Input
+            label="Temporary Password"
+            type="password"
+            value={invitePassword}
+            onChange={(e) => setInvitePassword(e.target.value)}
+            placeholder="Min. 8 characters"
+            hint="Share this with the user — they can change it after logging in."
+          />
         </div>
       </Modal>
 

@@ -34,6 +34,21 @@ class Tenant(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    # SaaS signup fields
+    signup_email = models.EmailField(blank=True, default="")
+    signup_phone = models.CharField(max_length=30, blank=True, default="")
+
+    # Stripe billing
+    stripe_customer_id = models.CharField(max_length=120, blank=True, default="")
+    stripe_subscription_id = models.CharField(max_length=120, blank=True, default="")
+    subscription_plan = models.CharField(max_length=50, default="trial")
+    subscription_status = models.CharField(max_length=50, default="trialing")
+    trial_ends_at = models.DateTimeField(null=True, blank=True)
+
+    # Onboarding state
+    setup_completed = models.BooleanField(default=False)
+    onboarding_step = models.PositiveSmallIntegerField(default=0)
+
     class Meta:
         db_table = "tenants_tenant"
 
@@ -86,6 +101,7 @@ class TenantSettings(models.Model):
     whatsapp_enabled = models.BooleanField(default=False)
     email_enabled = models.BooleanField(default=True)
     timezone = models.CharField(max_length=64, default="Australia/Sydney")
+    currency_symbol = models.CharField(max_length=10, default="$")
     cover_offer_expiry_hours = models.PositiveSmallIntegerField(default=24)
     auto_generate_invoices = models.BooleanField(default=True)
     # Outgoing email configuration for notifications

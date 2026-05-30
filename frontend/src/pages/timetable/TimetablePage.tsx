@@ -7,6 +7,7 @@ import {
   subWeeks,
   format,
   isSameWeek,
+  parseISO,
 } from 'date-fns'
 import { ChevronLeft, ChevronRight, Plus, LayoutGrid, List, Search } from 'lucide-react'
 import { listEvents, listEventsPaginated, listClassTypes } from '../../api/timetable'
@@ -21,6 +22,7 @@ import { Button } from '../../components/ui/Button'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { PageSpinner } from '../../components/ui/Spinner'
 import { RoleGuard } from '../../components/shared/RoleGuard'
+import { SetupGuard } from '../../components/shared/SetupGuard'
 
 // ─── Debounce hook ────────────────────────────────────────────────────────────
 
@@ -120,6 +122,14 @@ export function TimetablePage() {
     setListPage(1)
   }
 
+  function goToDateWeek(dateStr: string) {
+    // dateStr is YYYY-MM-DD (UTC date from API). Parse as local midnight so
+    // startOfWeek calculates in the user's timezone, not UTC.
+    const eventDate = parseISO(dateStr + 'T00:00:00')
+    setCurrentWeekStart(startOfWeek(eventDate, { weekStartsOn: 1 }))
+    setListPage(1)
+  }
+
   const staffList = staffPage?.results ?? []
   const isLoading = viewMode === 'week' ? weekLoading : listLoading
 
@@ -132,13 +142,15 @@ export function TimetablePage() {
         title="Timetable"
         actions={
           <RoleGuard permission="timetable">
-            <Button
-              leftIcon={<Plus className="h-4 w-4" />}
-              onClick={() => setShowAddModal(true)}
-              className="bg-cyan-500 hover:bg-cyan-600 text-white"
-            >
-              Add Class
-            </Button>
+            <SetupGuard>
+              <Button
+                leftIcon={<Plus className="h-4 w-4" />}
+                onClick={() => setShowAddModal(true)}
+                className="bg-cyan-500 hover:bg-cyan-600 text-white"
+              >
+                Add Class
+              </Button>
+            </SetupGuard>
           </RoleGuard>
         }
       />
@@ -289,6 +301,7 @@ export function TimetablePage() {
       <AddClassModal
         isOpen={showAddModal}
         onClose={() => setShowAddModal(false)}
+        onCreated={goToDateWeek}
       />
     </div>
   )

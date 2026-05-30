@@ -9,6 +9,32 @@ from .models import Site, TenantBranding, TenantSettings
 from .serializers import SiteSerializer, TenantBrandingSerializer, TenantSettingsSerializer
 
 
+class TenantSetupStatusView(APIView):
+    """Returns whether the tenant has completed minimum setup (location + class type)."""
+
+    def get(self, request):
+        from apps.timetable.models import ClassType
+
+        tenant = request.tenant
+        has_location = tenant.sites.filter(is_active=True).exists()
+        has_class_type = ClassType.objects.filter(tenant=tenant, is_active=True).exists()
+        setup_completed = has_location and has_class_type
+
+        if setup_completed and not tenant.setup_completed:
+            tenant.setup_completed = True
+            tenant.save(update_fields=["setup_completed"])
+
+        return Response({
+            "setup_completed": setup_completed,
+            "has_location": has_location,
+            "has_class_type": has_class_type,
+            "trial_ends_at": (
+                tenant.trial_ends_at.isoformat() if tenant.trial_ends_at else None
+            ),
+            "subscription_status": tenant.subscription_status,
+        })
+
+
 class CurrentWhatsAppAccountView(APIView):
     """GET / PATCH the WhatsApp Business account for the current tenant."""
 

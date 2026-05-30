@@ -11,6 +11,7 @@ import { PageHeader } from '../../components/shared/PageHeader'
 import { PageSpinner } from '../../components/ui/Spinner'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { RoleGuard } from '../../components/shared/RoleGuard'
+import { SetupGuard } from '../../components/shared/SetupGuard'
 
 // ─── Debounce hook ────────────────────────────────────────────────────────────
 
@@ -72,9 +73,11 @@ export function StaffPage() {
         subtitle={staffPage ? `${staffPage.count} members` : undefined}
         actions={
           <RoleGuard permission="staff">
-            <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setShowAddModal(true)}>
-              Add Staff
-            </Button>
+            <SetupGuard>
+              <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setShowAddModal(true)}>
+                Add Staff
+              </Button>
+            </SetupGuard>
           </RoleGuard>
         }
       />

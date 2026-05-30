@@ -12,4 +12,6 @@ export default defineConfig({
       },
     },
   },
+  // Expose VITE_* env variables to the browser bundle
+  envPrefix: 'VITE_',
 })

@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { MapPin, Clock, User, X, AlertTriangle, Copy, Trash2, RefreshCcw } from 'lucide-react'
+import { MapPin, Clock, User, X, AlertTriangle, Copy, Trash2, RefreshCcw, Repeat2 } from 'lucide-react'
 import { format } from 'date-fns'
 import {
   updateEvent,
@@ -9,12 +9,15 @@ import {
   assignInstructor,
   cancelEvent,
   createEvent,
+  createRecurringRule,
+  generateRuleEvents,
 } from '../../api/timetable'
 import { submitAttendanceForEvent } from '../../api/attendance'
 import { createCoverRequest } from '../../api/cover'
 import { listStaff } from '../../api/staff'
 import { listSites } from '../../api/settings'
 import type { TimetableEvent, TimetableEventStatus } from '../../types'
+import { useAuth } from '../../hooks/useAuth'
 import { Badge } from '../../components/ui/Badge'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 
@@ -173,10 +176,29 @@ function AttendanceTab({ event, onClose }: { event: TimetableEvent; onClose: () 
   )
 }
 
+// ─── Day of week config (shared) ─────────────────────────────────────────────
+
+const DAYS_OF_WEEK = [
+  { frontendValue: 1, label: 'Mon' },
+  { frontendValue: 2, label: 'Tue' },
+  { frontendValue: 3, label: 'Wed' },
+  { frontendValue: 4, label: 'Thu' },
+  { frontendValue: 5, label: 'Fri' },
+  { frontendValue: 6, label: 'Sat' },
+  { frontendValue: 0, label: 'Sun' },
+]
+
+/** Frontend day values (Mon=1…Sat=6, Sun=0) → Python weekday (Mon=0…Sun=6). */
+function toBackendDayOfWeek(frontendDay: number): number {
+  return frontendDay === 0 ? 6 : frontendDay - 1
+}
+
 // ─── Edit Tab ─────────────────────────────────────────────────────────────────
 
 function EditTab({ event, onSaved }: { event: TimetableEvent; onSaved: () => void }) {
   const queryClient = useQueryClient()
+  const { user } = useAuth()
+  const isSuperAdmin = user?.role === 'owner' || user?.role === 'admin'
 
   const [date, setDate]             = useState(event.date)
   const [startTime, setStartTime]   = useState(event.start_time)
@@ -185,9 +207,15 @@ function EditTab({ event, onSaved }: { event: TimetableEvent; onSaved: () => voi
   const [notes, setNotes]           = useState(event.notes ?? '')
   const [internalNotes, setInternalNotes] = useState(event.internal_notes ?? '')
 
+  // ── Recurring state ──────────────────────────────────────────────────────
+  const [makeRecurring, setMakeRecurring] = useState(false)
+  const [recurringDays, setRecurringDays] = useState<number[]>([])
+  const [recurringEndDate, setRecurringEndDate] = useState('')
+  const [isCreatingRecurring, setIsCreatingRecurring] = useState(false)
+
   const { data: sites = [] } = useQuery({ queryKey: ['sites'], queryFn: listSites })
 
-  const { mutate: save, isPending } = useMutation({
+  const { mutate: save, isPending: isSaving } = useMutation({
     mutationFn: () =>
       updateEvent(event.id, {
         start_datetime: `${date}T${startTime}:00`,
@@ -203,6 +231,73 @@ function EditTab({ event, onSaved }: { event: TimetableEvent; onSaved: () => voi
     },
     onError: () => toast.error('Failed to update class'),
   })
+
+  function toggleDay(frontendValue: number) {
+    setRecurringDays((prev) =>
+      prev.includes(frontendValue)
+        ? prev.filter((d) => d !== frontendValue)
+        : [...prev, frontendValue]
+    )
+  }
+
+  async function handleSave() {
+    if (!makeRecurring) {
+      save()
+      return
+    }
+
+    if (recurringDays.length === 0) {
+      toast.error('Select at least one day')
+      return
+    }
+
+    setIsCreatingRecurring(true)
+    let totalCreated = 0
+    let hadError = false
+
+    try {
+      // First save the event edits
+      await updateEvent(event.id, {
+        start_datetime: `${date}T${startTime}:00`,
+        end_datetime:   `${date}T${endTime}:00`,
+        site:           Number(siteId),
+        notes,
+        internal_notes: internalNotes,
+      })
+
+      // Then create a recurring rule per selected day and generate sessions
+      for (const frontendDay of recurringDays) {
+        const rule = await createRecurringRule({
+          class_type:  event.class_type as unknown as number,
+          instructor:  event.instructor as unknown as number | null,
+          site:        Number(siteId),
+          day_of_week: toBackendDayOfWeek(frontendDay),
+          start_time:  `${startTime}:00`,
+          valid_from:  date,
+          valid_to:    recurringEndDate || null,
+        })
+        const result = await generateRuleEvents(rule.id)
+        totalCreated += result.created
+      }
+    } catch {
+      hadError = true
+      toast.error('Failed to create recurring sessions')
+    } finally {
+      setIsCreatingRecurring(false)
+    }
+
+    if (!hadError) {
+      queryClient.invalidateQueries({ queryKey: ['timetable-events'] })
+      toast.success(
+        totalCreated > 0
+          ? `Class updated · ${totalCreated} recurring sessions created`
+          : 'Class updated · recurring rule saved'
+      )
+      onSaved()
+    }
+  }
+
+  const isPending = isSaving || isCreatingRecurring
 
   return (
     <div className="flex flex-col gap-3">
@@ -266,13 +361,68 @@ function EditTab({ event, onSaved }: { event: TimetableEvent; onSaved: () => voi
         />
       </div>
 
+      {/* ── Recurring section — super admins only ────────────────────────── */}
+      {isSuperAdmin && <div className="border border-gray-100 rounded-xl p-3 bg-gray-50">
+        <label className="flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={makeRecurring}
+            onChange={(e) => setMakeRecurring(e.target.checked)}
+            className="h-4 w-4 rounded border-gray-300 text-cyan-500 focus:ring-cyan-400"
+          />
+          <span className="text-sm font-medium text-gray-700">Make recurring</span>
+        </label>
+
+        {makeRecurring && (
+          <div className="mt-3 flex flex-col gap-3">
+            <div>
+              <p className="text-xs text-gray-500 mb-2">Repeat on</p>
+              <div className="flex gap-1.5 flex-wrap">
+                {DAYS_OF_WEEK.map((day) => (
+                  <button
+                    key={day.frontendValue}
+                    type="button"
+                    onClick={() => toggleDay(day.frontendValue)}
+                    className={[
+                      'px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors',
+                      recurringDays.includes(day.frontendValue)
+                        ? 'bg-gray-900 text-white border-gray-900'
+                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-100',
+                    ].join(' ')}
+                  >
+                    {day.label}
+                  </button>
+                ))}
+              </div>
+              {makeRecurring && recurringDays.length === 0 && (
+                <p className="text-xs text-red-500 mt-1">Select at least one day</p>
+              )}
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">End Date (optional)</label>
+              <input
+                type="date"
+                value={recurringEndDate}
+                onChange={(e) => setRecurringEndDate(e.target.value)}
+                className={inputClass}
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Leave blank to generate 12 weeks of sessions
+              </p>
+            </div>
+          </div>
+        )}
+      </div>}
+
       <button
-        onClick={() => save()}
-        disabled={isPending}
+        onClick={handleSave}
+        disabled={isPending || (makeRecurring && recurringDays.length === 0)}
         className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-800 disabled:opacity-50 transition-colors"
       >
         {isPending ? (
           <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+        ) : (isSuperAdmin && makeRecurring) ? (
+          '↻ Save & Create Recurring'
         ) : (
           '💾 Save Changes'
         )}

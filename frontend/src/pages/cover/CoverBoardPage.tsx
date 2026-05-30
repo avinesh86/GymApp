@@ -12,6 +12,7 @@ import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { Badge } from '../../components/ui/Badge'
 import { RoleGuard } from '../../components/shared/RoleGuard'
+import { SetupGuard } from '../../components/shared/SetupGuard'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { RefreshCcw } from 'lucide-react'
 
@@ -67,9 +68,11 @@ export function CoverBoardPage() {
         subtitle={`${openRequests.length} open request${openRequests.length !== 1 ? 's' : ''}`}
         actions={
           <RoleGuard permission="cover">
-            <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setShowCreateModal(true)}>
-              Create Cover Request
-            </Button>
+            <SetupGuard>
+              <Button leftIcon={<Plus className="h-4 w-4" />} onClick={() => setShowCreateModal(true)}>
+                Create Cover Request
+              </Button>
+            </SetupGuard>
           </RoleGuard>
         }
       />

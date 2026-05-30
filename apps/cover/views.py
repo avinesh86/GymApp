@@ -140,25 +140,29 @@ class CoverOfferViewSet(TenantScopedMixin, ModelViewSet):
     @action(detail=False, methods=["post"], url_path="accept-by-code", permission_classes=[])
     def accept_by_code(self, request):
         """
-        Public endpoint.  Instructor submits their accept code to claim the cover.
+        Public endpoint — no authentication required.
+
+        The accept_code is a sufficiently unique secret that acts as its own
+        auth token.  We resolve the tenant from the offer itself so this works
+        even when the middleware cannot resolve a tenant (e.g. the instructor
+        clicks the email link without being logged in).
         """
         serializer = AcceptCodeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         code = serializer.validated_data["accept_code"].upper()
 
-        tenant = getattr(request, "tenant", None)
-        if tenant is None:
-            return Response({"detail": "Tenant not resolved."}, status=400)
-
         try:
-            offer = CoverOffer.objects.select_related("cover_request__tenant").get(
+            offer = CoverOffer.objects.select_related(
+                "cover_request__tenant"
+            ).get(
                 accept_code=code,
-                cover_request__tenant=tenant,
                 status=CoverOffer.Status.PENDING,
+                is_deleted=False,
             )
         except CoverOffer.DoesNotExist:
             return Response({"detail": "Invalid or expired accept code."}, status=404)
 
         ip_address = request.META.get("REMOTE_ADDR")
-        accept_cover_offer(offer, accepted_by=request.user if request.user.is_authenticated else None, ip_address=ip_address)
+        accepted_by = request.user if request.user.is_authenticated else None
+        accept_cover_offer(offer, accepted_by=accepted_by, ip_address=ip_address)
         return Response({"detail": "Cover accepted successfully."})

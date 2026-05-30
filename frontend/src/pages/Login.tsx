@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { login } from '../api/auth'
 import { useAuth } from '../hooks/useAuth'
@@ -115,6 +115,13 @@ export function LoginPage() {
               Sign in
             </Button>
           </form>
+
+          <p className="text-center text-sm text-gray-400 mt-6">
+            New gym?{' '}
+            <Link to="/signup" className="text-cyan-600 hover:text-cyan-700 font-medium">
+              Sign up free →
+            </Link>
+          </p>
         </div>
       </div>
     </div>
