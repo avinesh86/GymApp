@@ -3,7 +3,6 @@ Tests for report views: correct response shape, empty data handling, tenant scop
 """
 
 from datetime import date, timedelta
-from decimal import Decimal
 
 import pytest
 from django.utils import timezone
@@ -21,6 +20,7 @@ from apps.reports.views import (
 )
 from tests.factories import (
     AttendanceRecordFactory,
+    ClassTypeFactory,
     InvoiceFactory,
     StaffProfileFactory,
     TimetableEventFactory,
@@ -96,12 +96,13 @@ class TestAttendanceReport:
         response = AttendanceReportView.as_view()(request)
         assert response.status_code == 400
 
-    def test_scoped_to_tenant(self, tenant, other_tenant, manager_user, class_type):
+    def test_scoped_to_tenant(self, tenant, other_tenant, manager_user):
+        other_class_type = ClassTypeFactory(tenant=other_tenant, name="Other Yoga")
         other_instructor = StaffProfileFactory(tenant=other_tenant)
         start = timezone.now() - timedelta(hours=2)
         other_event = TimetableEventFactory(
             tenant=other_tenant,
-            class_type=class_type,
+            class_type=other_class_type,
             instructor=other_instructor,
             start_datetime=start,
             end_datetime=start + timedelta(hours=1),

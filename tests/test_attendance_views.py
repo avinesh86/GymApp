@@ -3,9 +3,9 @@ Tests for attendance views: submit_for_event, _list_awaiting, QR token submit.
 """
 
 from datetime import timedelta
-from decimal import Decimal
 
 import pytest
+from django.contrib.auth.models import AnonymousUser
 from django.utils import timezone
 
 from apps.attendance.models import AttendanceRecord, QRAttendanceToken
@@ -274,7 +274,7 @@ class TestQRTokenSubmit:
             "token": token.token,
             "count": 12,
         }, format="json")
-        request.user = type("AnonymousUser", (), {"is_authenticated": False})()
+        request.user = AnonymousUser()
         request.tenant = tenant
 
         from apps.attendance.views import QRAttendanceTokenViewSet
@@ -297,7 +297,7 @@ class TestQRTokenSubmit:
             "token": token.token,
             "count": 10,
         }, format="json")
-        request.user = type("AnonymousUser", (), {"is_authenticated": False})()
+        request.user = AnonymousUser()
         request.tenant = tenant
 
         from apps.attendance.views import QRAttendanceTokenViewSet
@@ -315,7 +315,7 @@ class TestQRTokenSubmit:
             "token": token.token,
             "count": 10,
         }, format="json")
-        request.user = type("AnonymousUser", (), {"is_authenticated": False})()
+        request.user = AnonymousUser()
         request.tenant = tenant
 
         from apps.attendance.views import QRAttendanceTokenViewSet
@@ -331,7 +331,7 @@ class TestQRTokenSubmit:
             "token": "totally-invalid-token",
             "count": 10,
         }, format="json")
-        request.user = type("AnonymousUser", (), {"is_authenticated": False})()
+        request.user = AnonymousUser()
         request.tenant = tenant
 
         from apps.attendance.views import QRAttendanceTokenViewSet
@@ -350,7 +350,7 @@ class TestQRTokenSubmit:
             "token": token.token,
             "count": 8,
         }, format="json")
-        request.user = type("AnonymousUser", (), {"is_authenticated": False})()
+        request.user = AnonymousUser()
         request.tenant = tenant
 
         from apps.attendance.views import QRAttendanceTokenViewSet

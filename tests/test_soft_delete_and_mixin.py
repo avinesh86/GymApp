@@ -13,6 +13,7 @@ from tests.factories import (
     ClassTypeFactory,
     StaffProfileFactory,
     TimetableEventFactory,
+    UserFactory,
 )
 
 
@@ -185,9 +186,7 @@ class TestPerformUpdate:
     def test_perform_update_injects_updated_by(self, tenant, admin_user):
         class_type = ClassTypeFactory(tenant=tenant, created_by=admin_user, updated_by=admin_user)
 
-        other_admin = pytest.importorskip("tests.factories").UserFactory(
-            tenant=tenant, role="admin"
-        )
+        other_admin = UserFactory(tenant=tenant, role="admin")
 
         from apps.timetable.serializers import ClassTypeSerializer
         from apps.timetable.views import ClassTypeViewSet
