@@ -6,7 +6,7 @@ import pytest
 from django.test import RequestFactory
 from rest_framework_simplejwt.tokens import AccessToken
 
-from apps.tenants.middleware import TENANT_EXEMPT_PREFIXES, TenantMiddleware
+from apps.tenants.middleware import TenantMiddleware
 from tests.factories import TenantDomainFactory, TenantFactory, UserFactory
 
 

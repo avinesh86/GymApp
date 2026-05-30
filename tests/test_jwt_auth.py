@@ -2,9 +2,6 @@
 Tests for custom JWT token serializer that embeds tenant_id and role claims.
 """
 
-import pytest
-from rest_framework_simplejwt.tokens import AccessToken
-
 from apps.users.jwt_serializers import TenantTokenObtainPairSerializer
 from tests.factories import TenantFactory, UserFactory
 

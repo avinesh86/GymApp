@@ -3,6 +3,7 @@ Tests for report views: correct response shape, empty data handling, tenant scop
 """
 
 from datetime import date, timedelta
+from decimal import Decimal
 
 import pytest
 from django.utils import timezone

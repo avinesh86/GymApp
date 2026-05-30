@@ -44,7 +44,7 @@ jobs:
         run: pip install -r requirements/ci.txt
 
       - name: Check for missing migrations
-        run: python manage.py makemigrations --check --dry-run
+        run: python manage.py makemigrations --check --dry-run --settings=fitops.settings.ci
 
       - name: Run tests with coverage
         run: |
@@ -88,7 +88,7 @@ jobs:
         run: pip install ruff
 
       - name: Run ruff check
-        run: ruff check apps/ tests/ fitops/ --output-format=github
+        run: ruff check apps/ tests/ fitops/ --config=ruff.toml --output-format=github
 
       - name: Run ruff format check
         run: ruff format --check apps/ tests/ fitops/

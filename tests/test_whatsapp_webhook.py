@@ -10,9 +10,11 @@ from django.test import TestCase, RequestFactory
 from django.urls import reverse
 
 from tests.factories import (
+    ClassTypeFactory,
     StaffProfileFactory,
     TenantDomainFactory,
     TenantFactory,
+    TimetableEventFactory,
     UserFactory,
     WhatsAppAccountFactory,
 )

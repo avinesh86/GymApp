@@ -5,9 +5,7 @@ and atomic tenant+user creation.
 
 import pytest
 
-from apps.tenants.models import Tenant, TenantBranding, TenantDomain, TenantSettings
 from apps.tenants.public_views import _unique_slug, _validate_signup_data
-from apps.users.models import User
 from tests.factories import TenantFactory, UserFactory
 
 
