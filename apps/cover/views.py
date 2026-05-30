@@ -157,6 +157,7 @@ class CoverOfferViewSet(TenantScopedMixin, ModelViewSet):
             ).get(
                 accept_code=code,
                 status=CoverOffer.Status.PENDING,
+                is_deleted=False,
             )
         except CoverOffer.DoesNotExist:
             return Response({"detail": "Invalid or expired accept code."}, status=404)
