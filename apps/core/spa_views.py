@@ -11,6 +11,10 @@ from django.conf import settings
 from django.http import HttpResponse, HttpResponseNotFound
 from django.views import View
 
+# Cache index.html content in memory to avoid reading from disk on
+# every request.  Cleared on web-app reload (PA touches the WSGI file).
+_index_html_cache = None
+
 
 class SPAView(View):
     """
@@ -19,6 +23,11 @@ class SPAView(View):
     """
 
     def get(self, request, *args, **kwargs):
+        global _index_html_cache
+
+        if _index_html_cache is not None:
+            return HttpResponse(_index_html_cache, content_type="text/html")
+
         # Look for index.html in the React dist directory
         candidates = [
             os.path.join(settings.BASE_DIR, "frontend", "dist", "index.html"),
@@ -28,7 +37,8 @@ class SPAView(View):
         for index_path in candidates:
             if os.path.exists(index_path):
                 with open(index_path, "r", encoding="utf-8") as f:
-                    return HttpResponse(f.read(), content_type="text/html")
+                    _index_html_cache = f.read()
+                return HttpResponse(_index_html_cache, content_type="text/html")
 
         return HttpResponseNotFound(
             "<h1>Frontend not built</h1>"

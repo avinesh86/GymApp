@@ -33,11 +33,8 @@ urlpatterns = [
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
-else:
-    # On PythonAnywhere, media files are served via the static file mapping
-    # configured in the Web tab.  Django still needs to generate correct URLs.
-    # WhiteNoise handles /static/ automatically.
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# In production (PythonAnywhere), media files are served via the static
+# file mapping configured in the PA Web tab.  WhiteNoise handles /static/.
 
 # ─── SPA catch-all (PythonAnywhere / single-server deployments) ──────────────
 # When Django serves the React frontend, any non-API path should return
