@@ -20,6 +20,10 @@ jobs:
       DJANGO_SECRET_KEY: ci-test-secret-key-not-for-production
       FIELD_ENCRYPTION_KEY: RFhRaklBYlZJVWRfZm50RmhzUWVLYkhKdGxfX0Y1RGM9
       PYTHONPATH: ${{ github.workspace }}
+      # Dummy values so base.py imports without error (ci.py overrides DATABASES)
+      MYSQL_DATABASE: unused
+      MYSQL_USER: unused
+      MYSQL_PASSWORD: unused
 
     steps:
       - name: Checkout code
