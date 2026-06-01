@@ -3,10 +3,11 @@ Tests for report views: correct response shape, empty data handling, tenant scop
 """
 
 from datetime import date, timedelta
+from decimal import Decimal
 
 import pytest
 from django.utils import timezone
-from rest_framework.test import APIRequestFactory
+from rest_framework.test import APIRequestFactory, force_authenticate
 
 from apps.attendance.models import AttendanceRecord
 from apps.invoices.models import Invoice
@@ -30,7 +31,7 @@ from tests.factories import (
 def _make_request(url, user, tenant):
     factory = APIRequestFactory()
     request = factory.get(url)
-    request.user = user
+    force_authenticate(request, user=user)
     request.tenant = tenant
     return request
 
@@ -249,7 +250,7 @@ class TestPayrollReport:
 
         response = PayrollReportView.as_view()(request)
         assert response.status_code == 200
-        assert response.data["total_payroll"] == "0"
+        assert Decimal(response.data["total_payroll"]) == Decimal("0")
 
 
 # ---------------------------------------------------------------------------

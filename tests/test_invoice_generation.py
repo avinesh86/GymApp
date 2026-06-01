@@ -5,6 +5,8 @@ Tests for invoice generation: completed classes → invoice lines → correct am
 from datetime import date, timedelta
 from decimal import Decimal
 
+import datetime as dt
+
 from django.test import TestCase
 from django.utils import timezone
 
@@ -29,8 +31,9 @@ class InvoiceGenerationTest(TestCase):
         self.class_type = ClassTypeFactory(tenant=self.tenant, name="Yoga")
         self.instructor = StaffProfileFactory(tenant=self.tenant)
 
-        self.period_start = date.today().replace(day=1)
-        self.period_end = date.today()
+        # Keep period in the recent past so events at +0, +1, +2 days all fall within it
+        self.period_start = date.today() - timedelta(days=10)
+        self.period_end = self.period_start + timedelta(days=4)
 
         # Pay rate: $50 per class
         self.pay_rate = StaffPayRateFactory(
@@ -38,15 +41,18 @@ class InvoiceGenerationTest(TestCase):
             staff=self.instructor,
             rate_type="per_class",
             amount=Decimal("50.00"),
-            effective_from=self.period_start - timedelta(days=30),
+            effective_from=self.period_start - timedelta(days=1),
         )
 
-        # Create 3 completed events
+        # Create 3 completed events — use noon UTC to avoid date shifting across timezones
         self.events = []
         for i in range(3):
             event_date = self.period_start + timedelta(days=i)
-            start = timezone.datetime.combine(event_date, timezone.datetime.min.time().replace(hour=9))
-            start = timezone.make_aware(start)
+            start = dt.datetime(
+                event_date.year, event_date.month, event_date.day,
+                12, 0, 0,
+                tzinfo=dt.timezone.utc,
+            )
             event = TimetableEventFactory(
                 tenant=self.tenant,
                 class_type=self.class_type,
@@ -104,11 +110,12 @@ class InvoiceGenerationTest(TestCase):
     def test_attendance_bonus_applied(self):
         from apps.timetable.models import ClassBonus
 
-        # Add a green threshold bonus to class type
+        # Add a green threshold bonus — only fires when attendance >= green threshold (10)
         ClassBonus.objects.create(
             tenant=self.tenant,
             class_type=self.class_type,
-            threshold_type="green",
+            bonus_type=ClassBonus.BonusType.ATTENDANCE_THRESHOLD,
+            threshold=10,
             bonus_amount=Decimal("10.00"),
         )
 
