@@ -101,7 +101,7 @@ class CoverOffer(TenantAwareModel):
     )
     offered_at = models.DateTimeField(auto_now_add=True)
     responded_at = models.DateTimeField(null=True, blank=True)
-    accept_code = models.CharField(max_length=8, default=_generate_accept_code, db_index=True)
+    accept_code = models.CharField(max_length=16, default=_generate_accept_code, db_index=True)
 
     class Meta:
         db_table = "cover_offer"

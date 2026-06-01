@@ -77,6 +77,7 @@ class StaffProfileFactory(factory.django.DjangoModelFactory):
     name = factory.Sequence(lambda n: f"Staff Member {n}")
     email = factory.Sequence(lambda n: f"staff{n}@test.com")
     phone = "+61400000000"
+    role = "instructor"
     status = "active"
 
 

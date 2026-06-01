@@ -132,6 +132,12 @@ class QRAttendanceTokenViewSet(TenantScopedMixin, ModelViewSet):
     serializer_class = QRAttendanceTokenSerializer
     permission_classes = [IsGymManager]
 
+    def get_permissions(self):
+        # The 'submit' action is public — anyone with a valid QR token can submit
+        if getattr(self, 'action', None) == 'submit':
+            return []
+        return super().get_permissions()
+
     def get_queryset(self):
         return QRAttendanceToken.objects.filter(
             timetable_event__tenant=self.request.tenant

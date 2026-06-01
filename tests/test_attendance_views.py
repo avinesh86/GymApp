@@ -4,9 +4,12 @@ Tests for attendance views: submit_for_event, _list_awaiting, QR token submit.
 
 from datetime import timedelta
 
+import urllib.parse
+
 import pytest
 from django.contrib.auth.models import AnonymousUser
 from django.utils import timezone
+from rest_framework.test import APIRequestFactory, force_authenticate
 
 from apps.attendance.models import AttendanceRecord, QRAttendanceToken
 from apps.timetable.models import TimetableEvent
@@ -20,14 +23,12 @@ from tests.factories import TimetableEventFactory
 @pytest.mark.django_db
 class TestSubmitForEvent:
     def test_creates_attendance_record(self, tenant, class_count_admin_user, past_event):
-        from rest_framework.test import APIRequestFactory
-
         factory = APIRequestFactory()
         request = factory.post("/api/v1/attendance/records/submit-for-event/", {
             "event": past_event.pk,
             "count": 15,
         }, format="json")
-        request.user = class_count_admin_user
+        force_authenticate(request, user=class_count_admin_user)
         request.tenant = tenant
 
         from apps.attendance.views import AttendanceRecordViewSet
@@ -40,8 +41,6 @@ class TestSubmitForEvent:
         assert record.recorded_by == class_count_admin_user
 
     def test_transitions_scheduled_event_to_completed(self, tenant, class_count_admin_user, past_event):
-        from rest_framework.test import APIRequestFactory
-
         assert past_event.status == TimetableEvent.Status.SCHEDULED
 
         factory = APIRequestFactory()
@@ -49,7 +48,7 @@ class TestSubmitForEvent:
             "event": past_event.pk,
             "count": 10,
         }, format="json")
-        request.user = class_count_admin_user
+        force_authenticate(request, user=class_count_admin_user)
         request.tenant = tenant
 
         from apps.attendance.views import AttendanceRecordViewSet
@@ -60,8 +59,6 @@ class TestSubmitForEvent:
         assert past_event.status == TimetableEvent.Status.COMPLETED
 
     def test_updates_existing_record_via_update_or_create(self, tenant, class_count_admin_user, past_event):
-        from rest_framework.test import APIRequestFactory
-
         AttendanceRecord.objects.create(
             tenant=tenant,
             timetable_event=past_event,
@@ -74,7 +71,7 @@ class TestSubmitForEvent:
             "event": past_event.pk,
             "count": 20,
         }, format="json")
-        request.user = class_count_admin_user
+        force_authenticate(request, user=class_count_admin_user)
         request.tenant = tenant
 
         from apps.attendance.views import AttendanceRecordViewSet
@@ -87,13 +84,11 @@ class TestSubmitForEvent:
         assert record.count == 20
 
     def test_missing_count_returns_400(self, tenant, class_count_admin_user, past_event):
-        from rest_framework.test import APIRequestFactory
-
         factory = APIRequestFactory()
         request = factory.post("/api/v1/attendance/records/submit-for-event/", {
             "event": past_event.pk,
         }, format="json")
-        request.user = class_count_admin_user
+        force_authenticate(request, user=class_count_admin_user)
         request.tenant = tenant
 
         from apps.attendance.views import AttendanceRecordViewSet
@@ -103,14 +98,12 @@ class TestSubmitForEvent:
         assert response.status_code == 400
 
     def test_nonexistent_event_returns_404(self, tenant, class_count_admin_user):
-        from rest_framework.test import APIRequestFactory
-
         factory = APIRequestFactory()
         request = factory.post("/api/v1/attendance/records/submit-for-event/", {
             "event": 999999,
             "count": 10,
         }, format="json")
-        request.user = class_count_admin_user
+        force_authenticate(request, user=class_count_admin_user)
         request.tenant = tenant
 
         from apps.attendance.views import AttendanceRecordViewSet
@@ -127,11 +120,9 @@ class TestSubmitForEvent:
 @pytest.mark.django_db
 class TestListAwaiting:
     def test_returns_events_without_attendance(self, tenant, class_count_admin_user, past_event):
-        from rest_framework.test import APIRequestFactory
-
         factory = APIRequestFactory()
         request = factory.get("/api/v1/attendance/records/?awaiting=true")
-        request.user = class_count_admin_user
+        force_authenticate(request, user=class_count_admin_user)
         request.tenant = tenant
 
         from apps.attendance.views import AttendanceRecordViewSet
@@ -143,8 +134,6 @@ class TestListAwaiting:
         assert past_event.pk in event_ids
 
     def test_excludes_events_with_attendance(self, tenant, class_count_admin_user, past_event):
-        from rest_framework.test import APIRequestFactory
-
         AttendanceRecord.objects.create(
             tenant=tenant,
             timetable_event=past_event,
@@ -154,7 +143,7 @@ class TestListAwaiting:
 
         factory = APIRequestFactory()
         request = factory.get("/api/v1/attendance/records/?awaiting=true")
-        request.user = class_count_admin_user
+        force_authenticate(request, user=class_count_admin_user)
         request.tenant = tenant
 
         from apps.attendance.views import AttendanceRecordViewSet
@@ -175,11 +164,9 @@ class TestListAwaiting:
             status="cancelled",
         )
 
-        from rest_framework.test import APIRequestFactory
-
         factory = APIRequestFactory()
         request = factory.get("/api/v1/attendance/records/?awaiting=true")
-        request.user = class_count_admin_user
+        force_authenticate(request, user=class_count_admin_user)
         request.tenant = tenant
 
         from apps.attendance.views import AttendanceRecordViewSet
@@ -190,11 +177,9 @@ class TestListAwaiting:
         assert cancelled_event.pk not in event_ids
 
     def test_excludes_future_events(self, tenant, class_count_admin_user, future_event):
-        from rest_framework.test import APIRequestFactory
-
         factory = APIRequestFactory()
         request = factory.get("/api/v1/attendance/records/?awaiting=true")
-        request.user = class_count_admin_user
+        force_authenticate(request, user=class_count_admin_user)
         request.tenant = tenant
 
         from apps.attendance.views import AttendanceRecordViewSet
@@ -205,11 +190,9 @@ class TestListAwaiting:
         assert future_event.pk not in event_ids
 
     def test_count_only_returns_count(self, tenant, class_count_admin_user, past_event):
-        from rest_framework.test import APIRequestFactory
-
         factory = APIRequestFactory()
         request = factory.get("/api/v1/attendance/records/?awaiting=true&count_only=true")
-        request.user = class_count_admin_user
+        force_authenticate(request, user=class_count_admin_user)
         request.tenant = tenant
 
         from apps.attendance.views import AttendanceRecordViewSet
@@ -231,16 +214,14 @@ class TestListAwaiting:
             status="completed",
         )
 
-        from rest_framework.test import APIRequestFactory
-
-        from_dt = (timezone.now() - timedelta(days=1)).isoformat()
-        to_dt = timezone.now().isoformat()
+        from_dt = urllib.parse.quote((timezone.now() - timedelta(days=1)).isoformat())
+        to_dt = urllib.parse.quote(timezone.now().isoformat())
 
         factory = APIRequestFactory()
         request = factory.get(
             f"/api/v1/attendance/records/?awaiting=true&from_datetime={from_dt}&to_datetime={to_dt}"
         )
-        request.user = class_count_admin_user
+        force_authenticate(request, user=class_count_admin_user)
         request.tenant = tenant
 
         from apps.attendance.views import AttendanceRecordViewSet
@@ -268,7 +249,6 @@ class TestQRTokenSubmit:
     def test_valid_token_creates_attendance(self, tenant, past_event):
         token = self._create_token(past_event)
 
-        from rest_framework.test import APIRequestFactory
         factory = APIRequestFactory()
         request = factory.post("/api/v1/attendance/qr-tokens/submit/", {
             "token": token.token,
@@ -291,7 +271,6 @@ class TestQRTokenSubmit:
     def test_expired_token_returns_400(self, tenant, past_event):
         token = self._create_token(past_event, expired=True)
 
-        from rest_framework.test import APIRequestFactory
         factory = APIRequestFactory()
         request = factory.post("/api/v1/attendance/qr-tokens/submit/", {
             "token": token.token,
@@ -309,7 +288,6 @@ class TestQRTokenSubmit:
     def test_used_token_returns_400(self, tenant, past_event):
         token = self._create_token(past_event, used=True)
 
-        from rest_framework.test import APIRequestFactory
         factory = APIRequestFactory()
         request = factory.post("/api/v1/attendance/qr-tokens/submit/", {
             "token": token.token,
@@ -325,7 +303,6 @@ class TestQRTokenSubmit:
         assert response.status_code == 400
 
     def test_invalid_token_returns_404(self, tenant):
-        from rest_framework.test import APIRequestFactory
         factory = APIRequestFactory()
         request = factory.post("/api/v1/attendance/qr-tokens/submit/", {
             "token": "totally-invalid-token",
@@ -344,7 +321,6 @@ class TestQRTokenSubmit:
         token = self._create_token(past_event)
         assert past_event.status == TimetableEvent.Status.SCHEDULED
 
-        from rest_framework.test import APIRequestFactory
         factory = APIRequestFactory()
         request = factory.post("/api/v1/attendance/qr-tokens/submit/", {
             "token": token.token,
