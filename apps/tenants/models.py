@@ -100,6 +100,8 @@ class TenantSettings(models.Model):
     payroll_approval_required = models.BooleanField(default=True)
     whatsapp_enabled = models.BooleanField(default=False)
     email_enabled = models.BooleanField(default=True)
+    cover_alerts_enabled = models.BooleanField(default=True)
+    invoice_reminders_enabled = models.BooleanField(default=True)
     timezone = models.CharField(max_length=64, default="Australia/Sydney")
     currency_symbol = models.CharField(max_length=10, default="$")
     cover_offer_expiry_hours = models.PositiveSmallIntegerField(default=24)
