@@ -1,0 +1,13 @@
+[lint]
+select = ["E", "F", "W"]
+ignore = [
+    "E402",   # module-level import not at top of file (Django patterns)
+    "F401",   # unused imports (will clean up incrementally)
+    "F841",   # local variable assigned but unused (test setup patterns)
+    "E501",   # line too long (handled by formatter)
+]
+
+[lint.per-file-ignores]
+"tests/*" = ["F811"]  # redefined-unused (pytest fixtures)
+"fitops/settings/*" = ["F403", "F405"]  # wildcard imports in settings
+"fitops/pa_wsgi.py" = ["E402"]  # conditional imports in WSGI

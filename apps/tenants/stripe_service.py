@@ -10,7 +10,7 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-FITOPS_PRODUCT_ID = "prod_UZsIYi4XDpNbhx"
+FITOPS_PRODUCT_ID = getattr(settings, "STRIPE_PRODUCT_ID", "prod_UZsIYi4XDpNbhx")
 
 
 def _get_stripe():

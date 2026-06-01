@@ -241,7 +241,7 @@ function EditTab({ event, onSaved }: { event: TimetableEvent; onSaved: () => voi
   }
 
   async function handleSave() {
-    if (!makeRecurring || recurringDays.length === 0) {
+    if (!makeRecurring) {
       save()
       return
     }

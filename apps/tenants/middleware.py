@@ -63,6 +63,7 @@ class TenantMiddleware:
         token_str = auth_header[7:]
         try:
             from rest_framework_simplejwt.tokens import AccessToken
+            from rest_framework_simplejwt.exceptions import TokenError
 
             token = AccessToken(token_str)
 
@@ -82,8 +83,8 @@ class TenantMiddleware:
                     .select_related("tenant")
                     .first()
                 )
-                if user and user.tenant.is_active:
+                if user and user.tenant_id and user.tenant and user.tenant.is_active:
                     return user.tenant
-        except Exception:
+        except (TokenError, Tenant.DoesNotExist):
             return None
         return None

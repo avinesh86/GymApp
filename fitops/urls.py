@@ -37,3 +37,17 @@ urlpatterns = [
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
     urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
+# In production (PythonAnywhere), media files are served via the static
+# file mapping configured in the PA Web tab.  WhiteNoise handles /static/.
+
+# ─── SPA catch-all (PythonAnywhere / single-server deployments) ──────────────
+# When Django serves the React frontend, any non-API path should return
+# index.html so React Router handles client-side routing.
+# This MUST be the last pattern — it matches everything.
+if not settings.DEBUG:
+    from apps.core.spa_views import SPAView
+
+    urlpatterns += [
+        path("<path:path>", SPAView.as_view()),
+        path("", SPAView.as_view()),
+    ]

@@ -1,0 +1,11 @@
+-r base.txt
+
+# Testing
+pytest==8.3.2
+pytest-django==4.8.0
+pytest-cov==5.0.0
+factory-boy==3.3.1
+faker==26.0.0
+
+# CI needs stripe for import resolution (even though tests mock it)
+stripe>=10.0.0
