@@ -26,8 +26,8 @@ export function TimetableTab() {
 
   useEffect(() => {
     if (settings) {
-      setWeekStart(String(settings.week_start_day))
-      setDefaultView(settings.default_timetable_view)
+      setWeekStart(String(settings.week_start_day ?? 1))
+      setDefaultView(settings.default_timetable_view ?? 'week')
     }
   }, [settings])
 

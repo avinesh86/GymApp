@@ -44,6 +44,8 @@ class TenantSettingsSerializer(serializers.ModelSerializer):
             "payroll_approval_required",
             "whatsapp_enabled",
             "email_enabled",
+            "cover_alerts_enabled",
+            "invoice_reminders_enabled",
             "timezone",
             "currency_symbol",
             "cover_offer_expiry_hours",

@@ -74,9 +74,9 @@ export function NotificationsTab() {
 
   useEffect(() => {
     if (settings) {
-      setEmailEnabled(settings.email_notifications_enabled ?? settings.email_enabled ?? true)
-      setWhatsappEnabled(settings.whatsapp_notifications_enabled ?? false)
-      setCoverAlerts(settings.cover_request_alerts_enabled ?? false)
+      setEmailEnabled(settings.email_enabled ?? true)
+      setWhatsappEnabled(settings.whatsapp_enabled ?? false)
+      setCoverAlerts(settings.cover_alerts_enabled ?? false)
       setInvoiceReminders(settings.invoice_reminders_enabled ?? false)
       setFromEmail(settings.notification_from_email ?? '')
       setFromName(settings.notification_from_name ?? '')
@@ -95,11 +95,22 @@ export function NotificationsTab() {
     }
   }, [waAccount])
 
+  // ── Auto-save channel toggles ────────────────────────────────────────────────
+  const { mutate: saveToggle } = useMutation({
+    mutationFn: (patch: Partial<Record<string, boolean>>) => updateTenantSettings(patch),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tenant', 'settings'] }),
+    onError: () => toast.error('Failed to save setting'),
+  })
+
+  function handleToggle(field: string, value: boolean, setter: (v: boolean) => void) {
+    setter(value)
+    saveToggle({ [field]: value })
+  }
+
   // ── Save email settings ──────────────────────────────────────────────────────
   const { mutate: saveEmail, isPending: savingEmail } = useMutation({
     mutationFn: () => {
       const payload: Record<string, unknown> = {
-        email_enabled: emailEnabled,
         notification_from_email: fromEmail,
         notification_from_name: fromName,
       }
@@ -145,26 +156,26 @@ export function NotificationsTab() {
           label="Email Notifications"
           description="Send cover requests and alerts via email"
           checked={emailEnabled}
-          onChange={setEmailEnabled}
+          onChange={(v) => handleToggle('email_enabled', v, setEmailEnabled)}
         />
         <Toggle
           label="WhatsApp Notifications"
           description="Send notifications via WhatsApp Business"
           checked={whatsappEnabled}
-          onChange={setWhatsappEnabled}
+          onChange={(v) => handleToggle('whatsapp_enabled', v, setWhatsappEnabled)}
         />
         <h3 className="text-sm font-semibold text-gray-900 mt-4 mb-2">Alert Types</h3>
         <Toggle
           label="Cover Request Alerts"
           description="Notify instructors when cover is needed for a class"
           checked={coverAlerts}
-          onChange={setCoverAlerts}
+          onChange={(v) => handleToggle('cover_alerts_enabled', v, setCoverAlerts)}
         />
         <Toggle
           label="Invoice Reminders"
           description="Remind instructors and managers about pending invoices"
           checked={invoiceReminders}
-          onChange={setInvoiceReminders}
+          onChange={(v) => handleToggle('invoice_reminders_enabled', v, setInvoiceReminders)}
         />
       </Card>
 

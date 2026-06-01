@@ -48,19 +48,21 @@ export interface TenantSettings {
   timezone: string
   invoice_frequency: 'weekly' | 'fortnightly' | 'monthly' | '8-weekly'
   payroll_approval_required: boolean
-  week_start_day: number
-  default_timetable_view: 'week' | 'list'
-  email_notifications_enabled: boolean
-  whatsapp_notifications_enabled: boolean
-  cover_request_alerts_enabled: boolean
-  invoice_reminders_enabled: boolean
   email_enabled: boolean
+  whatsapp_enabled: boolean
+  cover_alerts_enabled: boolean
+  invoice_reminders_enabled: boolean
+  cover_offer_expiry_hours: number
+  auto_generate_invoices: boolean
   notification_from_email: string
   notification_from_name: string
   // write-only on PATCH — never returned
   notification_email_password?: string
   // true when a password is already stored server-side
   notification_email_password_set: boolean
+  // frontend-only prefs (not persisted server-side yet)
+  week_start_day?: number
+  default_timetable_view?: 'week' | 'list'
 }
 
 export interface TenantBranding {
