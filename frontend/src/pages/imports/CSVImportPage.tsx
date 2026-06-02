@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { Upload, FileText, CheckCircle, XCircle, Download } from 'lucide-react'
 import { createImportJob, getImportJob, downloadTemplate } from '../../api/imports'
@@ -28,9 +28,18 @@ const IMPORT_TYPE_OPTIONS: { value: ImportType; label: string; description: stri
   },
 ]
 
-function usePollingImportJob(jobId: number | null) {
+// Query keys to invalidate after a successful import so that stale cached
+// data (class types, sites, timetable events, staff) is immediately refreshed.
+const IMPORT_INVALIDATION_KEYS: Record<string, string[][]> = {
+  staff:      [['staff']],
+  timetable:  [['timetable-events'], ['class-types'], ['sites']],
+  attendance: [['attendance']],
+}
+
+function usePollingImportJob(jobId: number | null, importType: string) {
   const [job, setJob] = useState<ImportJob | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const queryClient = useQueryClient()
 
   React.useEffect(() => {
     if (!jobId) {
@@ -48,6 +57,15 @@ function usePollingImportJob(jobId: number | null) {
             clearInterval(intervalRef.current)
             intervalRef.current = null
           }
+
+          // Invalidate related queries so the UI picks up newly created
+          // records without requiring a manual page refresh.
+          if (result.status === 'complete') {
+            const keys = IMPORT_INVALIDATION_KEYS[importType] ?? []
+            keys.forEach((queryKey) =>
+              queryClient.invalidateQueries({ queryKey })
+            )
+          }
         }
       } catch {
         // silently ignore polling errors
@@ -62,7 +80,7 @@ function usePollingImportJob(jobId: number | null) {
         clearInterval(intervalRef.current)
       }
     }
-  }, [jobId])
+  }, [jobId, importType, queryClient])
 
   return job
 }
@@ -73,7 +91,7 @@ export function CSVImportPage() {
   const [currentJobId, setCurrentJobId] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const job = usePollingImportJob(currentJobId)
+  const job = usePollingImportJob(currentJobId, importType)
 
   const { mutate: uploadFile, isPending: isUploading } = useMutation({
     mutationFn: (file: File) => createImportJob(importType, file),
