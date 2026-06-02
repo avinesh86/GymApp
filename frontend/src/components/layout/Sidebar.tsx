@@ -24,17 +24,23 @@ import { useTenantBranding } from '../../hooks/useTenant'
 
 import type { Permission } from '../../hooks/usePermission'
 
+import type { UserRole } from '../../types'
+
+// Roles that have a StaffProfile — only these users can access personal schedule views.
+const STAFF_ROLES: UserRole[] = ['instructor', 'team_leader', 'gym_manager']
+
 interface NavItem {
   to: string
   label: string
   icon: React.ReactNode
   permission?: Permission  // undefined = always shown to authenticated users
+  roles?: UserRole[]       // undefined = no role restriction
 }
 
 const NAV_ITEMS: NavItem[] = [
   { to: '/dashboard',        label: 'Dashboard',       icon: <LayoutDashboard className="h-5 w-5" />, permission: 'dashboard' },
-  { to: '/my-schedule',      label: 'My Schedule',     icon: <CalendarDays className="h-5 w-5" /> },
-  { to: '/calendar',         label: 'My Calendar',     icon: <Calendar className="h-5 w-5" /> },
+  { to: '/my-schedule',      label: 'My Schedule',     icon: <CalendarDays className="h-5 w-5" />,    roles: STAFF_ROLES },
+  { to: '/calendar',         label: 'My Calendar',     icon: <Calendar className="h-5 w-5" />,         roles: STAFF_ROLES },
   { to: '/timetable',        label: 'Timetable',       icon: <Calendar className="h-5 w-5" />,        permission: 'timetable' },
   { to: '/staff',            label: 'Staff',           icon: <Users className="h-5 w-5" />,           permission: 'staff' },
   { to: '/cover',            label: 'Cover Board',     icon: <RefreshCcw className="h-5 w-5" />,      permission: 'cover' },
@@ -74,7 +80,11 @@ export function Sidebar() {
 
       {/* Nav items */}
       <nav className="flex-1 px-2 py-3 overflow-y-auto">
-        {NAV_ITEMS.filter((item) => !item.permission || can(item.permission)).map((item) => (
+        {NAV_ITEMS.filter((item) => {
+          if (item.permission && !can(item.permission)) return false
+          if (item.roles && (!user || !item.roles.includes(user.role))) return false
+          return true
+        }).map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
