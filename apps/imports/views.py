@@ -38,6 +38,10 @@ class ImportJobViewSet(TenantScopedMixin, ModelViewSet):
         if not file_obj:
             return Response({"detail": "No file provided."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Read before creating the job — Django's file storage consumes the
+        # file pointer during model save, so reading after create returns b"".
+        file_content = file_obj.read()
+
         job = ImportJob.objects.create(
             tenant=request.tenant,
             import_type=import_type,
@@ -46,8 +50,6 @@ class ImportJobViewSet(TenantScopedMixin, ModelViewSet):
             created_by=request.user,
             updated_by=request.user,
         )
-
-        file_content = file_obj.read()
         handler = IMPORT_HANDLERS.get(import_type)
 
         if handler is None:
