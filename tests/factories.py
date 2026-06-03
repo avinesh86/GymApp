@@ -102,7 +102,7 @@ class TimetableEventFactory(factory.django.DjangoModelFactory):
     tenant = factory.SubFactory(TenantFactory)
     class_type = factory.SubFactory(ClassTypeFactory, tenant=factory.SelfAttribute("..tenant"))
     start_datetime = factory.LazyFunction(timezone.now)
-    end_datetime = factory.LazyFunction(lambda: timezone.now().replace(hour=timezone.now().hour + 1))
+    end_datetime = factory.LazyFunction(lambda: timezone.now() + timezone.timedelta(hours=1))
     status = "scheduled"
 
 
