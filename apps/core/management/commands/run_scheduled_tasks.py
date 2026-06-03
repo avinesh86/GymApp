@@ -50,6 +50,13 @@ class Command(BaseCommand):
             "expire_cover_offers",
         ))
 
+        # 3b. Expire cover requests where the event date has passed (daily)
+        results.append(self._run_task(
+            "Expire stale cover requests",
+            "apps.cover.tasks",
+            "expire_stale_cover_requests",
+        ))
+
         # 4. Send cover reminders (hourly)
         results.append(self._run_task(
             "Send cover reminders",

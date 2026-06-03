@@ -204,6 +204,24 @@ def expire_cover_offers():
     return total_expired
 
 
+@shared_task(name="cover.expire_stale_cover_requests")
+def expire_stale_cover_requests():
+    """
+    Runs daily.  Marks open/offered cover requests as expired when the
+    associated timetable event's end_datetime has already passed.
+    """
+    now = timezone.now()
+    expired_count = CoverRequest.objects.filter(
+        status__in=[CoverRequest.Status.OPEN, CoverRequest.Status.OFFERED],
+        is_deleted=False,
+        timetable_event__end_datetime__lt=now,
+        tenant__is_active=True,
+    ).update(status=CoverRequest.Status.EXPIRED)
+
+    logger.info("expire_stale_cover_requests: expired %d cover requests", expired_count)
+    return expired_count
+
+
 @shared_task(name="cover.send_cover_reminders")
 def send_cover_reminders():
     """

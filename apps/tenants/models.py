@@ -129,6 +129,10 @@ class TenantSettings(models.Model):
 
     @notification_email_password.setter
     def notification_email_password(self, raw_password: str) -> None:
+        if raw_password:
+            # Normalize non-breaking spaces (\xa0) that browsers paste in place
+            # of regular spaces — SMTP auth requires plain ASCII.
+            raw_password = raw_password.replace('\xa0', ' ').strip()
         self._notification_email_password = _encrypt_field(raw_password) if raw_password else ""
 
 

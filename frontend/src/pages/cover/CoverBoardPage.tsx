@@ -57,7 +57,7 @@ export function CoverBoardPage() {
   })
 
   const openRequests = allRequests.filter((r) => ['open', 'offered'].includes(r.status))
-  const resolvedRequests = allRequests.filter((r) => ['accepted', 'cancelled'].includes(r.status))
+  const resolvedRequests = allRequests.filter((r) => ['accepted', 'cancelled', 'expired'].includes(r.status))
 
   if (isLoading) return <PageSpinner />
 
@@ -89,6 +89,7 @@ export function CoverBoardPage() {
           <option value="offered">Offered</option>
           <option value="accepted">Accepted</option>
           <option value="cancelled">Cancelled</option>
+          <option value="expired">Expired</option>
         </select>
 
         <select
@@ -128,7 +129,7 @@ export function CoverBoardPage() {
       {/* Resolved requests */}
       {resolvedRequests.length > 0 && (
         <section>
-          <h2 className="text-sm font-semibold text-gray-700 mb-3">Resolved Requests</h2>
+          <h2 className="text-sm font-semibold text-gray-700 mb-3">Resolved &amp; Expired Requests</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {resolvedRequests.map((request) => (
               <CoverRequestCard

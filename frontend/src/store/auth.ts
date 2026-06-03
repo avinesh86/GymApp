@@ -61,6 +61,14 @@ export const useAuthStore = create<AuthState>()(
         user: state.user,
         isAuthenticated: state.isAuthenticated,
       }),
+      // On cold reload isAuthenticated=true but accessToken=null (not persisted).
+      // Set isRestoring=true synchronously so RequireAuth shows a spinner and
+      // no API calls fire before UserInitializer restores the access token.
+      onRehydrateStorage: () => (rehydratedState) => {
+        if (rehydratedState?.isAuthenticated) {
+          rehydratedState.isRestoring = true
+        }
+      },
     }
   )
 )

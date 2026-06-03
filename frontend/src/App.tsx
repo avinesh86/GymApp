@@ -62,15 +62,16 @@ function UserInitializer() {
           logout()
           return
         }
-        const refreshRes = await axios.post<{ access: string }>(
+        const refreshRes = await axios.post<{ access: string; refresh: string }>(
           '/api/v1/auth/token/refresh/',
           { refresh: refreshToken }
         )
         const newAccess = refreshRes.data.access
+        const newRefresh = refreshRes.data.refresh ?? refreshToken
         const userRes = await axios.get<AuthUser>('/api/v1/users/me/', {
           headers: { Authorization: `Bearer ${newAccess}` },
         })
-        login({ access: newAccess, refresh: refreshToken }, userRes.data)
+        login({ access: newAccess, refresh: newRefresh }, userRes.data)
       } catch {
         logout()
       }

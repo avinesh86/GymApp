@@ -200,7 +200,7 @@ export interface TimetableEvent {
 // ─── Cover ───────────────────────────────────────────────────────────────────
 
 export type CoverUrgency = 'low' | 'high' | 'critical'
-export type CoverRequestStatus = 'open' | 'offered' | 'accepted' | 'cancelled'
+export type CoverRequestStatus = 'open' | 'offered' | 'accepted' | 'cancelled' | 'expired'
 
 export interface CoverRequest {
   id: number
