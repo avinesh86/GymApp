@@ -38,36 +38,47 @@ const queryClient = new QueryClient({
   },
 })
 
-// ─── Restore user from token on cold load ─────────────────────────────────────
-// If the page is refreshed, accessToken is gone (memory-only) but refreshToken
-// and isAuthenticated persist in localStorage. Fetch /users/me/ using the
-// refresh token to restore the access token + user profile.
+// ─── Restore access token on cold reload ──────────────────────────────────────
+// accessToken is memory-only (not persisted). On reload: isAuthenticated and
+// refreshToken survive localStorage rehydration, but accessToken is null.
+// UserInitializer detects that state and restores a fresh access token before
+// any page queries fire, preventing a 401 flood.
 
 function UserInitializer() {
-  const { isAuthenticated, user, login, logout } = useAuth()
+  const { isAuthenticated, login, logout } = useAuth()
+  const accessToken = useAuthStore((s) => s.accessToken)
   const refreshToken = useAuthStore((s) => s.refreshToken)
+  const setIsRestoring = useAuthStore((s) => s.setIsRestoring)
 
   useEffect(() => {
-    if (!isAuthenticated || user) return
+    // Nothing to do: either not logged in, or access token already in memory.
+    if (!isAuthenticated || accessToken) return
+
+    setIsRestoring(true)
 
     async function restore() {
       try {
-        if (!refreshToken) { logout(); return }
-        // Get a fresh access token first
-        const refreshRes = await axios.post<{ access: string }>('/api/v1/auth/token/refresh/', { refresh: refreshToken })
+        if (!refreshToken) {
+          logout()
+          return
+        }
+        const refreshRes = await axios.post<{ access: string; refresh: string }>(
+          '/api/v1/auth/token/refresh/',
+          { refresh: refreshToken }
+        )
         const newAccess = refreshRes.data.access
-        // Fetch user profile
+        const newRefresh = refreshRes.data.refresh ?? refreshToken
         const userRes = await axios.get<AuthUser>('/api/v1/users/me/', {
           headers: { Authorization: `Bearer ${newAccess}` },
         })
-        login({ access: newAccess, refresh: refreshToken! }, userRes.data)
+        login({ access: newAccess, refresh: newRefresh }, userRes.data)
       } catch {
         logout()
       }
     }
 
     restore()
-  }, [isAuthenticated, user, refreshToken, login, logout])
+  }, [isAuthenticated, accessToken, refreshToken, login, logout, setIsRestoring])
 
   return null
 }
@@ -76,9 +87,20 @@ function UserInitializer() {
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth()
+  const isRestoring = useAuthStore((s) => s.isRestoring)
+
+  if (isRestoring) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-[#F0F2F5]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      </div>
+    )
+  }
+
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
   }
+
   return <>{children}</>
 }
 

@@ -58,7 +58,7 @@ def import_staff(file_content: bytes, tenant, created_by) -> tuple[int, int, lis
 
 
 def import_timetable(file_content: bytes, tenant, created_by) -> tuple[int, int, list]:
-    from datetime import datetime
+    from datetime import datetime, timedelta
 
     from apps.staff.models import StaffProfile
     from apps.tenants.models import Site
@@ -79,23 +79,47 @@ def import_timetable(file_content: bytes, tenant, created_by) -> tuple[int, int,
             if not class_type_name or not start_str:
                 raise ValueError("class_type and start_datetime are required")
 
-            class_type = ClassType.objects.get(tenant=tenant, name=class_type_name)
-            start_dt = datetime.fromisoformat(start_str)
-            end_dt = start_dt.replace(
-                hour=start_dt.hour, minute=start_dt.minute
+            # Auto-create class type if it doesn't exist yet for this tenant.
+            # Default duration is 60 minutes — the tenant can adjust it later
+            # via settings.
+            class_type, _ = ClassType.objects.get_or_create(
+                tenant=tenant,
+                name=class_type_name,
+                defaults={
+                    "duration_minutes": 60,
+                    "created_by": created_by,
+                    "updated_by": created_by,
+                },
             )
-            from datetime import timedelta
+
+            start_dt = datetime.fromisoformat(start_str)
             end_dt = start_dt + timedelta(minutes=class_type.duration_minutes)
 
+            # Resolve instructor — log a warning if the email is provided but
+            # no matching StaffProfile exists, but still create the event as
+            # unfilled rather than failing the row.
             instructor = None
             if instructor_email:
                 instructor = StaffProfile.objects.filter(
                     tenant=tenant, email=instructor_email
                 ).first()
+                if not instructor:
+                    logger.warning(
+                        "Timetable import row %d: no StaffProfile for email %r — "
+                        "event created as unfilled.",
+                        index,
+                        instructor_email,
+                    )
 
+            # Auto-create site if a name is provided and it doesn't exist yet.
+            # Site is a plain model (no created_by/updated_by).
             site = None
             if site_name:
-                site = Site.objects.filter(tenant=tenant, name=site_name).first()
+                site, _ = Site.objects.get_or_create(
+                    tenant=tenant,
+                    name=site_name,
+                    defaults={"address": ""},
+                )
 
             TimetableEvent.objects.create(
                 tenant=tenant,

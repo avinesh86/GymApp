@@ -1,4 +1,3 @@
-from django.utils import timezone
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
@@ -7,14 +6,7 @@ from apps.core.mixins import TenantScopedMixin
 from apps.core.permissions import IsAdmin
 
 from .models import ImportJob
-from .parsers import import_attendance, import_staff, import_timetable
 from .serializers import ImportJobSerializer
-
-IMPORT_HANDLERS = {
-    ImportJob.ImportType.STAFF: import_staff,
-    ImportJob.ImportType.TIMETABLE: import_timetable,
-    ImportJob.ImportType.ATTENDANCE: import_attendance,
-}
 
 
 class ImportJobViewSet(TenantScopedMixin, ModelViewSet):
@@ -42,39 +34,14 @@ class ImportJobViewSet(TenantScopedMixin, ModelViewSet):
             tenant=request.tenant,
             import_type=import_type,
             file=file_obj,
-            status=ImportJob.Status.PROCESSING,
+            status=ImportJob.Status.PENDING,
             created_by=request.user,
             updated_by=request.user,
         )
 
-        file_content = file_obj.read()
-        handler = IMPORT_HANDLERS.get(import_type)
-
-        if handler is None:
-            job.status = ImportJob.Status.FAILED
-            job.error_log = [{"error": f"Unknown import type: {import_type}"}]
-            job.save(update_fields=["status", "error_log"])
-            return Response(
-                {"detail": "Unsupported import type."}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        try:
-            rows_success, rows_failed, error_log = handler(
-                file_content, request.tenant, request.user
-            )
-            job.rows_total = rows_success + rows_failed
-            job.rows_success = rows_success
-            job.rows_failed = rows_failed
-            job.error_log = error_log
-            job.status = ImportJob.Status.COMPLETE
-            job.completed_at = timezone.now()
-        except Exception as exc:
-            job.status = ImportJob.Status.FAILED
-            job.error_log = [{"error": str(exc)}]
-        finally:
-            job.save(update_fields=[
-                "rows_total", "rows_success", "rows_failed",
-                "error_log", "status", "completed_at",
-            ])
+        # Dispatch to Celery — returns immediately so the HTTP request does
+        # not block while rows are being parsed and inserted.
+        from .tasks import run_import_job
+        run_import_job.delay(job.id)
 
         return Response(ImportJobSerializer(job).data, status=status.HTTP_201_CREATED)

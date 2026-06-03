@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react'
-import { useMutation } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { Upload, FileText, CheckCircle, XCircle, Download } from 'lucide-react'
 import { createImportJob, getImportJob, downloadTemplate } from '../../api/imports'
@@ -28,9 +28,18 @@ const IMPORT_TYPE_OPTIONS: { value: ImportType; label: string; description: stri
   },
 ]
 
-function usePollingImportJob(jobId: number | null) {
+// Query keys to invalidate after a successful import so that stale cached
+// data (class types, sites, timetable events, staff) is immediately refreshed.
+const IMPORT_INVALIDATION_KEYS: Record<string, string[][]> = {
+  staff:      [['staff']],
+  timetable:  [['timetable-events'], ['class-types'], ['sites']],
+  attendance: [['attendance']],
+}
+
+function usePollingImportJob(jobId: number | null, importType: string) {
   const [job, setJob] = useState<ImportJob | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const queryClient = useQueryClient()
 
   React.useEffect(() => {
     if (!jobId) {
@@ -43,10 +52,19 @@ function usePollingImportJob(jobId: number | null) {
       try {
         const result = await getImportJob(jobId)
         setJob(result)
-        if (result.status === 'completed' || result.status === 'failed') {
+        if (result.status === 'complete' || result.status === 'failed') {
           if (intervalRef.current) {
             clearInterval(intervalRef.current)
             intervalRef.current = null
+          }
+
+          // Invalidate related queries so the UI picks up newly created
+          // records without requiring a manual page refresh.
+          if (result.status === 'complete') {
+            const keys = IMPORT_INVALIDATION_KEYS[importType] ?? []
+            keys.forEach((queryKey) =>
+              queryClient.invalidateQueries({ queryKey })
+            )
           }
         }
       } catch {
@@ -62,7 +80,7 @@ function usePollingImportJob(jobId: number | null) {
         clearInterval(intervalRef.current)
       }
     }
-  }, [jobId])
+  }, [jobId, importType, queryClient])
 
   return job
 }
@@ -73,7 +91,7 @@ export function CSVImportPage() {
   const [currentJobId, setCurrentJobId] = useState<number | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const job = usePollingImportJob(currentJobId)
+  const job = usePollingImportJob(currentJobId, importType)
 
   const { mutate: uploadFile, isPending: isUploading } = useMutation({
     mutationFn: (file: File) => createImportJob(importType, file),
@@ -117,7 +135,7 @@ export function CSVImportPage() {
   const statusVariant: Record<string, 'blue' | 'green' | 'red' | 'grey'> = {
     pending:    'blue',
     processing: 'blue',
-    completed:  'green',
+    complete:   'green',
     failed:     'red',
   }
 
@@ -221,36 +239,36 @@ export function CSVImportPage() {
 
           <div className="grid grid-cols-3 gap-4 mb-4">
             <div className="text-center">
-              <p className="text-2xl font-bold text-gray-900">{job.total_rows}</p>
+              <p className="text-2xl font-bold text-gray-900">{job.rows_total}</p>
               <p className="text-xs text-gray-400">Total Rows</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-green-600">{job.success_rows}</p>
+              <p className="text-2xl font-bold text-green-600">{job.rows_success}</p>
               <p className="text-xs text-gray-400">Successful</p>
             </div>
             <div className="text-center">
-              <p className="text-2xl font-bold text-red-600">{job.failed_rows}</p>
+              <p className="text-2xl font-bold text-red-600">{job.rows_failed}</p>
               <p className="text-xs text-gray-400">Failed</p>
             </div>
           </div>
 
           {/* Progress bar */}
-          {job.total_rows > 0 && (
+          {job.rows_total > 0 && (
             <div className="w-full bg-gray-100 rounded-full h-2 mb-4">
               <div
                 className="bg-green-500 h-2 rounded-full transition-all duration-300"
                 style={{
-                  width: `${((job.success_rows + job.failed_rows) / job.total_rows) * 100}%`,
+                  width: `${((job.rows_success + job.rows_failed) / job.rows_total) * 100}%`,
                 }}
               />
             </div>
           )}
 
           {/* Errors */}
-          {job.errors.length > 0 && (
+          {job.error_log.length > 0 && (
             <div>
               <h4 className="text-xs font-semibold text-red-600 mb-2">
-                {job.errors.length} error{job.errors.length !== 1 ? 's' : ''}
+                {job.error_log.length} error{job.error_log.length !== 1 ? 's' : ''}
               </h4>
               <div className="max-h-48 overflow-y-auto rounded-lg border border-red-100 bg-red-50">
                 <table className="w-full text-xs">
@@ -262,7 +280,7 @@ export function CSVImportPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {job.errors.map((err, i) => (
+                    {job.error_log.map((err, i) => (
                       <tr key={i} className="border-b border-red-50">
                         <td className="px-3 py-1.5 text-red-600">{err.row}</td>
                         <td className="px-3 py-1.5 text-red-600 font-medium">{err.field}</td>
@@ -275,7 +293,7 @@ export function CSVImportPage() {
             </div>
           )}
 
-          {job.status === 'completed' && job.failed_rows === 0 && (
+          {job.status === 'complete' && job.rows_failed === 0 && (
             <div className="flex items-center gap-2 text-green-600">
               <CheckCircle className="h-5 w-5" />
               <p className="text-sm font-medium">Import completed successfully</p>

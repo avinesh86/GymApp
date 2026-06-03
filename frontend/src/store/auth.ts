@@ -7,10 +7,13 @@ interface AuthState {
   accessToken: string | null
   refreshToken: string | null
   isAuthenticated: boolean
+  /** True while UserInitializer is restoring the access token on a cold reload. */
+  isRestoring: boolean
   login: (tokens: TokenPair, user: AuthUser) => void
   logout: () => void
   setAccessToken: (token: string) => void
   setTokens: (tokens: { access: string; refresh?: string }) => void
+  setIsRestoring: (value: boolean) => void
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -20,6 +23,7 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       refreshToken: null,
       isAuthenticated: false,
+      isRestoring: false,
 
       login: (tokens, user) =>
         set({
@@ -27,6 +31,7 @@ export const useAuthStore = create<AuthState>()(
           refreshToken: tokens.refresh,
           user,
           isAuthenticated: true,
+          isRestoring: false,
         }),
 
       logout: () =>
@@ -35,6 +40,7 @@ export const useAuthStore = create<AuthState>()(
           refreshToken: null,
           user: null,
           isAuthenticated: false,
+          isRestoring: false,
         }),
 
       setAccessToken: (token) => set({ accessToken: token }),
@@ -45,6 +51,8 @@ export const useAuthStore = create<AuthState>()(
           ...(refresh ? { refreshToken: refresh } : {}),
           isAuthenticated: state.isAuthenticated,
         })),
+
+      setIsRestoring: (value) => set({ isRestoring: value }),
     }),
     {
       name: 'fitops-auth',
@@ -53,6 +61,14 @@ export const useAuthStore = create<AuthState>()(
         user: state.user,
         isAuthenticated: state.isAuthenticated,
       }),
+      // On cold reload isAuthenticated=true but accessToken=null (not persisted).
+      // Set isRestoring=true synchronously so RequireAuth shows a spinner and
+      // no API calls fire before UserInitializer restores the access token.
+      onRehydrateStorage: () => (rehydratedState) => {
+        if (rehydratedState?.isAuthenticated) {
+          rehydratedState.isRestoring = true
+        }
+      },
     }
   )
 )

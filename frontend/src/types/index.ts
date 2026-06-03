@@ -200,7 +200,7 @@ export interface TimetableEvent {
 // ─── Cover ───────────────────────────────────────────────────────────────────
 
 export type CoverUrgency = 'low' | 'high' | 'critical'
-export type CoverRequestStatus = 'open' | 'offered' | 'accepted' | 'cancelled'
+export type CoverRequestStatus = 'open' | 'offered' | 'accepted' | 'cancelled' | 'expired'
 
 export interface CoverRequest {
   id: number
@@ -422,16 +422,16 @@ export interface AppNotification {
 // ─── Imports ─────────────────────────────────────────────────────────────────
 
 export type ImportType = 'staff' | 'timetable' | 'attendance'
-export type ImportStatus = 'pending' | 'processing' | 'completed' | 'failed'
+export type ImportStatus = 'pending' | 'processing' | 'complete' | 'failed'
 
 export interface ImportJob {
   id: number
   import_type: ImportType
   status: ImportStatus
-  total_rows: number
-  success_rows: number
-  failed_rows: number
-  errors: ImportError[]
+  rows_total: number
+  rows_success: number
+  rows_failed: number
+  error_log: ImportError[]
   created_at: string
   completed_at: string | null
 }

@@ -1,6 +1,6 @@
 import React from 'react'
 import { Clock, MapPin, User, DollarSign, XCircle } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, isPast, parseISO } from 'date-fns'
 import type { CoverRequest } from '../../types'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
@@ -16,6 +16,7 @@ const STATUS_CONFIG = {
   offered:   { label: 'Offered',  variant: 'blue' as const },
   accepted:  { label: 'Accepted', variant: 'green' as const },
   cancelled: { label: 'Cancelled',variant: 'grey' as const },
+  expired:   { label: 'Expired',  variant: 'grey' as const },
 }
 
 interface CoverRequestCardProps {
@@ -28,6 +29,9 @@ export function CoverRequestCard({ request, onViewDetails, muted = false }: Cove
   const urgency = URGENCY_CONFIG[request.urgency]
   const status = STATUS_CONFIG[request.status]
   const event = request.event_detail
+  const eventIsPast = event?.start_datetime
+    ? isPast(parseISO(event.start_datetime))
+    : isPast(parseISO(event.date))
 
   return (
     <div className={[
@@ -43,6 +47,9 @@ export function CoverRequestCard({ request, onViewDetails, muted = false }: Cove
           </p>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap justify-end">
+          {eventIsPast && !['accepted', 'cancelled', 'expired'].includes(request.status) && (
+            <Badge variant="grey">Past</Badge>
+          )}
           <Badge variant={urgency.variant}>{urgency.label}</Badge>
           <Badge variant={status.variant} dot>{status.label}</Badge>
         </div>

@@ -11,6 +11,13 @@ DEBUG = False
 
 ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="").split(",")
 
+# All URL patterns have explicit trailing slashes. Disabling APPEND_SLASH
+# prevents Django from issuing 301 redirects for URLs missing a trailing
+# slash — those 301s are permanent and get cached by browsers, which can
+# cause ERR_TOO_MANY_REDIRECTS if another app on the same host ever
+# triggers them.
+APPEND_SLASH = False
+
 INSTALLED_APPS = [
     # Django core
     "django.contrib.admin",

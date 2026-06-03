@@ -56,7 +56,8 @@ apiClient.interceptors.response.use(
 
     if (!refreshToken) {
       logout()
-      window.location.href = '/login'
+      // logout() clears isAuthenticated — React Router's RequireAuth will
+      // redirect to /login on next render. No hard navigation needed.
       return Promise.reject(error)
     }
 
@@ -64,6 +65,9 @@ apiClient.interceptors.response.use(
       return new Promise((resolve, reject) => {
         pendingQueue.push({ resolve, reject })
       }).then((token) => {
+        // Mark as retried so a subsequent 401 on this request does not
+        // trigger yet another refresh cycle.
+        originalRequest._retry = true
         originalRequest.headers.Authorization = `Bearer ${token}`
         return apiClient(originalRequest)
       })
@@ -88,7 +92,8 @@ apiClient.interceptors.response.use(
     } catch (refreshError) {
       processQueue(refreshError, null)
       logout()
-      window.location.href = '/login'
+      // logout() clears isAuthenticated — React Router's RequireAuth will
+      // redirect to /login on next render. No hard navigation needed.
       return Promise.reject(refreshError)
     } finally {
       isRefreshing = false

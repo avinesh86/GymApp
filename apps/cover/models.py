@@ -32,6 +32,7 @@ class CoverRequest(TenantAwareModel):
         OFFERED = "offered", "Offered"
         ACCEPTED = "accepted", "Accepted"
         CANCELLED = "cancelled", "Cancelled"
+        EXPIRED = "expired", "Expired"
 
     class Urgency(models.TextChoices):
         LOW = "low", "Low"
