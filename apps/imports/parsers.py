@@ -19,8 +19,7 @@ def _read_csv(file_content: bytes) -> list[dict]:
 
 def import_staff(file_content: bytes, tenant, created_by) -> tuple[int, int, list]:
     from apps.staff.models import StaffProfile
-    from apps.users.constants import UserRole
-    from apps.users.models import User
+    from apps.staff.services import provision_user_for_staff
 
     rows = _read_csv(file_content)
     success = 0
@@ -37,7 +36,7 @@ def import_staff(file_content: bytes, tenant, created_by) -> tuple[int, int, lis
             if not name or not email:
                 raise ValueError("name and email are required")
 
-            StaffProfile.objects.update_or_create(
+            profile, _ = StaffProfile.objects.update_or_create(
                 tenant=tenant,
                 email=email,
                 defaults={
@@ -49,6 +48,11 @@ def import_staff(file_content: bytes, tenant, created_by) -> tuple[int, int, lis
                     "updated_by": created_by,
                 },
             )
+
+            # Every staff member needs a login. Provision (or link an existing)
+            # User and email the new ones an invite to set their password.
+            provision_user_for_staff(profile, send_invite=True)
+
             success += 1
         except Exception as exc:
             failed += 1
