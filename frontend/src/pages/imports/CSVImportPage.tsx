@@ -265,7 +265,7 @@ export function CSVImportPage() {
           )}
 
           {/* Errors */}
-          {job.error_log.length > 0 && (
+          {(job.error_log ?? []).length > 0 && (
             <div>
               <h4 className="text-xs font-semibold text-red-600 mb-2">
                 {job.error_log.length} error{job.error_log.length !== 1 ? 's' : ''}
@@ -280,7 +280,7 @@ export function CSVImportPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {job.error_log.map((err, i) => (
+                    {(job.error_log ?? []).map((err, i) => (
                       <tr key={i} className="border-b border-red-50">
                         <td className="px-3 py-1.5 text-red-600">{err.row}</td>
                         <td className="px-3 py-1.5 text-red-600 font-medium">{err.field}</td>
