@@ -130,6 +130,15 @@ class TimetableEvent(TenantAwareModel):
         related_name="original_events",
         help_text="Instructor before cover was applied.",
     )
+    pending_instructor_email = models.EmailField(
+        blank=True,
+        db_index=True,
+        help_text=(
+            "Set during CSV import when a row names an instructor email that has "
+            "no StaffProfile yet. The staff import back-fills the instructor and "
+            "clears this. Lets staff/timetable CSVs be imported in any order."
+        ),
+    )
     start_datetime = models.DateTimeField(db_index=True)
     end_datetime = models.DateTimeField()
     capacity = models.PositiveIntegerField(default=0)
