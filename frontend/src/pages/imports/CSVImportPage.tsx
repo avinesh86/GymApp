@@ -268,7 +268,7 @@ export function CSVImportPage() {
           {(job.error_log ?? []).length > 0 && (
             <div>
               <h4 className="text-xs font-semibold text-red-600 mb-2">
-                {job.error_log.length} error{job.error_log.length !== 1 ? 's' : ''}
+                {(job.error_log ?? []).length} error{(job.error_log ?? []).length !== 1 ? 's' : ''}
               </h4>
               <div className="max-h-48 overflow-y-auto rounded-lg border border-red-100 bg-red-50">
                 <table className="w-full text-xs">
