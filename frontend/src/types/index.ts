@@ -431,7 +431,7 @@ export interface ImportJob {
   rows_total: number
   rows_success: number
   rows_failed: number
-  error_log: ImportError[]
+  error_log: ImportError[] | null
   created_at: string
   completed_at: string | null
 }

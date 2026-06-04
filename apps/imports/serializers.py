@@ -4,6 +4,13 @@ from .models import ImportJob
 
 
 class ImportJobSerializer(serializers.ModelSerializer):
+    # Guarantee a list even when the DB column stored NULL (e.g. rows created
+    # before the JSONField migration ran with a proper default).
+    error_log = serializers.SerializerMethodField()
+
+    def get_error_log(self, obj):
+        return obj.error_log or []
+
     class Meta:
         model = ImportJob
         fields = [
