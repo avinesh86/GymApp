@@ -5,7 +5,7 @@ from rest_framework.viewsets import ModelViewSet
 
 from apps.core.permissions import IsAdmin
 
-from .models import User
+from .models import Membership, User
 from .serializers import ChangePasswordSerializer, UserListSerializer, UserSerializer
 
 
@@ -24,7 +24,12 @@ class UserViewSet(ModelViewSet):
         )
 
     def perform_create(self, serializer):
-        serializer.save(tenant=self.request.tenant)
+        user = serializer.save(tenant=self.request.tenant)
+        Membership.objects.get_or_create(
+            user=user,
+            tenant=self.request.tenant,
+            defaults={"role": user.role, "is_active": True},
+        )
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
