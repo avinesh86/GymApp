@@ -124,13 +124,18 @@ class TimetableEventViewSet(TenantScopedMixin, ModelViewSet):
         event = self.get_object()
         serializer = AssignInstructorSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        try:
-            instructor = StaffProfile.objects.get(
-                pk=serializer.validated_data["instructor_id"],
-                tenant=request.tenant,
-            )
-        except StaffProfile.DoesNotExist:
-            return Response({"detail": "Instructor not found."}, status=404)
+        instructor_id = serializer.validated_data.get("instructor_id")
+
+        instructor = None
+        if instructor_id is not None:
+            try:
+                instructor = StaffProfile.objects.get(
+                    pk=instructor_id,
+                    tenant=request.tenant,
+                )
+            except StaffProfile.DoesNotExist:
+                return Response({"detail": "Instructor not found."}, status=404)
+
         updated = assign_instructor(event, instructor, request.user)
         return Response(TimetableEventSerializer(updated).data)
 

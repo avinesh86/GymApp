@@ -42,6 +42,9 @@ class StaffProfileViewSet(TenantScopedMixin, ModelViewSet):
         status_filter = self.request.query_params.get("status")
         if status_filter:
             qs = qs.filter(status=status_filter)
+        role_filter = self.request.query_params.get("role")
+        if role_filter:
+            qs = qs.filter(role=role_filter)
         return qs.order_by("name")
 
     @action(detail=False, methods=["get", "patch"], url_path="me", permission_classes=[])

@@ -86,15 +86,24 @@ def get_week_events(tenant, from_date: date) -> list:
 
 
 def assign_instructor(timetable_event: TimetableEvent, instructor, assigned_by) -> TimetableEvent:
-    """Assigns an instructor to a timetable event and updates status."""
+    """Assign an instructor to a timetable event, or unassign when instructor is None.
+
+    Assigning marks the event scheduled; unassigning (instructor=None) marks it
+    unfilled so it surfaces as needing an instructor again.
+    """
     before = {"instructor_id": timetable_event.instructor_id, "status": timetable_event.status}
 
     timetable_event.instructor = instructor
-    timetable_event.status = TimetableEvent.Status.SCHEDULED
+    timetable_event.status = (
+        TimetableEvent.Status.SCHEDULED if instructor else TimetableEvent.Status.UNFILLED
+    )
     timetable_event.updated_by = assigned_by
     timetable_event.save(update_fields=["instructor", "status", "updated_by", "updated_at"])
 
-    after = {"instructor_id": instructor.pk, "status": timetable_event.status}
+    after = {
+        "instructor_id": instructor.pk if instructor else None,
+        "status": timetable_event.status,
+    }
     log_audit(assigned_by, "assign_instructor", timetable_event, before, after)
     return timetable_event
 
