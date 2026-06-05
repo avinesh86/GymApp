@@ -116,6 +116,18 @@ class TimetableEventViewSet(TenantScopedMixin, ModelViewSet):
         except ValueError:
             return Response({"detail": "Invalid date format. Use YYYY-MM-DD."}, status=400)
         events = get_week_events(request.tenant, from_date)
+
+        # Mirror the list view's filters so the calendar can filter too.
+        params = request.query_params
+        if params.get("status"):
+            events = events.filter(status=params["status"])
+        if params.get("site"):
+            events = events.filter(site_id=params["site"])
+        if params.get("instructor"):
+            events = events.filter(instructor_id=params["instructor"])
+        if params.get("search"):
+            events = events.filter(class_type__name__icontains=params["search"])
+
         serializer = self.get_serializer(events, many=True)
         return Response(serializer.data)
 

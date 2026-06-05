@@ -10,7 +10,7 @@ import {
   parseISO,
 } from 'date-fns'
 import { ChevronLeft, ChevronRight, Plus, LayoutGrid, List, Search } from 'lucide-react'
-import { listEvents, listEventsPaginated, listClassTypes } from '../../api/timetable'
+import { getWeekEvents, listEventsPaginated, listClassTypes } from '../../api/timetable'
 import { listStaff } from '../../api/staff'
 import { listSites } from '../../api/settings'
 import type { TimetableEvent } from '../../types'
@@ -65,9 +65,8 @@ export function TimetablePage() {
       statusFilter, siteFilter, instructorFilter, search,
     ],
     queryFn: () =>
-      listEvents({
+      getWeekEvents({
         from: format(currentWeekStart, 'yyyy-MM-dd'),
-        to: format(weekEnd, 'yyyy-MM-dd'),
         search: search || undefined,
         status: statusFilter || undefined,
         site: siteFilter ? Number(siteFilter) : undefined,
