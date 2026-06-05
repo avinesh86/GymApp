@@ -62,7 +62,10 @@ export async function deleteEvent(id: number): Promise<void> {
   await apiClient.delete(`timetable/events/${id}/`)
 }
 
-export async function assignInstructor(eventId: number, instructorId: number): Promise<TimetableEvent> {
+export async function assignInstructor(
+  eventId: number,
+  instructorId: number | null,
+): Promise<TimetableEvent> {
   const response = await apiClient.post<TimetableEvent>(
     `timetable/events/${eventId}/assign-instructor/`,
     { instructor_id: instructorId }

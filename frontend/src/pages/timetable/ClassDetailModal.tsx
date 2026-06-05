@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { MapPin, Clock, User, X, AlertTriangle, Copy, Trash2, RefreshCcw, Repeat2 } from 'lucide-react'
@@ -439,17 +439,39 @@ function ManageTab({ event, onClose }: { event: TimetableEvent; onClose: () => v
   const [showCancelConfirm, setShowCancelConfirm]   = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm]   = useState(false)
 
+  // Only staff who teach are assignable to a class.
   const { data: staffPage } = useQuery({
-    queryKey: ['staff', { status: 'active' }],
-    queryFn: () => listStaff({ status: 'active' }),
+    queryKey: ['staff', { status: 'active', role: 'instructor' }],
+    queryFn: () => listStaff({ status: 'active', role: 'instructor' }),
   })
-  const staffList = staffPage?.results ?? []
+
+  // Build the option list, always including the currently-assigned instructor
+  // even if they aren't in the fetched list (e.g. a manager covering a class,
+  // or the list hasn't loaded yet). Otherwise an assigned class would wrongly
+  // render as "Unassigned".
+  const instructorOptions = useMemo(() => {
+    const options = (staffPage?.results ?? []).map((s) => ({
+      id: s.id,
+      label: `${s.first_name} ${s.last_name}`.trim() || s.name,
+    }))
+    if (event.instructor && !options.some((o) => o.id === event.instructor)) {
+      options.unshift({
+        id: event.instructor,
+        label: event.instructor_name ?? `Instructor #${event.instructor}`,
+      })
+    }
+    return options
+  }, [staffPage, event.instructor, event.instructor_name])
+
+  const currentInstructor = String(event.instructor ?? '')
+  const assignmentChanged = selectedInstructor !== currentInstructor
 
   const { mutate: updateAssignment, isPending: isAssigning } = useMutation({
-    mutationFn: () => assignInstructor(event.id, Number(selectedInstructor)),
+    mutationFn: () =>
+      assignInstructor(event.id, selectedInstructor ? Number(selectedInstructor) : null),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['timetable-events'] })
-      toast.success('Instructor updated')
+      toast.success(selectedInstructor ? 'Instructor updated' : 'Instructor unassigned')
     },
     onError: () => toast.error('Failed to update assignment'),
   })
@@ -516,19 +538,23 @@ function ManageTab({ event, onClose }: { event: TimetableEvent; onClose: () => v
               className={`${inputClass} flex-1`}
             >
               <option value="">Unassigned</option>
-              {staffList.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.first_name} {s.last_name}
+              {instructorOptions.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {o.label}
                 </option>
               ))}
             </select>
           </div>
           <button
             onClick={() => updateAssignment()}
-            disabled={isAssigning || !selectedInstructor}
+            disabled={isAssigning || !assignmentChanged}
             className="w-full mt-2 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
           >
-            {isAssigning ? 'Updating…' : 'Update Assignment'}
+            {isAssigning
+              ? 'Updating…'
+              : selectedInstructor
+                ? 'Update Assignment'
+                : 'Unassign Instructor'}
           </button>
         </div>
 

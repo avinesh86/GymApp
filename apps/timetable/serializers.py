@@ -95,7 +95,8 @@ class TimetableEventSerializer(serializers.ModelSerializer):
 
 
 class AssignInstructorSerializer(serializers.Serializer):
-    instructor_id = serializers.IntegerField()
+    # Null / omitted unassigns the instructor.
+    instructor_id = serializers.IntegerField(required=False, allow_null=True)
 
 
 class CancelEventSerializer(serializers.Serializer):

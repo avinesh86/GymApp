@@ -42,7 +42,7 @@ def import_staff(file_content: bytes, tenant, created_by) -> tuple[int, int, lis
                 email=email, name=name, tenant=tenant, role=role, send_invite=True
             )
 
-            StaffProfile.objects.update_or_create(
+            profile, _ = StaffProfile.objects.update_or_create(
                 tenant=tenant,
                 email=email,
                 defaults={
@@ -56,12 +56,40 @@ def import_staff(file_content: bytes, tenant, created_by) -> tuple[int, int, lis
                 },
             )
 
+            # Order-independent mapping: a timetable CSV imported before this
+            # staff CSV created unfilled events that recorded the wanted
+            # instructor in pending_instructor_email. Back-fill them now.
+            _backfill_pending_events(tenant, email, profile, created_by)
+
             success += 1
         except Exception as exc:
             failed += 1
             errors.append({"row": index, "error": str(exc), "data": row})
 
     return success, failed, errors
+
+
+def _backfill_pending_events(tenant, email, profile, updated_by) -> int:
+    """Assign a newly-imported instructor to events waiting on their email.
+
+    Only touches unfilled events that named this email during a prior timetable
+    import. Returns the number of events updated.
+    """
+    from apps.timetable.models import TimetableEvent
+
+    return (
+        TimetableEvent.objects.filter(
+            tenant=tenant,
+            instructor__isnull=True,
+            pending_instructor_email=email,
+            status=TimetableEvent.Status.UNFILLED,
+        ).update(
+            instructor=profile,
+            status=TimetableEvent.Status.SCHEDULED,
+            pending_instructor_email="",
+            updated_by=updated_by,
+        )
+    )
 
 
 def import_timetable(file_content: bytes, tenant, created_by) -> tuple[int, int, list]:
@@ -80,7 +108,7 @@ def import_timetable(file_content: bytes, tenant, created_by) -> tuple[int, int,
         try:
             class_type_name = row.get("class_type", "").strip()
             start_str = row.get("start_datetime", "").strip()
-            instructor_email = row.get("instructor_email", "").strip()
+            instructor_email = row.get("instructor_email", "").strip().lower()
             site_name = row.get("site", "").strip()
 
             if not class_type_name or not start_str:
@@ -102,18 +130,21 @@ def import_timetable(file_content: bytes, tenant, created_by) -> tuple[int, int,
             start_dt = datetime.fromisoformat(start_str)
             end_dt = start_dt + timedelta(minutes=class_type.duration_minutes)
 
-            # Resolve instructor — log a warning if the email is provided but
-            # no matching StaffProfile exists, but still create the event as
-            # unfilled rather than failing the row.
+            # Resolve instructor. If an email is provided but no StaffProfile
+            # exists yet, create the event as unfilled and remember the email in
+            # pending_instructor_email so a later staff import can back-fill it.
+            # This makes staff/timetable CSV order irrelevant.
             instructor = None
+            pending_email = ""
             if instructor_email:
                 instructor = StaffProfile.objects.filter(
                     tenant=tenant, email=instructor_email
                 ).first()
                 if not instructor:
+                    pending_email = instructor_email
                     logger.warning(
                         "Timetable import row %d: no StaffProfile for email %r — "
-                        "event created as unfilled.",
+                        "event created as unfilled, pending staff import.",
                         index,
                         instructor_email,
                     )
@@ -133,6 +164,7 @@ def import_timetable(file_content: bytes, tenant, created_by) -> tuple[int, int,
                 class_type=class_type,
                 site=site,
                 instructor=instructor,
+                pending_instructor_email=pending_email,
                 start_datetime=start_dt,
                 end_datetime=end_dt,
                 status=(
