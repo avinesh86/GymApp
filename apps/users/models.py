@@ -35,7 +35,17 @@ class UserManager(BaseUserManager):
             from apps.tenants.models import Tenant
             tenant = Tenant.objects.get(pk=tenant_id)
 
-        return self.create_user(email, tenant=tenant, password=password, **extra_fields)
+        user = self.create_user(email, tenant=tenant, password=password, **extra_fields)
+
+        # Every login needs an active membership in a gym, or auth rejects it
+        # with "no active gym access". Give the superuser one in its tenant so
+        # `createsuperuser` produces an account that can actually log in.
+        Membership.objects.get_or_create(
+            user=user,
+            tenant=tenant,
+            defaults={"role": user.role, "is_active": True},
+        )
+        return user
 
 
 class User(AbstractBaseUser, PermissionsMixin):
