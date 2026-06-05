@@ -1,3 +1,8 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 class UserRole:
     OWNER = "owner"
     ADMIN = "admin"
@@ -30,4 +35,7 @@ class UserRole:
         falls back to instructor, the least-privileged staff role.
         """
         normalized = (role or "").strip().lower().replace(" ", "_").replace("-", "_")
-        return normalized if normalized in cls._VALID else cls.INSTRUCTOR
+        if normalized in cls._VALID:
+            return normalized
+        logger.warning("Unrecognised staff role %r — defaulting to instructor.", role)
+        return cls.INSTRUCTOR

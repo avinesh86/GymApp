@@ -6,8 +6,6 @@ from rest_framework.viewsets import ModelViewSet
 from apps.core.mixins import TenantScopedMixin
 from apps.core.permissions import IsAdmin, IsGymManager
 
-from .services import provision_user
-
 from .models import (
     PaymentDetails,
     StaffAvailability,
@@ -17,6 +15,7 @@ from .models import (
     StaffProfile,
     StaffQualification,
 )
+from .services import provision_user
 from .serializers import (
     PaymentDetailsSerializer,
     StaffAvailabilitySerializer,
@@ -48,17 +47,17 @@ class StaffProfileViewSet(TenantScopedMixin, ModelViewSet):
 
     def perform_create(self, serializer):
         data = serializer.validated_data
-        # StaffProfile.user is required: provision (or reuse) the login first,
-        # then save the profile linked to it. New accounts get an invite.
-        user = data.get("user")
-        if user is None:
-            user, _ = provision_user(
-                email=data.get("email", ""),
-                name=data.get("name", ""),
-                tenant=self.request.tenant,
-                role=data.get("role", ""),
-                send_invite=True,
-            )
+        # StaffProfile.user is required and managed here (the field is read-only
+        # on the serializer): provision/reuse the global login from the email,
+        # ensure a membership in this gym, then save the profile linked to it.
+        # New accounts get a set-password invite.
+        user, _ = provision_user(
+            email=data.get("email", ""),
+            name=data.get("name", ""),
+            tenant=self.request.tenant,
+            role=data.get("role", ""),
+            send_invite=True,
+        )
         serializer.save(
             tenant=self.request.tenant,
             user=user,

@@ -18,8 +18,15 @@ class UserViewSet(ModelViewSet):
         return UserSerializer
 
     def get_queryset(self):
+        # List users by membership in the active gym, not by User.tenant — a
+        # user's default tenant may differ from the gym they're a member of.
         return (
-            User.objects.filter(tenant=self.request.tenant, is_active=True)
+            User.objects.filter(
+                memberships__tenant=self.request.tenant,
+                memberships__is_active=True,
+                is_active=True,
+            )
+            .distinct()
             .order_by("email")
         )
 
@@ -32,9 +39,13 @@ class UserViewSet(ModelViewSet):
         )
 
     def destroy(self, request, *args, **kwargs):
+        # Removing a user is per-gym: deactivate their membership in THIS gym.
+        # Only disable the login entirely if they have no other active gym.
         instance = self.get_object()
-        instance.is_active = False
-        instance.save(update_fields=["is_active"])
+        instance.memberships.filter(tenant=request.tenant).update(is_active=False)
+        if not instance.memberships.filter(is_active=True).exists():
+            instance.is_active = False
+            instance.save(update_fields=["is_active"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=False, methods=["get", "patch"], url_path="me", permission_classes=[])
