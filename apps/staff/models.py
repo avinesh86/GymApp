@@ -12,9 +12,7 @@ class StaffProfile(TenantAwareModel):
 
     user = models.ForeignKey(
         "users.User",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
+        on_delete=models.PROTECT,
         related_name="staff_profiles",
         help_text="The person's global login. One user can have a staff profile per gym.",
     )

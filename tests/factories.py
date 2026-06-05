@@ -93,6 +93,12 @@ class StaffProfileFactory(factory.django.DjangoModelFactory):
         model = "staff.StaffProfile"
 
     tenant = factory.SubFactory(TenantFactory)
+    # Every staff member has a login User in the same gym (user is required).
+    user = factory.SubFactory(
+        UserFactory,
+        tenant=factory.SelfAttribute("..tenant"),
+        email=factory.Sequence(lambda n: f"staff-user{n}@test.com"),
+    )
     name = factory.Sequence(lambda n: f"Staff Member {n}")
     email = factory.Sequence(lambda n: f"staff{n}@test.com")
     phone = "+61400000000"

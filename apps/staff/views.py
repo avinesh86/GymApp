@@ -6,7 +6,7 @@ from rest_framework.viewsets import ModelViewSet
 from apps.core.mixins import TenantScopedMixin
 from apps.core.permissions import IsAdmin, IsGymManager
 
-from .services import provision_user_for_staff
+from .services import provision_user
 
 from .models import (
     PaymentDetails,
@@ -47,14 +47,24 @@ class StaffProfileViewSet(TenantScopedMixin, ModelViewSet):
         return qs.order_by("name")
 
     def perform_create(self, serializer):
-        staff = serializer.save(
+        data = serializer.validated_data
+        # StaffProfile.user is required: provision (or reuse) the login first,
+        # then save the profile linked to it. New accounts get an invite.
+        user = data.get("user")
+        if user is None:
+            user, _ = provision_user(
+                email=data.get("email", ""),
+                name=data.get("name", ""),
+                tenant=self.request.tenant,
+                role=data.get("role", ""),
+                send_invite=True,
+            )
+        serializer.save(
             tenant=self.request.tenant,
+            user=user,
             created_by=self.request.user,
             updated_by=self.request.user,
         )
-        # Every staff member needs a login; provision/link one and invite them.
-        if not staff.user_id:
-            provision_user_for_staff(staff, send_invite=True)
 
     @action(detail=False, methods=["get", "patch"], url_path="me", permission_classes=[])
     def me(self, request):
