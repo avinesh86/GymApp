@@ -29,6 +29,10 @@ def link_staff_users(apps, schema_editor):
     User = apps.get_model("users", "User")
     Membership = apps.get_model("users", "Membership")
 
+    # Soft-deleted staff that were never linked can't carry a required login and
+    # are already logically gone — hard-delete them rather than minting a login.
+    StaffProfile.objects.filter(user__isnull=True, is_deleted=True).delete()
+
     for staff in StaffProfile.objects.filter(user__isnull=True).iterator():
         email = (staff.email or "").strip().lower()
         if not email:

@@ -37,6 +37,17 @@ def test_enforce_migration_backfills_unlinked_staff():
         status="active",
         user=None,
     )
+    # A soft-deleted, never-linked orphan — the production blocker. The migration
+    # must drop these rather than fail the NOT NULL alter on them.
+    orphan = StaffProfile.objects.create(
+        tenant=tenant,
+        name="Gone Person",
+        email="gone@migtest.com",
+        role="instructor",
+        status="inactive",
+        user=None,
+        is_deleted=True,
+    )
     assert staff.user_id is None
 
     try:
@@ -55,6 +66,10 @@ def test_enforce_migration_backfills_unlinked_staff():
         user = UserNew.objects.get(pk=linked.user_id)
         assert user.email == "pat.coach@migtest.com"
         assert not is_password_usable(user.password), "provisioned login must be unusable until invite"
+
+        # The soft-deleted orphan was hard-deleted, not given a login.
+        assert not StaffProfileNew.objects.filter(pk=orphan.pk).exists()
+        assert not UserNew.objects.filter(email="gone@migtest.com").exists()
         assert MembershipNew.objects.filter(user_id=user.id, tenant_id=tenant.id).exists()
     finally:
         # Leave the DB at the latest state for the rest of the suite.
