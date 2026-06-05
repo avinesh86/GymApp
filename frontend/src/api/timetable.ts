@@ -25,6 +25,15 @@ export async function listEvents(filters: TimetableFilters = {}): Promise<Timeta
   return unwrapList(response.data)
 }
 
+export async function getWeekEvents(filters: TimetableFilters = {}): Promise<TimetableEvent[]> {
+  // Unpaginated endpoint — returns every event in the week (from .. from+6),
+  // so the calendar isn't truncated by page size. Accepts the same filters.
+  const response = await apiClient.get<TimetableEvent[]>('timetable/events/week/', {
+    params: filters,
+  })
+  return response.data
+}
+
 export async function listEventsPaginated(
   filters: TimetableFilters = {}
 ): Promise<PaginatedResponse<TimetableEvent>> {

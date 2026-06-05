@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { login } from '../api/auth'
+import { login, isGymSelection, type Gym } from '../api/auth'
 import { useAuth } from '../hooks/useAuth'
 import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
@@ -23,14 +23,19 @@ export function LoginPage() {
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  // Set when the account belongs to multiple gyms — the user picks one, then
+  // we re-submit the same credentials with the chosen tenant_id.
+  const [gyms, setGyms] = useState<Gym[] | null>(null)
 
-  async function handleSubmit(event: React.FormEvent) {
-    event.preventDefault()
+  async function attemptLogin(tenantId?: number) {
     setError('')
     setIsLoading(true)
-
     try {
-      const response = await login({ email, password })
+      const response = await login({ email, password, tenant_id: tenantId })
+      if (isGymSelection(response)) {
+        setGyms(response.gyms)
+        return
+      }
       storeLogin({ access: response.access, refresh: response.refresh }, response.user)
       navigate('/dashboard', { replace: true })
     } catch {
@@ -39,6 +44,11 @@ export function LoginPage() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  function handleSubmit(event: React.FormEvent) {
+    event.preventDefault()
+    attemptLogin()
   }
 
   return (
@@ -74,6 +84,41 @@ export function LoginPage() {
           <span className="text-xl font-bold text-gray-900">Northern Arena</span>
         </div>
 
+        {gyms ? (
+          <div className="w-full max-w-sm">
+            <h2 className="text-lg font-semibold text-gray-900 mb-1">Choose a gym</h2>
+            <p className="text-sm text-gray-500 mb-6">
+              Your account has access to more than one gym. Pick one to continue.
+            </p>
+
+            {error && (
+              <p className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2 mb-3">
+                {error}
+              </p>
+            )}
+
+            <div className="flex flex-col gap-2">
+              {gyms.map((gym) => (
+                <button
+                  key={gym.tenant_id}
+                  onClick={() => attemptLogin(gym.tenant_id)}
+                  disabled={isLoading}
+                  className="flex items-center justify-between rounded-xl border border-gray-200 px-4 py-3 text-left hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  <span className="text-sm font-medium text-gray-900">{gym.name}</span>
+                  <span className="text-xs text-gray-400 capitalize">{gym.role.replace('_', ' ')}</span>
+                </button>
+              ))}
+            </div>
+
+            <button
+              onClick={() => { setGyms(null); setError('') }}
+              className="text-center text-sm text-gray-400 hover:text-gray-600 mt-6 w-full"
+            >
+              ← Back to sign in
+            </button>
+          </div>
+        ) : (
         <div className="w-full max-w-sm">
           <h2 className="text-lg font-semibold text-gray-900 mb-1">Sign in to your account</h2>
           <p className="text-sm text-gray-500 mb-6">Welcome back. Enter your credentials below.</p>
@@ -123,6 +168,7 @@ export function LoginPage() {
             </Link>
           </p>
         </div>
+        )}
       </div>
     </div>
   )

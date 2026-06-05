@@ -125,7 +125,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # REST Framework
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework_simplejwt.authentication.JWTAuthentication",
+        "apps.users.authentication.MembershipJWTAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
@@ -181,6 +181,10 @@ EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="noreply@fitops.io")
 EMAIL_REPLY_TO = config("EMAIL_REPLY_TO", default="")
+
+# Base URL of the React frontend, used to build links in transactional emails
+# (e.g. the staff invite / set-password link).
+FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:3000")
 
 # Encryption for sensitive fields (WhatsApp tokens etc.)
 FIELD_ENCRYPTION_KEY = config("FIELD_ENCRYPTION_KEY", default="")

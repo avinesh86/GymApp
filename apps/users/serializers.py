@@ -12,6 +12,21 @@ class UserSerializer(serializers.ModelSerializer):
         required=False,
         allow_blank=True,
     )
+    # The gyms this user belongs to. `role` above reflects the active gym
+    # (synced from the token); this lists every gym so the UI can offer a
+    # gym switcher.
+    gyms = serializers.SerializerMethodField()
+
+    def get_gyms(self, obj):
+        return [
+            {
+                "tenant_id": m.tenant_id,
+                "slug": m.tenant.slug,
+                "name": m.tenant.name,
+                "role": m.role,
+            }
+            for m in obj.memberships.filter(is_active=True).select_related("tenant")
+        ]
 
     class Meta:
         model = User
@@ -24,8 +39,9 @@ class UserSerializer(serializers.ModelSerializer):
             "is_active",
             "date_joined",
             "password",
+            "gyms",
         ]
-        read_only_fields = ["id", "date_joined"]
+        read_only_fields = ["id", "date_joined", "gyms"]
 
     def create(self, validated_data):
         import secrets

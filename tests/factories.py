@@ -62,6 +62,15 @@ class UserFactory(factory.django.DjangoModelFactory):
         obj = model_class(*args, **kwargs)
         obj.set_password(password)
         obj.save()
+        # Mirror the user's tenant/role into a Membership so multi-tenant auth
+        # works in tests, matching the production invariant.
+        from apps.users.models import Membership
+
+        Membership.objects.get_or_create(
+            user=obj,
+            tenant=obj.tenant,
+            defaults={"role": obj.role, "is_active": True},
+        )
         return obj
 
 
@@ -69,11 +78,27 @@ class AdminUserFactory(UserFactory):
     role = "admin"
 
 
+class MembershipFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = "users.Membership"
+
+    user = factory.SubFactory(UserFactory)
+    tenant = factory.SubFactory(TenantFactory)
+    role = "instructor"
+    is_active = True
+
+
 class StaffProfileFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = "staff.StaffProfile"
 
     tenant = factory.SubFactory(TenantFactory)
+    # Every staff member has a login User in the same gym (user is required).
+    user = factory.SubFactory(
+        UserFactory,
+        tenant=factory.SelfAttribute("..tenant"),
+        email=factory.Sequence(lambda n: f"staff-user{n}@test.com"),
+    )
     name = factory.Sequence(lambda n: f"Staff Member {n}")
     email = factory.Sequence(lambda n: f"staff{n}@test.com")
     phone = "+61400000000"

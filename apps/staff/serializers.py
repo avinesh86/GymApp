@@ -98,7 +98,12 @@ class StaffProfileSerializer(NameMixin, serializers.ModelSerializer):
             "qualifications", "capabilities",
             "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "first_name", "last_name", "created_at", "updated_at", "reliability_score"]
+        # `user` is managed by provisioning (provision_user), never set by the
+        # client — otherwise a profile could be linked to an arbitrary user.
+        read_only_fields = [
+            "id", "user", "first_name", "last_name",
+            "created_at", "updated_at", "reliability_score",
+        ]
 
 
 class StaffProfileListSerializer(NameMixin, serializers.ModelSerializer):

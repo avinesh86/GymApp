@@ -13,7 +13,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.users.models import User
+from apps.users.models import Membership, User
 
 from .models import Tenant, TenantBranding, TenantDomain, TenantSettings
 from .stripe_service import create_customer_and_subscription
@@ -133,6 +133,9 @@ class TenantSignupView(APIView):
             )
             user.set_password(data["password"])
             user.save()
+
+            # The owner's membership in their new gym.
+            Membership.objects.create(user=user, tenant=tenant, role="owner")
 
         # Step 2: Stripe call OUTSIDE the atomic block — if this fails the
         # DB rows already exist but the tenant simply has no billing yet
