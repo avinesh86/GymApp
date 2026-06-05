@@ -62,3 +62,26 @@ export async function submitAttendanceForEvent(eventId: number, count: number): 
   const response = await apiClient.post<AttendanceRecord>('attendance/records/submit-for-event/', { event: eventId, count })
   return response.data
 }
+
+// ─── Public QR submit (scanned by the instructor, no login) ────────────────────
+
+export interface QRTokenInfo {
+  valid: boolean
+  is_used: boolean
+  class_type_name: string
+  date: string
+  start_time: string
+  site_name: string | null
+  instructor_name: string | null
+}
+
+export async function getQRTokenInfo(token: string): Promise<QRTokenInfo> {
+  const response = await apiClient.get<QRTokenInfo>('attendance/qr-tokens/info/', {
+    params: { token },
+  })
+  return response.data
+}
+
+export async function submitQRAttendance(token: string, count: number, notes = ''): Promise<void> {
+  await apiClient.post('attendance/qr-tokens/submit/', { token, count, notes })
+}
