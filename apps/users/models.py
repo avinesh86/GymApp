@@ -80,3 +80,40 @@ class User(AbstractBaseUser, PermissionsMixin):
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}".strip()
+
+    def membership_for(self, tenant):
+        """Active Membership of this user in the given tenant, or None."""
+        return self.memberships.filter(tenant=tenant, is_active=True).first()
+
+
+class Membership(models.Model):
+    """A user's belonging to one gym (tenant), with a role scoped to that gym.
+
+    A person has one global User (login) but may belong to several gyms. Role is
+    per-gym, so the same person can be an owner at one gym and an instructor at
+    another. The active gym for a request is carried in the JWT; User.tenant /
+    User.role hold the user's default (and are synced to the active membership
+    per-request by authentication).
+    """
+
+    user = models.ForeignKey(
+        "users.User", on_delete=models.CASCADE, related_name="memberships"
+    )
+    tenant = models.ForeignKey(
+        "tenants.Tenant", on_delete=models.CASCADE, related_name="memberships"
+    )
+    role = models.CharField(
+        max_length=30,
+        choices=UserRole.CHOICES,
+        default=UserRole.INSTRUCTOR,
+        db_index=True,
+    )
+    is_active = models.BooleanField(default=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "users_membership"
+        unique_together = ("user", "tenant")
+
+    def __str__(self):
+        return f"{self.user.email} @ {self.tenant.slug} ({self.role})"

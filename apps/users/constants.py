@@ -1,3 +1,8 @@
+import logging
+
+logger = logging.getLogger(__name__)
+
+
 class UserRole:
     OWNER = "owner"
     ADMIN = "admin"
@@ -19,3 +24,18 @@ class UserRole:
 
     MANAGEMENT_ROLES = [OWNER, ADMIN, GYM_MANAGER]
     STAFF_ROLES = [TEAM_LEADER, INSTRUCTOR]
+
+    _VALID = {OWNER, ADMIN, GYM_MANAGER, PAYROLL, TEAM_LEADER, INSTRUCTOR, CLASS_COUNT_ADMIN}
+
+    @classmethod
+    def from_staff_role(cls, role: str) -> str:
+        """Map a free-text StaffProfile.role to a valid User.role.
+
+        StaffProfile.role is an unvalidated string; anything we don't recognise
+        falls back to instructor, the least-privileged staff role.
+        """
+        normalized = (role or "").strip().lower().replace(" ", "_").replace("-", "_")
+        if normalized in cls._VALID:
+            return normalized
+        logger.warning("Unrecognised staff role %r — defaulting to instructor.", role)
+        return cls.INSTRUCTOR

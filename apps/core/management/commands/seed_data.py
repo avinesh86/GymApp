@@ -83,7 +83,7 @@ class Command(BaseCommand):
         return site
 
     def _create_users(self, tenant):
-        from apps.users.models import User
+        from apps.users.models import Membership, User
 
         users = {}
         user_data = [
@@ -110,6 +110,11 @@ class Command(BaseCommand):
                 user.set_password("FitOps2024!")
                 user.save(update_fields=["password"])
                 self.stdout.write(f"  Created user: {email}")
+            Membership.objects.get_or_create(
+                user=user,
+                tenant=tenant,
+                defaults={"role": role, "is_active": True},
+            )
             users[role] = user
             users[email] = user
 

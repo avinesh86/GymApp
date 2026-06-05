@@ -10,12 +10,11 @@ class StaffProfile(TenantAwareModel):
         INACTIVE = "inactive", "Inactive"
         SUSPENDED = "suspended", "Suspended"
 
-    user = models.OneToOneField(
+    user = models.ForeignKey(
         "users.User",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="staff_profile",
+        on_delete=models.PROTECT,
+        related_name="staff_profiles",
+        help_text="The person's global login. One user can have a staff profile per gym.",
     )
     name = models.CharField(max_length=200)
     email = models.EmailField(db_index=True)

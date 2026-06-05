@@ -15,6 +15,7 @@ from .models import (
     StaffProfile,
     StaffQualification,
 )
+from .services import provision_user
 from .serializers import (
     PaymentDetailsSerializer,
     StaffAvailabilitySerializer,
@@ -43,6 +44,26 @@ class StaffProfileViewSet(TenantScopedMixin, ModelViewSet):
         if status_filter:
             qs = qs.filter(status=status_filter)
         return qs.order_by("name")
+
+    def perform_create(self, serializer):
+        data = serializer.validated_data
+        # StaffProfile.user is required and managed here (the field is read-only
+        # on the serializer): provision/reuse the global login from the email,
+        # ensure a membership in this gym, then save the profile linked to it.
+        # New accounts get a set-password invite.
+        user, _ = provision_user(
+            email=data.get("email", ""),
+            name=data.get("name", ""),
+            tenant=self.request.tenant,
+            role=data.get("role", ""),
+            send_invite=True,
+        )
+        serializer.save(
+            tenant=self.request.tenant,
+            user=user,
+            created_by=self.request.user,
+            updated_by=self.request.user,
+        )
 
     @action(detail=False, methods=["get", "patch"], url_path="me", permission_classes=[])
     def me(self, request):
