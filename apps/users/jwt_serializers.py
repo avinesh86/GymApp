@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from .models import Membership
+
 
 class TenantTokenObtainPairSerializer(TokenObtainPairSerializer):
     """Authenticate globally by email + password, then issue a gym-scoped token.
@@ -34,6 +36,18 @@ class TenantTokenObtainPairSerializer(TokenObtainPairSerializer):
         memberships = list(
             self.user.memberships.filter(is_active=True).select_related("tenant")
         )
+        if not memberships and self.user.tenant_id:
+            # Self-heal: a valid account that belongs to a tenant but has no
+            # membership row (e.g. created before membership provisioning) gets
+            # one from its own tenant on login, rather than being locked out.
+            Membership.objects.get_or_create(
+                user=self.user,
+                tenant_id=self.user.tenant_id,
+                defaults={"role": self.user.role, "is_active": True},
+            )
+            memberships = list(
+                self.user.memberships.filter(is_active=True).select_related("tenant")
+            )
         if not memberships:
             raise serializers.ValidationError(
                 {"detail": "This account has no active gym access."}
