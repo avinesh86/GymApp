@@ -2,17 +2,78 @@
 
 import django.db.models.deletion
 from django.conf import settings
+from django.contrib.auth.hashers import make_password
 from django.db import migrations, models
+
+_VALID_ROLES = {
+    "owner", "admin", "gym_manager", "payroll",
+    "team_leader", "instructor", "class_count_admin",
+}
+
+
+def _map_role(role):
+    normalized = (role or "").strip().lower().replace(" ", "_").replace("-", "_")
+    return normalized if normalized in _VALID_ROLES else "instructor"
+
+
+def link_staff_users(apps, schema_editor):
+    """Provision/link a login User for every StaffProfile that lacks one.
+
+    Makes the NOT NULL enforce below safe on a populated database: without it,
+    AlterField fails with "Invalid use of NULL value" on any tenant that still
+    has unlinked staff. One global User per email (reused across gyms) with an
+    unusable password (login blocked until the staff member accepts an invite),
+    plus a Membership in the staff member's gym.
+    """
+    StaffProfile = apps.get_model("staff", "StaffProfile")
+    User = apps.get_model("users", "User")
+    Membership = apps.get_model("users", "Membership")
+
+    for staff in StaffProfile.objects.filter(user__isnull=True).iterator():
+        email = (staff.email or "").strip().lower()
+        if not email:
+            # Can't provision a login without an email; leave it so the
+            # AlterField fails loudly rather than inventing data.
+            continue
+
+        role = _map_role(staff.role)
+        user = User.objects.filter(email=email).first()
+        if user is None:
+            parts = (staff.name or "").split()
+            user = User.objects.create(
+                email=email,
+                tenant_id=staff.tenant_id,
+                first_name=parts[0] if parts else "",
+                last_name=" ".join(parts[1:]) if len(parts) > 1 else "",
+                role=role,
+                is_active=True,
+                password=make_password(None),  # unusable until invite accepted
+            )
+
+        Membership.objects.get_or_create(
+            user=user,
+            tenant_id=staff.tenant_id,
+            defaults={"role": role, "is_active": True},
+        )
+        staff.user = user
+        staff.save(update_fields=["user"])
+
+
+def noop(apps, schema_editor):
+    pass
 
 
 class Migration(migrations.Migration):
 
     dependencies = [
         ('staff', '0006_alter_staffprofile_user'),
+        ('users', '0003_backfill_memberships'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
+        # Back-fill first so the NOT NULL enforce can't fail on existing rows.
+        migrations.RunPython(link_staff_users, noop),
         migrations.AlterField(
             model_name='staffprofile',
             name='user',
