@@ -7,6 +7,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from apps.attendance.models import AttendanceRecord, QRAttendanceToken
+from apps.attendance.serializers import QRAttendanceTokenSerializer
 from apps.timetable.models import TimetableEvent
 
 pytestmark = pytest.mark.django_db
@@ -48,6 +49,15 @@ def test_submit_records_attendance_without_auth(qr_token, future_event):
     assert qr_token.is_used is True
     future_event.refresh_from_db()
     assert future_event.status == TimetableEvent.Status.COMPLETED
+
+
+def test_qr_token_url_is_absolute_page_link(qr_token, settings):
+    # The reported bug: the QR encoded a relative API path, so phones showed it
+    # as text. It must be an absolute link to the public page, not the API.
+    settings.FRONTEND_URL = "https://gym.example.com"
+    url = QRAttendanceTokenSerializer(qr_token).data["url"]
+    assert url == f"https://gym.example.com/attendance/qr?token={qr_token.token}"
+    assert "/api/" not in url
 
 
 def test_submit_rejects_used_token(qr_token):
