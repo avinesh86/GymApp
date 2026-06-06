@@ -124,5 +124,8 @@ jobs:
         run: npx tsc --noEmit
         continue-on-error: true
 
+      - name: Unit tests
+        run: npm test
+
       - name: Build
         run: npm run build

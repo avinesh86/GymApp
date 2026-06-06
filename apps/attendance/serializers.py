@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework import serializers
 
 from apps.timetable.models import TimetableEvent
@@ -26,7 +27,10 @@ class QRAttendanceTokenSerializer(serializers.ModelSerializer):
     url = serializers.SerializerMethodField()
 
     def get_url(self, obj):
-        return f"/api/v1/attendance/qr-tokens/submit/?token={obj.token}"
+        # Absolute URL to the public frontend page (not the raw API endpoint),
+        # so a phone camera turns it into a tappable link to a form.
+        base = settings.FRONTEND_URL.rstrip("/")
+        return f"{base}/attendance/qr?token={obj.token}"
 
     class Meta:
         model = QRAttendanceToken

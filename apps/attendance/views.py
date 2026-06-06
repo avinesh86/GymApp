@@ -133,8 +133,8 @@ class QRAttendanceTokenViewSet(TenantScopedMixin, ModelViewSet):
     permission_classes = [IsGymManager]
 
     def get_permissions(self):
-        # The 'submit' action is public — anyone with a valid QR token can submit
-        if getattr(self, 'action', None) == 'submit':
+        # 'submit' and 'info' are public — anyone with a valid QR token can use them
+        if getattr(self, 'action', None) in ('submit', 'info'):
             return []
         return super().get_permissions()
 
@@ -148,6 +148,33 @@ class QRAttendanceTokenViewSet(TenantScopedMixin, ModelViewSet):
         event = TimetableEvent.objects.get(pk=event_id, tenant=self.request.tenant)
         expires_at = timezone.now() + timedelta(hours=2)
         serializer.save(timetable_event=event, expires_at=expires_at)
+
+    @action(detail=False, methods=["get"], url_path="info", permission_classes=[])
+    def info(self, request):
+        """Public: session details for a QR token, so the submit page can show
+        what's being recorded before the instructor enters a count."""
+        token_str = request.query_params.get("token", "")
+        try:
+            qr = QRAttendanceToken.objects.select_related(
+                "timetable_event__class_type",
+                "timetable_event__site",
+                "timetable_event__instructor",
+            ).get(token=token_str)
+        except QRAttendanceToken.DoesNotExist:
+            return Response({"detail": "Invalid token."}, status=status.HTTP_404_NOT_FOUND)
+
+        event = qr.timetable_event
+        return Response(
+            {
+                "valid": qr.is_valid(),
+                "is_used": qr.is_used,
+                "class_type_name": event.class_type.name,
+                "date": event.start_datetime.date().isoformat(),
+                "start_time": event.start_datetime.strftime("%H:%M"),
+                "site_name": event.site.name if event.site else None,
+                "instructor_name": event.instructor.name if event.instructor else None,
+            }
+        )
 
     @action(detail=False, methods=["post"], url_path="submit", permission_classes=[])
     def submit(self, request):

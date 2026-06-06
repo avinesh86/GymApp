@@ -18,6 +18,7 @@ import { InvoicesPage } from './pages/invoices/InvoicesPage'
 import { InvoiceDetailPage } from './pages/invoices/InvoiceDetailPage'
 import { AttendancePage } from './pages/attendance/AttendancePage'
 import { QRAttendancePage } from './pages/qr-attendance/QRAttendancePage'
+import { QRSubmitPage } from './pages/qr-attendance/QRSubmitPage'
 import { ReportsPage } from './pages/reports/ReportsPage'
 import { CSVImportPage } from './pages/imports/CSVImportPage'
 import { SettingsPage } from './pages/settings/SettingsPage'
@@ -130,6 +131,7 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/cover/accept/:code" element={<AcceptCoverPage />} />
+          <Route path="/attendance/qr" element={<QRSubmitPage />} />
 
           {/* Protected */}
           <Route
