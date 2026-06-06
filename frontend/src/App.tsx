@@ -28,6 +28,8 @@ import { AttendanceEntryPage } from './pages/attendance/AttendanceEntryPage'
 import { ProfilePage } from './pages/profile/ProfilePage'
 import { AcceptCoverPage } from './pages/cover/AcceptCoverPage'
 import { SignupPage } from './pages/auth/SignupPage'
+import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage'
+import { SetPasswordPage } from './pages/auth/SetPasswordPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -130,6 +132,8 @@ export default function App() {
           {/* Public */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/set-password" element={<SetPasswordPage />} />
           <Route path="/cover/accept/:code" element={<AcceptCoverPage />} />
           <Route path="/attendance/qr" element={<QRSubmitPage />} />
 

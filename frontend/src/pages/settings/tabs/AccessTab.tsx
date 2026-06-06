@@ -1,8 +1,8 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { Plus, Edit2 } from 'lucide-react'
-import { listUsers, inviteUser, updateUser, deactivateUser } from '../../../api/settings'
+import { Plus, Edit2, KeyRound } from 'lucide-react'
+import { listUsers, inviteUser, updateUser, deactivateUser, sendUserPasswordReset } from '../../../api/settings'
 import type { User } from '../../../types'
 import { Button } from '../../../components/ui/Button'
 import { Badge } from '../../../components/ui/Badge'
@@ -84,6 +84,12 @@ export function AccessTab() {
     onError: () => toast.error('Failed to deactivate user'),
   })
 
+  const { mutate: sendReset } = useMutation({
+    mutationFn: (id: number) => sendUserPasswordReset(id),
+    onSuccess: () => toast.success('Password reset link sent'),
+    onError: () => toast.error('Failed to send reset link'),
+  })
+
   const columns = [
     {
       key: 'name',
@@ -126,6 +132,15 @@ export function AccessTab() {
           >
             <Edit2 className="h-4 w-4" />
           </button>
+          {user.is_active && (
+            <button
+              onClick={() => sendReset(user.id)}
+              title="Send password reset link"
+              className="p-1.5 text-gray-400 hover:text-cyan-600 rounded-lg hover:bg-cyan-50 transition-colors"
+            >
+              <KeyRound className="h-4 w-4" />
+            </button>
+          )}
           {user.is_active && user.role !== 'owner' && (
             <button
               onClick={() => deactivate(user.id)}

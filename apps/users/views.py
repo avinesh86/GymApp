@@ -3,8 +3,10 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
+from apps.core.audit import log_audit
 from apps.core.permissions import IsAdmin
 
+from .emails import send_password_reset_email
 from .models import Membership, User
 from .serializers import ChangePasswordSerializer, UserListSerializer, UserSerializer
 
@@ -58,6 +60,20 @@ class UserViewSet(ModelViewSet):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+    @action(detail=True, methods=["post"], url_path="send-password-reset")
+    def send_password_reset(self, request, pk=None):
+        """Owner/admin emails a password-reset link to a user in their gym.
+
+        Scoped by get_queryset (membership in request.tenant), so an admin can
+        only reset users that belong to their gym. The link is the same
+        single-use token flow the user would get from "forgot password" — the
+        admin never sees or sets the password.
+        """
+        target = self.get_object()
+        send_password_reset_email(target)
+        log_audit(request.user, "send_password_reset", target, {}, {"email": target.email})
+        return Response({"detail": f"Password reset link sent to {target.email}."})
 
     @action(detail=False, methods=["post"], url_path="change-password", permission_classes=[])
     def change_password(self, request):

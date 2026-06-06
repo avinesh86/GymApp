@@ -16,6 +16,7 @@ import {
   type PaymentDetails,
 } from '../../api/staff'
 import { listClassTypes } from '../../api/timetable'
+import { changePassword } from '../../api/auth'
 import type { Availability, Capability } from '../../types'
 import { useAuth } from '../../hooks/useAuth'
 import { PageHeader } from '../../components/shared/PageHeader'
@@ -27,7 +28,7 @@ import { Input } from '../../components/ui/Input'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type ProfileTab = 'info' | 'availability' | 'classes' | 'payment'
+type ProfileTab = 'info' | 'availability' | 'classes' | 'payment' | 'security'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,7 @@ const TABS: { key: ProfileTab; label: string }[] = [
   { key: 'availability', label: 'Availability' },
   { key: 'classes',      label: 'Classes' },
   { key: 'payment',      label: 'Payment Details' },
+  { key: 'security',     label: 'Security' },
 ]
 
 const ROLE_LABELS: Record<string, string> = {
@@ -546,6 +548,72 @@ export function ProfilePage() {
       {activeTab === 'availability' && <AvailabilityTab staffId={staffId} />}
       {activeTab === 'classes'      && <ClassesTab staffId={staffId} />}
       {activeTab === 'payment'      && <PaymentTab staffId={staffId} />}
+      {activeTab === 'security'     && <SecurityTab />}
     </div>
+  )
+}
+
+// ─── Security tab (change own password) ────────────────────────────────────────
+
+function SecurityTab() {
+  const [oldPassword, setOldPassword] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+
+  const { mutate, isPending } = useMutation({
+    mutationFn: () => changePassword({ old_password: oldPassword, new_password: newPassword }),
+    onSuccess: () => {
+      toast.success('Password updated')
+      setOldPassword(''); setNewPassword(''); setConfirm('')
+    },
+    onError: () => toast.error('Could not update password. Check your current password.'),
+  })
+
+  function handleSubmit(event: React.FormEvent) {
+    event.preventDefault()
+    if (newPassword.length < 8) {
+      toast.error('New password must be at least 8 characters.')
+      return
+    }
+    if (newPassword !== confirm) {
+      toast.error('New passwords do not match.')
+      return
+    }
+    mutate()
+  }
+
+  return (
+    <Card>
+      <h3 className="text-sm font-semibold text-gray-900 mb-4">Change Password</h3>
+      <form onSubmit={handleSubmit} className="flex flex-col gap-4 max-w-sm">
+        <Input
+          label="Current password"
+          type="password"
+          value={oldPassword}
+          onChange={(e) => setOldPassword(e.target.value)}
+          required
+          autoComplete="current-password"
+        />
+        <Input
+          label="New password"
+          type="password"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          required
+          autoComplete="new-password"
+        />
+        <Input
+          label="Confirm new password"
+          type="password"
+          value={confirm}
+          onChange={(e) => setConfirm(e.target.value)}
+          required
+          autoComplete="new-password"
+        />
+        <div className="flex justify-end">
+          <Button type="submit" isLoading={isPending}>Update Password</Button>
+        </div>
+      </form>
+    </Card>
   )
 }

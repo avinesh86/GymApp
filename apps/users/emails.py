@@ -28,15 +28,38 @@ def send_invite_email(user: User) -> bool:
         f"{invite_url}\n\n"
         "This link expires once you set your password.\n"
     )
+    return _send(user.email, subject, body, "invite")
+
+
+def send_password_reset_email(user: User) -> bool:
+    """Email a user a password-reset link (same single-use token mechanism).
+
+    Used by self-service "forgot password" and admin-triggered resets. Returns
+    True if handed to the backend, False on failure (logged, never raised).
+    """
+    reset_url = build_invite_url(user)
+    subject = "Reset your FitOps password"
+    body = (
+        f"Hi {user.first_name or 'there'},\n\n"
+        "We received a request to reset your FitOps password. "
+        "Set a new password here:\n\n"
+        f"{reset_url}\n\n"
+        "This link expires after use, or in a few days. "
+        "If you didn't request this, you can ignore this email.\n"
+    )
+    return _send(user.email, subject, body, "password reset")
+
+
+def _send(to_email: str, subject: str, body: str, kind: str) -> bool:
     try:
         send_mail(
             subject=subject,
             message=body,
             from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[user.email],
+            recipient_list=[to_email],
             fail_silently=False,
         )
         return True
     except Exception:
-        logger.exception("Failed to send invite email to %s", user.email)
+        logger.exception("Failed to send %s email to %s", kind, to_email)
         return False
