@@ -53,8 +53,16 @@ export function SetPasswordPage() {
       await setPasswordWithToken(uid, token, password)
       setDone(true)
       toast.success('Password set')
-    } catch {
-      setError('This link is invalid or has expired. Request a new one.')
+    } catch (err) {
+      const data = (err as { response?: { data?: { password?: string[]; detail?: string } } })
+        ?.response?.data
+      if (data?.password?.length) {
+        setError(data.password.join(' '))
+      } else if (data?.detail) {
+        setError(data.detail)
+      } else {
+        setError('This link is invalid or has expired. Request a new one.')
+      }
     } finally {
       setIsSaving(false)
     }

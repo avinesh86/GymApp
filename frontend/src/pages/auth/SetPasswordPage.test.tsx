@@ -38,6 +38,21 @@ describe('SetPasswordPage', () => {
     expect(await screen.findByText(/password set/i)).toBeInTheDocument()
   })
 
+  it('surfaces the password-validation error (not "link invalid")', async () => {
+    vi.mocked(validateInvite).mockResolvedValue({ valid: true, email: 'a@b.com' })
+    vi.mocked(setPasswordWithToken).mockRejectedValue({
+      response: { data: { password: ['The password is too similar to the email.'] } },
+    })
+
+    renderSetPassword('?uid=U&token=T')
+    await screen.findByText('a@b.com')
+    await userEvent.type(screen.getByLabelText('New password'), 'Str0ngPass!')
+    await userEvent.type(screen.getByLabelText('Confirm password'), 'Str0ngPass!')
+    await userEvent.click(screen.getByRole('button', { name: /set password/i }))
+
+    expect(await screen.findByText(/too similar to the email/i)).toBeInTheDocument()
+  })
+
   it('shows expired state for an invalid link', async () => {
     vi.mocked(validateInvite).mockResolvedValue({ valid: false })
 
