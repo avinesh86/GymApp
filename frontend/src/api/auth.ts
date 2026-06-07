@@ -61,3 +61,45 @@ export async function getCurrentUser(): Promise<AuthUser> {
   const response = await apiClient.get<AuthUser>('auth/me/')
   return response.data
 }
+
+// ─── Password management ─────────────────────────────────────────────────────
+
+/** Logged-in user changes their own password (requires the current one). */
+export async function changePassword(data: {
+  old_password: string
+  new_password: string
+}): Promise<void> {
+  await apiClient.post('users/change-password/', data)
+}
+
+/** Public: request a reset link by email. Always succeeds (no enumeration). */
+export async function requestPasswordReset(email: string): Promise<void> {
+  await apiClient.post('public/password-reset/', { email })
+}
+
+export interface InviteInfo {
+  valid: boolean
+  email?: string
+  name?: string
+}
+
+/** Public: check an invite/reset link before showing the form. */
+export async function validateInvite(uid: string, token: string): Promise<InviteInfo> {
+  try {
+    const response = await apiClient.get<InviteInfo>('public/set-password/validate/', {
+      params: { uid, token },
+    })
+    return response.data
+  } catch {
+    return { valid: false }
+  }
+}
+
+/** Public: redeem an invite/reset link by setting a new password. */
+export async function setPasswordWithToken(
+  uid: string,
+  token: string,
+  password: string,
+): Promise<void> {
+  await apiClient.post('public/set-password/', { uid, token, password })
+}

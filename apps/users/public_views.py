@@ -12,7 +12,30 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .emails import send_password_reset_email
 from .invites import get_user_from_invite
+from .models import User
+
+
+class RequestPasswordResetView(APIView):
+    """POST /api/v1/public/password-reset/ {email} — email a reset link.
+
+    Always returns 200 regardless of whether the email exists, to avoid
+    leaking which addresses have accounts (no user enumeration).
+    """
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def post(self, request):
+        email = (request.data.get("email") or "").strip().lower()
+        if email:
+            user = User.objects.filter(email=email, is_active=True).first()
+            if user is not None:
+                send_password_reset_email(user)
+        return Response(
+            {"detail": "If that email has an account, a reset link is on its way."}
+        )
 
 
 class ValidateInviteView(APIView):

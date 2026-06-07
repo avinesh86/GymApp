@@ -89,6 +89,11 @@ export async function deactivateUser(id: number): Promise<void> {
   await apiClient.patch(`users/${id}/`, { is_active: false })
 }
 
+/** Owner/admin emails a password-reset link to a user in their gym. */
+export async function sendUserPasswordReset(id: number): Promise<void> {
+  await apiClient.post(`users/${id}/send-password-reset/`)
+}
+
 // ─── Setup status ─────────────────────────────────────────────────────────────
 
 export async function getSetupStatus(): Promise<SetupStatus> {
