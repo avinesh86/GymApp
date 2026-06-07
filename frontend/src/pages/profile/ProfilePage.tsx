@@ -506,12 +506,15 @@ export function ProfilePage() {
   if (isLoading) return <PageSpinner />
 
   if (!staffProfile) {
+    // Accounts without a staff profile (e.g. owner/admin) still manage their
+    // own password here.
     return (
-      <div>
+      <div className="max-w-3xl mx-auto">
         <PageHeader title="My Profile" />
-        <p className="text-sm text-gray-500">
-          No staff profile found for your account. Please contact an administrator.
+        <p className="text-sm text-gray-500 mb-6">
+          No staff profile is linked to your account, but you can still manage your password.
         </p>
+        <SecurityTab />
       </div>
     )
   }
