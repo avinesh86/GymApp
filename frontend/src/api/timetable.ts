@@ -13,6 +13,8 @@ export interface TimetableFilters {
   status?: string
   class_type?: number
   instructor?: number
+  /** When 'true', returns only past, non-cancelled events with no attendance recorded yet. */
+  awaiting?: 'true'
   page?: number
   page_size?: number
 }

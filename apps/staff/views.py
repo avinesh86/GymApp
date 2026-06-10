@@ -175,6 +175,30 @@ class StaffCapabilityViewSet(TenantScopedMixin, ModelViewSet):
         staff = StaffProfile.objects.get(
             pk=self.kwargs["staff_pk"], tenant=self.request.tenant
         )
+        class_type = serializer.validated_data["class_type"]
+
+        # unique_together("staff", "class_type") ignores is_deleted, so a
+        # capability that was toggled off (soft-deleted) still occupies the
+        # row. Re-toggling it on would INSERT a duplicate and raise an
+        # IntegrityError, surfacing as a generic "Failed" toast. Revive the
+        # existing row instead, making the toggle idempotent.
+        existing = (
+            StaffClassTypeCapability.objects.filter(
+                tenant=self.request.tenant,
+                staff=staff,
+                class_type=class_type,
+            ).first()
+        )
+        if existing is not None:
+            existing.is_deleted = False
+            existing.is_active = serializer.validated_data.get("is_active", True)
+            existing.updated_by = self.request.user
+            existing.save(
+                update_fields=["is_deleted", "is_active", "updated_by", "updated_at"]
+            )
+            serializer.instance = existing
+            return
+
         serializer.save(
             tenant=self.request.tenant,
             staff=staff,
