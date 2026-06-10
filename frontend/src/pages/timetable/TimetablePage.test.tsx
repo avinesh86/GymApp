@@ -34,19 +34,19 @@ function renderPage() {
   )
 }
 
-describe('TimetablePage — filter by class', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    vi.mocked(getWeekEvents).mockResolvedValue([])
-    vi.mocked(listEventsPaginated).mockResolvedValue({ count: 0, next: null, previous: null, results: [] })
-    vi.mocked(listStaff).mockResolvedValue({ count: 0, next: null, previous: null, results: [] })
-    vi.mocked(listSites).mockResolvedValue([])
-    vi.mocked(listClassTypes).mockResolvedValue([
-      { id: 7, name: 'Yoga' },
-      { id: 8, name: 'Spin' },
-    ] as never)
-  })
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.mocked(getWeekEvents).mockResolvedValue([])
+  vi.mocked(listEventsPaginated).mockResolvedValue({ count: 0, next: null, previous: null, results: [] })
+  vi.mocked(listStaff).mockResolvedValue({ count: 0, next: null, previous: null, results: [] })
+  vi.mocked(listSites).mockResolvedValue([])
+  vi.mocked(listClassTypes).mockResolvedValue([
+    { id: 7, name: 'Yoga' },
+    { id: 8, name: 'Spin' },
+  ] as never)
+})
 
+describe('TimetablePage — filter by class (F2)', () => {
   it('renders a class filter populated from class types', async () => {
     renderPage()
     const select = await screen.findByLabelText('Filter by class')
@@ -58,7 +58,6 @@ describe('TimetablePage — filter by class', () => {
   it('passes the selected class_type to the week query', async () => {
     renderPage()
     const select = await screen.findByLabelText('Filter by class')
-    // Wait for the async-loaded options before selecting one.
     await screen.findByRole('option', { name: 'Spin' })
 
     await userEvent.selectOptions(select, '8')
@@ -75,6 +74,48 @@ describe('TimetablePage — filter by class', () => {
     await waitFor(() => expect(getWeekEvents).toHaveBeenCalled())
     expect(getWeekEvents).toHaveBeenLastCalledWith(
       expect.objectContaining({ class_type: undefined }),
+    )
+  })
+})
+
+describe('TimetablePage — awaiting attendance filter (F3)', () => {
+  it('defaults to not awaiting-only', async () => {
+    renderPage()
+    const button = await screen.findByRole('button', { name: /awaiting attendance/i })
+    expect(button).toHaveAttribute('aria-pressed', 'false')
+
+    await waitFor(() => expect(getWeekEvents).toHaveBeenCalled())
+    expect(getWeekEvents).toHaveBeenLastCalledWith(
+      expect.objectContaining({ awaiting: undefined }),
+    )
+  })
+
+  it('toggles awaiting=true and re-queries when clicked', async () => {
+    renderPage()
+    const button = await screen.findByRole('button', { name: /awaiting attendance/i })
+
+    await userEvent.click(button)
+
+    expect(button).toHaveAttribute('aria-pressed', 'true')
+    await waitFor(() =>
+      expect(getWeekEvents).toHaveBeenLastCalledWith(
+        expect.objectContaining({ awaiting: 'true' }),
+      ),
+    )
+  })
+
+  it('toggles back off', async () => {
+    renderPage()
+    const button = await screen.findByRole('button', { name: /awaiting attendance/i })
+
+    await userEvent.click(button)
+    await userEvent.click(button)
+
+    expect(button).toHaveAttribute('aria-pressed', 'false')
+    await waitFor(() =>
+      expect(getWeekEvents).toHaveBeenLastCalledWith(
+        expect.objectContaining({ awaiting: undefined }),
+      ),
     )
   })
 })

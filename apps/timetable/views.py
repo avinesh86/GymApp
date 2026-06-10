@@ -1,5 +1,6 @@
 from datetime import date
 
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -90,6 +91,16 @@ class TimetableEventViewSet(TenantScopedMixin, ModelViewSet):
     permission_classes = [IsTeamLeader]
     filterset_fields = ["status", "class_type", "site", "instructor"]
 
+    @staticmethod
+    def _filter_awaiting_attendance(qs):
+        """Past, non-cancelled events with no attendance record yet — i.e. the
+        classes still awaiting an attendance count. Mirrors the definition used
+        by the attendance awaiting-list endpoint."""
+        return qs.filter(
+            end_datetime__lt=timezone.now(),
+            attendance_record__isnull=True,
+        ).exclude(status=TimetableEvent.Status.CANCELLED)
+
     def get_queryset(self):
         qs = (
             TimetableEvent.objects.filter(tenant=self.request.tenant, is_deleted=False)
@@ -106,6 +117,8 @@ class TimetableEventViewSet(TenantScopedMixin, ModelViewSet):
                 qs = qs.filter(start_datetime__date__lte=date.fromisoformat(to_str))
         except ValueError:
             pass
+        if params.get("awaiting") == "true":
+            qs = self._filter_awaiting_attendance(qs)
         return qs
 
     @action(detail=False, methods=["get"], url_path="week")
@@ -129,6 +142,8 @@ class TimetableEventViewSet(TenantScopedMixin, ModelViewSet):
             events = events.filter(class_type_id=params["class_type"])
         if params.get("search"):
             events = events.filter(class_type__name__icontains=params["search"])
+        if params.get("awaiting") == "true":
+            events = self._filter_awaiting_attendance(events)
 
         serializer = self.get_serializer(events, many=True)
         return Response(serializer.data)
