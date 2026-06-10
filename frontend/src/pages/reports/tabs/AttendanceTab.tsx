@@ -51,6 +51,34 @@ function attendanceBg(count: number | null): string {
   return 'bg-green-100 text-green-700'
 }
 
+export interface CalendarEvent {
+  event_id: number
+  class_name: string
+  time: string
+  attendance_count: number | null
+  color: string
+}
+
+/** A single class chip in the weekly calendar — shows the class time, name,
+ *  and (when recorded) the attendance count, tinted by viability. */
+export function CalendarEventChip({ ev }: { ev: CalendarEvent }) {
+  const name = ev.class_name.length > 10 ? ev.class_name.slice(0, 10) + '…' : ev.class_name
+  return (
+    <div
+      className={`rounded px-1.5 py-0.5 text-xs truncate ${attendanceBg(ev.attendance_count)}`}
+      title={`${ev.class_name} · ${ev.time}${ev.attendance_count !== null ? ` · ${ev.attendance_count}` : ''}`}
+    >
+      <span
+        className="inline-block w-1.5 h-1.5 rounded-full mr-1"
+        style={{ backgroundColor: ev.color }}
+      />
+      <span className="text-gray-500 tabular-nums mr-1">{ev.time}</span>
+      {name}
+      {ev.attendance_count !== null && ` · ${ev.attendance_count}`}
+    </div>
+  )
+}
+
 function exportCsv(rows: Array<{
   class_name: string
   instructor_name: string | null
@@ -303,20 +331,7 @@ export function AttendanceTab() {
                       <p className="text-xs text-gray-400 mb-1">{format(date, 'd')}</p>
                       <div className="flex flex-col gap-0.5">
                         {events.map((ev) => (
-                          <div
-                            key={ev.event_id}
-                            className={`rounded px-1.5 py-0.5 text-xs truncate ${attendanceBg(ev.attendance_count)}`}
-                            title={`${ev.class_name} · ${ev.time}${ev.attendance_count !== null ? ` · ${ev.attendance_count}` : ''}`}
-                          >
-                            <span
-                              className="inline-block w-1.5 h-1.5 rounded-full mr-1"
-                              style={{ backgroundColor: ev.color }}
-                            />
-                            {ev.class_name.length > 12
-                              ? ev.class_name.slice(0, 12) + '…'
-                              : ev.class_name}
-                            {ev.attendance_count !== null && ` · ${ev.attendance_count}`}
-                          </div>
+                          <CalendarEventChip key={ev.event_id} ev={ev} />
                         ))}
                       </div>
                     </div>
