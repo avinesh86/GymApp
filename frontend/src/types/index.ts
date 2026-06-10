@@ -125,6 +125,7 @@ export interface StaffMember {
   is_active?: boolean
   reliability_score: number | null
   avatar: string | null
+  capabilities?: Capability[]
 }
 
 export interface PayRate {

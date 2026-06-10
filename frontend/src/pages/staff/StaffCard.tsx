@@ -26,9 +26,10 @@ const ROLE_LABELS: Record<string, string> = {
 interface StaffCardProps {
   staff: StaffMember
   onClick: (staff: StaffMember) => void
+  showClassTags?: boolean
 }
 
-export function StaffCard({ staff, onClick }: StaffCardProps) {
+export function StaffCard({ staff, onClick, showClassTags = false }: StaffCardProps) {
   const initials = `${(staff.first_name || staff.name || '?').charAt(0)}${(staff.last_name || '').charAt(0)}`.toUpperCase()
   const fullName = staff.name || `${staff.first_name} ${staff.last_name}`.trim()
 
@@ -71,6 +72,20 @@ export function StaffCard({ staff, onClick }: StaffCardProps) {
           </div>
         )}
       </div>
+
+      {/* Class tags (toggleable) */}
+      {showClassTags && (staff.capabilities?.length ?? 0) > 0 && (
+        <div className="flex flex-wrap gap-1 mb-3" data-testid="class-tags">
+          {staff.capabilities!.map((cap) => (
+            <span
+              key={cap.id}
+              className="inline-flex items-center rounded-md bg-cyan-50 text-cyan-700 px-2 py-0.5 text-xs font-medium"
+            >
+              {cap.class_type_name}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Reliability score */}
       <div className="flex items-center gap-1.5 border-t border-gray-50 pt-3">

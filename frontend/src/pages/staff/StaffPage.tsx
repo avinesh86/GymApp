@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Plus, Search, Users } from 'lucide-react'
+import { Plus, Search, Users, Tag } from 'lucide-react'
 import { listStaff } from '../../api/staff'
+import { listClassTypes } from '../../api/timetable'
 import type { StaffMember } from '../../types'
 import { StaffCard } from './StaffCard'
 import { AddStaffModal } from './AddStaffModal'
@@ -36,6 +37,31 @@ const ROLE_OPTIONS = [
   { value: 'class_count_admin', label: 'Class Count Admin' },
 ]
 
+const DAY_OPTIONS = [
+  { value: '',  label: 'Any Day' },
+  { value: '0', label: 'Monday' },
+  { value: '1', label: 'Tuesday' },
+  { value: '2', label: 'Wednesday' },
+  { value: '3', label: 'Thursday' },
+  { value: '4', label: 'Friday' },
+  { value: '5', label: 'Saturday' },
+  { value: '6', label: 'Sunday' },
+]
+
+const RATE_TYPE_OPTIONS = [
+  { value: '',          label: 'All Pay Rates' },
+  { value: 'per_class', label: 'Per Class' },
+  { value: 'per_head',  label: 'Per Head' },
+  { value: 'blended',   label: 'Blended' },
+  { value: 'hourly',    label: 'Hourly' },
+  { value: 'flat',      label: 'Flat' },
+]
+
+const ORDER_OPTIONS = [
+  { value: 'name',  label: 'Name A–Z' },
+  { value: '-name', label: 'Name Z–A' },
+]
+
 // ─── Staff Page ───────────────────────────────────────────────────────────────
 
 export function StaffPage() {
@@ -44,20 +70,38 @@ export function StaffPage() {
   const [searchInput, setSearchInput] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('active')
+  const [classTypeFilter, setClassTypeFilter] = useState('')
+  const [dayFilter, setDayFilter] = useState('')
+  const [rateTypeFilter, setRateTypeFilter] = useState('')
+  const [ordering, setOrdering] = useState<'name' | '-name'>('name')
+  const [showClassTags, setShowClassTags] = useState(false)
   const [page, setPage] = useState(1)
 
   const search = useDebounce(searchInput, 300)
 
   const { data: staffPage, isLoading } = useQuery({
-    queryKey: ['staff', { search, role: roleFilter, status: statusFilter, page }],
+    queryKey: ['staff', {
+      search, role: roleFilter, status: statusFilter,
+      class_type: classTypeFilter, day: dayFilter, rate_type: rateTypeFilter,
+      ordering, page,
+    }],
     queryFn: () =>
       listStaff({
         search: search || undefined,
         role: roleFilter || undefined,
         status: statusFilter || undefined,
+        class_type: classTypeFilter ? Number(classTypeFilter) : undefined,
+        day: dayFilter !== '' ? Number(dayFilter) : undefined,
+        rate_type: rateTypeFilter || undefined,
+        ordering,
         page,
         page_size: 20,
       }),
+  })
+
+  const { data: classTypes = [] } = useQuery({
+    queryKey: ['class-types'],
+    queryFn: listClassTypes,
   })
 
   const staffList = staffPage?.results ?? []
@@ -118,6 +162,66 @@ export function StaffPage() {
           <option value="suspended">Suspended</option>
           <option value="">All</option>
         </select>
+
+        <select
+          value={rateTypeFilter}
+          onChange={(e) => { setRateTypeFilter(e.target.value); setPage(1) }}
+          className={selectClass}
+          aria-label="Filter by pay rate"
+        >
+          {RATE_TYPE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+
+        <select
+          value={dayFilter}
+          onChange={(e) => { setDayFilter(e.target.value); setPage(1) }}
+          className={selectClass}
+          aria-label="Filter by availability day"
+        >
+          {DAY_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+
+        <select
+          value={classTypeFilter}
+          onChange={(e) => { setClassTypeFilter(e.target.value); setPage(1) }}
+          className={selectClass}
+          aria-label="Filter by class type"
+        >
+          <option value="">All Class Types</option>
+          {classTypes.map((ct) => (
+            <option key={ct.id} value={ct.id}>{ct.name}</option>
+          ))}
+        </select>
+
+        <select
+          value={ordering}
+          onChange={(e) => { setOrdering(e.target.value as 'name' | '-name'); setPage(1) }}
+          className={selectClass}
+          aria-label="Sort order"
+        >
+          {ORDER_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+
+        <button
+          type="button"
+          onClick={() => setShowClassTags((v) => !v)}
+          aria-pressed={showClassTags}
+          className={[
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors',
+            showClassTags
+              ? 'bg-cyan-500 border-cyan-500 text-white hover:bg-cyan-600'
+              : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50',
+          ].join(' ')}
+        >
+          <Tag className="h-4 w-4" />
+          {showClassTags ? 'Hide Class Tags' : 'Show Class Tags'}
+        </button>
       </div>
 
       {/* Grid */}
@@ -137,6 +241,7 @@ export function StaffPage() {
               <StaffCard
                 key={staff.id}
                 staff={staff}
+                showClassTags={showClassTags}
                 onClick={(s: StaffMember) => setSelectedStaffId(s.id)}
               />
             ))}

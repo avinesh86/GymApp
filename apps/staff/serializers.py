@@ -109,8 +109,15 @@ class StaffProfileSerializer(NameMixin, serializers.ModelSerializer):
 class StaffProfileListSerializer(NameMixin, serializers.ModelSerializer):
     first_name = serializers.SerializerMethodField()
     last_name = serializers.SerializerMethodField()
+    capabilities = serializers.SerializerMethodField()
+
+    def get_capabilities(self, obj):
+        # Only active capabilities power the class tags on the staff tile.
+        # Filtered in Python so the viewset's prefetch is reused (no N+1).
+        active = [c for c in obj.capabilities.all() if not c.is_deleted]
+        return StaffClassTypeCapabilitySerializer(active, many=True).data
 
     class Meta:
         model = StaffProfile
-        fields = ["id", "name", "first_name", "last_name", "email", "phone", "role", "status", "avatar", "reliability_score"]
-        read_only_fields = ["id", "name", "first_name", "last_name", "email", "phone", "role", "status", "avatar", "reliability_score"]
+        fields = ["id", "name", "first_name", "last_name", "email", "phone", "role", "status", "avatar", "reliability_score", "capabilities"]
+        read_only_fields = ["id", "name", "first_name", "last_name", "email", "phone", "role", "status", "avatar", "reliability_score", "capabilities"]
