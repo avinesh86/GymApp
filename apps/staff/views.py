@@ -40,13 +40,45 @@ class StaffProfileViewSet(TenantScopedMixin, ModelViewSet):
         qs = StaffProfile.objects.filter(
             tenant=self.request.tenant, is_deleted=False
         ).select_related("user").prefetch_related("qualifications", "capabilities__class_type")
-        status_filter = self.request.query_params.get("status")
+        params = self.request.query_params
+
+        status_filter = params.get("status")
         if status_filter:
             qs = qs.filter(status=status_filter)
-        role_filter = self.request.query_params.get("role")
+        role_filter = params.get("role")
         if role_filter:
             qs = qs.filter(role=role_filter)
-        return qs.order_by("name")
+
+        # Class type the member can teach (via active capability).
+        class_type = params.get("class_type")
+        if class_type:
+            qs = qs.filter(
+                capabilities__class_type_id=class_type,
+                capabilities__is_deleted=False,
+            )
+        # Day of week the member has availability for (0=Mon .. 6=Sun).
+        day = params.get("day")
+        if day:
+            qs = qs.filter(
+                availability__day_of_week=day,
+                availability__is_deleted=False,
+            )
+        # Pay rate type (per_class, per_head, blended, hourly, flat).
+        rate_type = params.get("rate_type")
+        if rate_type:
+            qs = qs.filter(
+                pay_rates__rate_type=rate_type,
+                pay_rates__is_deleted=False,
+            )
+
+        # Joins above can fan out rows — collapse back to distinct members.
+        qs = qs.distinct()
+
+        # Sort A-Z / Z-A by name; default A-Z.
+        ordering = params.get("ordering")
+        if ordering not in ("name", "-name"):
+            ordering = "name"
+        return qs.order_by(ordering)
 
     def perform_create(self, serializer):
         data = serializer.validated_data
