@@ -1,6 +1,23 @@
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from django.utils import timezone as djtz
 from rest_framework import serializers
 
 from .models import ClassBonus, ClassType, RecurringTimetableRule, TimetableEvent
+
+
+def _tenant_timezone(event):
+    """Return the tenant's configured timezone, falling back to the project
+    default.  Times are stored as UTC; the timetable must display them in the
+    gym's local time, otherwise a 9am NZ class renders as a 9pm UTC class."""
+    settings = getattr(event.tenant, "settings", None)
+    tz_name = getattr(settings, "timezone", None)
+    if tz_name:
+        try:
+            return ZoneInfo(tz_name)
+        except (ZoneInfoNotFoundError, ValueError):
+            pass
+    return djtz.get_current_timezone()
 
 
 class ClassBonusSerializer(serializers.ModelSerializer):
@@ -43,13 +60,16 @@ class TimetableEventSerializer(serializers.ModelSerializer):
     end_time = serializers.SerializerMethodField()
 
     def get_date(self, obj):
-        return obj.start_datetime.date().isoformat()
+        tz = _tenant_timezone(obj)
+        return djtz.localtime(obj.start_datetime, tz).date().isoformat()
 
     def get_start_time(self, obj):
-        return obj.start_datetime.strftime("%H:%M")
+        tz = _tenant_timezone(obj)
+        return djtz.localtime(obj.start_datetime, tz).strftime("%H:%M")
 
     def get_end_time(self, obj):
-        return obj.end_datetime.strftime("%H:%M")
+        tz = _tenant_timezone(obj)
+        return djtz.localtime(obj.end_datetime, tz).strftime("%H:%M")
 
     attendance_count = serializers.SerializerMethodField()
     viability_color = serializers.SerializerMethodField()

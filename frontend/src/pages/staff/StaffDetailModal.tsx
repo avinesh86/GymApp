@@ -492,7 +492,22 @@ function AvailabilityTab({ staffId }: { staffId: number }) {
 
 // ─── Classes Tab ──────────────────────────────────────────────────────────────
 
-function ClassesTab({ staffId }: { staffId: number }) {
+/** Pull a human-readable message out of a DRF error response, falling back to
+ *  a generic label. Without this, the user only ever sees "Failed to ...". */
+export function extractApiError(error: unknown, fallback: string): string {
+  const data = (error as { response?: { data?: unknown } })?.response?.data
+  if (typeof data === 'string') return data
+  if (data && typeof data === 'object') {
+    const record = data as Record<string, unknown>
+    if (typeof record.detail === 'string') return record.detail
+    const first = Object.values(record)[0]
+    if (Array.isArray(first) && first.length > 0) return String(first[0])
+    if (typeof first === 'string') return first
+  }
+  return fallback
+}
+
+export function ClassesTab({ staffId }: { staffId: number }) {
   const queryClient = useQueryClient()
 
   const { data: capabilities = [], isLoading: capsLoading } = useQuery({
@@ -511,7 +526,7 @@ function ClassesTab({ staffId }: { staffId: number }) {
       queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'capabilities'] })
       toast.success('Class type added')
     },
-    onError: () => toast.error('Failed to add class type'),
+    onError: (error) => toast.error(extractApiError(error, 'Failed to add class type')),
   })
 
   const { mutate: removeCap } = useMutation({
@@ -520,7 +535,7 @@ function ClassesTab({ staffId }: { staffId: number }) {
       queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'capabilities'] })
       toast.success('Class type removed')
     },
-    onError: () => toast.error('Failed to remove class type'),
+    onError: (error) => toast.error(extractApiError(error, 'Failed to remove class type')),
   })
 
   if (capsLoading || ctLoading) {
@@ -1159,7 +1174,7 @@ export function StaffDetailModal({ staffId, onClose }: StaffDetailModalProps) {
         </div>
 
         {/* Tab bar */}
-        <div className="flex border-b border-gray-100 px-6 overflow-x-auto">
+        <div className="flex flex-shrink-0 border-b border-gray-100 px-6 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {tabs.map((tab) => (
             <button
               key={tab.id}

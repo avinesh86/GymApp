@@ -16,6 +16,14 @@ export interface StaffFilters {
   search?: string
   role?: string
   status?: string
+  /** Class type the member can teach (capability). */
+  class_type?: number
+  /** Availability day of week: 0=Mon .. 6=Sun. */
+  day?: number
+  /** Pay rate type: per_class | per_head | blended | hourly | flat. */
+  rate_type?: string
+  /** Sort by name: 'name' (A-Z) or '-name' (Z-A). */
+  ordering?: 'name' | '-name'
   page?: number
   page_size?: number
 }

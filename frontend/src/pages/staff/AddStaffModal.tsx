@@ -1,7 +1,8 @@
 import React, { useState } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { createStaff, createPayRate } from '../../api/staff'
+import { createStaff, createPayRate, createCapability } from '../../api/staff'
+import { listClassTypes } from '../../api/timetable'
 import { Modal } from '../../components/ui/Modal'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -31,6 +32,21 @@ export function AddStaffModal({ isOpen, onClose }: AddStaffModalProps) {
   const [role, setRole]           = useState('instructor')
   const [status, setStatus]       = useState<'active' | 'inactive'>('active')
   const [payRate, setPayRate]     = useState('')
+  const [classTypeIds, setClassTypeIds] = useState<Set<number>>(new Set())
+
+  const { data: classTypes = [] } = useQuery({
+    queryKey: ['class-types'],
+    queryFn: listClassTypes,
+  })
+
+  function toggleClassType(id: number) {
+    setClassTypeIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   const { mutate: addStaff, isPending } = useMutation({
     mutationFn: createStaff,
@@ -46,6 +62,16 @@ export function AddStaffModal({ isOpen, onClose }: AddStaffModalProps) {
         } catch {
           // Non-fatal — staff is created, rate can be added later
           toast('Staff created but pay rate could not be saved', { icon: '⚠️' })
+        }
+      }
+      // Create the selected "classes can teach" capabilities. Non-fatal: the
+      // staff member already exists and capabilities can be edited later.
+      if (classTypeIds.size > 0) {
+        const results = await Promise.allSettled(
+          [...classTypeIds].map((id) => createCapability(created.id, { class_type: id })),
+        )
+        if (results.some((r) => r.status === 'rejected')) {
+          toast('Staff created but some class types could not be assigned', { icon: '⚠️' })
         }
       }
       queryClient.invalidateQueries({ queryKey: ['staff'] })
@@ -64,6 +90,7 @@ export function AddStaffModal({ isOpen, onClose }: AddStaffModalProps) {
     setRole('instructor')
     setStatus('active')
     setPayRate('')
+    setClassTypeIds(new Set())
   }
 
   function handleSubmit(event: React.FormEvent) {
@@ -150,6 +177,27 @@ export function AddStaffModal({ isOpen, onClose }: AddStaffModalProps) {
           onChange={(e) => setPayRate(e.target.value)}
           placeholder="e.g. 35.00"
         />
+
+        {classTypes.length > 0 && (
+          <fieldset className="flex flex-col gap-2">
+            <legend className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+              Classes Can Teach
+            </legend>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+              {classTypes.map((ct) => (
+                <label key={ct.id} className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={classTypeIds.has(ct.id)}
+                    onChange={() => toggleClassType(ct.id)}
+                    className="h-4 w-4 rounded border-gray-300 text-cyan-500 focus:ring-cyan-400"
+                  />
+                  {ct.name}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
       </form>
     </Modal>
   )
