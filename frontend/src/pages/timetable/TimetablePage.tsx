@@ -50,6 +50,7 @@ export function TimetablePage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [siteFilter, setSiteFilter] = useState('')
   const [instructorFilter, setInstructorFilter] = useState('')
+  const [classTypeFilter, setClassTypeFilter] = useState('')
   const [listPage, setListPage] = useState(1)
 
   const search = useDebounce(searchInput, 300)
@@ -62,7 +63,7 @@ export function TimetablePage() {
     queryKey: [
       'timetable-events', 'week',
       format(currentWeekStart, 'yyyy-MM-dd'),
-      statusFilter, siteFilter, instructorFilter, search,
+      statusFilter, siteFilter, instructorFilter, classTypeFilter, search,
     ],
     queryFn: () =>
       getWeekEvents({
@@ -71,6 +72,7 @@ export function TimetablePage() {
         status: statusFilter || undefined,
         site: siteFilter ? Number(siteFilter) : undefined,
         instructor: instructorFilter ? Number(instructorFilter) : undefined,
+        class_type: classTypeFilter ? Number(classTypeFilter) : undefined,
       }),
     enabled: viewMode === 'week',
   })
@@ -80,7 +82,7 @@ export function TimetablePage() {
     queryKey: [
       'timetable-events', 'list',
       format(currentWeekStart, 'yyyy-MM-dd'),
-      listPage, statusFilter, siteFilter, instructorFilter, search,
+      listPage, statusFilter, siteFilter, instructorFilter, classTypeFilter, search,
     ],
     queryFn: () =>
       listEventsPaginated({
@@ -90,6 +92,7 @@ export function TimetablePage() {
         status: statusFilter || undefined,
         site: siteFilter ? Number(siteFilter) : undefined,
         instructor: instructorFilter ? Number(instructorFilter) : undefined,
+        class_type: classTypeFilter ? Number(classTypeFilter) : undefined,
         page: listPage,
         page_size: 20,
       }),
@@ -104,6 +107,11 @@ export function TimetablePage() {
   const { data: staffPage } = useQuery({
     queryKey: ['staff', { status: 'active' }],
     queryFn: () => listStaff({ status: 'active' }),
+  })
+
+  const { data: classTypes = [] } = useQuery({
+    queryKey: ['class-types'],
+    queryFn: listClassTypes,
   })
 
   function navigatePrev() {
@@ -241,6 +249,18 @@ export function TimetablePage() {
           <option value="">All Locations</option>
           {sites.map((site) => (
             <option key={site.id} value={site.id}>{site.name}</option>
+          ))}
+        </select>
+
+        <select
+          value={classTypeFilter}
+          onChange={(e) => setClassTypeFilter(e.target.value)}
+          className={selectClass}
+          aria-label="Filter by class"
+        >
+          <option value="">All Classes</option>
+          {classTypes.map((ct) => (
+            <option key={ct.id} value={ct.id}>{ct.name}</option>
           ))}
         </select>
 
