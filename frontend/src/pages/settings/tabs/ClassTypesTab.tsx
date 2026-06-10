@@ -153,12 +153,14 @@ export function ClassTypesTab() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => { setEditTarget(ct); setShowForm(true) }}
+                aria-label={`Edit ${ct.name}`}
                 className="p-1.5 text-gray-400 hover:text-cyan-600 transition-colors rounded-lg hover:bg-cyan-50"
               >
                 <Edit2 className="h-4 w-4" />
               </button>
               <button
                 onClick={() => setDeleteTarget(ct)}
+                aria-label={`Delete ${ct.name}`}
                 className="p-1.5 text-gray-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
               >
                 <Trash2 className="h-4 w-4" />
@@ -171,7 +173,11 @@ export function ClassTypesTab() {
         )}
       </div>
 
+      {/* key remounts the form per target so its initial state reflects the
+          row being edited (the modal otherwise stays mounted and keeps the
+          first, empty values — which then saved name="" and 400'd). */}
       <ClassTypeFormModal
+        key={editTarget?.id ?? 'new'}
         isOpen={showForm}
         onClose={() => { setShowForm(false); setEditTarget(undefined) }}
         initial={editTarget}
