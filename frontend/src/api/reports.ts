@@ -46,9 +46,13 @@ export async function getInstructorCharts(
   return response.data
 }
 
-export async function getPayrollReport(from?: string, to?: string): Promise<PayrollReport> {
+export async function getPayrollReport(
+  from?: string,
+  to?: string,
+  instructor?: number
+): Promise<PayrollReport> {
   const response = await apiClient.get<PayrollReport>('reports/payroll/', {
-    params: { from, to },
+    params: { from, to, instructor },
   })
   return response.data
 }

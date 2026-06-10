@@ -313,6 +313,24 @@ class TestPayrollReport:
         assert "period_breakdown" in data
         assert "instructor_breakdown" in data
 
+    def test_filters_by_instructor(self, tenant, payroll_user, instructor, instructor_b):
+        InvoiceFactory(tenant=tenant, instructor=instructor, status="paid", total_amount=Decimal("500.00"))
+        InvoiceFactory(tenant=tenant, instructor=instructor_b, status="paid", total_amount=Decimal("300.00"))
+
+        from_date = (date.today().replace(day=1)).isoformat()
+        to_date = date.today().isoformat()
+        request = _make_request(
+            f"/api/v1/reports/payroll/?from={from_date}&to={to_date}&instructor={instructor.id}",
+            payroll_user, tenant,
+        )
+
+        response = PayrollReportView.as_view()(request)
+        assert response.status_code == 200
+        # Only the selected instructor's invoice counts toward the total.
+        assert response.data["total_payroll"] == "500.0"
+        ids = [row["instructor_id"] for row in response.data["instructor_breakdown"]]
+        assert ids == [instructor.id]
+
     def test_empty_data(self, tenant, payroll_user):
         from_date = (date.today().replace(day=1)).isoformat()
         to_date = date.today().isoformat()
