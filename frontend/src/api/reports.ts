@@ -2,6 +2,7 @@ import apiClient from './client'
 import type {
   AttendanceReport,
   InstructorReliabilityReport,
+  InstructorChartsReport,
   PayrollReport,
   ClassViabilityReport,
   ClassesReport,
@@ -34,6 +35,17 @@ export async function getInstructorReliabilityReport(
   return unwrapList(response.data)
 }
 
+export async function getInstructorCharts(
+  from?: string,
+  to?: string,
+  instructor?: number
+): Promise<InstructorChartsReport> {
+  const response = await apiClient.get<InstructorChartsReport>('reports/instructor-charts/', {
+    params: { from, to, instructor },
+  })
+  return response.data
+}
+
 export async function getPayrollReport(
   from?: string,
   to?: string,
@@ -57,12 +69,13 @@ export async function getClassViabilityReport(
 
 export async function getClassesReport(
   from?: string,
-  to?: string
-): Promise<ClassesReport[]> {
-  const response = await apiClient.get<ClassesReport[] | PaginatedResponse<ClassesReport>>('reports/classes/', {
-    params: { from, to },
+  to?: string,
+  classType?: number
+): Promise<ClassesReport> {
+  const response = await apiClient.get<ClassesReport>('reports/classes/', {
+    params: { from, to, class_type: classType },
   })
-  return unwrapList(response.data)
+  return response.data
 }
 
 export interface ClassTypeOption {
