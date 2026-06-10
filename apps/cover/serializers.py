@@ -44,6 +44,7 @@ class CoverRequestSerializer(serializers.ModelSerializer):
         return ""
 
     cancelled_by_name = serializers.SerializerMethodField()
+    accepted_by_name = serializers.CharField(source="accepted_by.name", read_only=True)
 
     def get_cancelled_by_name(self, obj):
         if obj.cancelled_by:
@@ -56,12 +57,16 @@ class CoverRequestSerializer(serializers.ModelSerializer):
             "id", "timetable_event", "event", "event_detail",
             "absence", "status", "urgency", "bonus_amount",
             "original_instructor_name", "notes",
+            "requested_by", "approved_by", "approved_at",
+            "accepted_by", "accepted_by_name", "accepted_at",
             "cancellation_reason", "cancelled_at", "cancelled_by_name",
             "offers", "created_at", "updated_at",
         ]
         read_only_fields = [
             "id", "event", "event_detail", "original_instructor_name",
             "notes", "status",
+            "requested_by", "approved_by", "approved_at",
+            "accepted_by", "accepted_by_name", "accepted_at",
             "cancellation_reason", "cancelled_at", "cancelled_by_name",
             "created_at", "updated_at",
         ]

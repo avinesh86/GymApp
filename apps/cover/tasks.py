@@ -212,7 +212,11 @@ def expire_stale_cover_requests():
     """
     now = timezone.now()
     expired_count = CoverRequest.objects.filter(
-        status__in=[CoverRequest.Status.OPEN, CoverRequest.Status.OFFERED],
+        status__in=[
+            CoverRequest.Status.OPEN,
+            CoverRequest.Status.OFFERED,
+            CoverRequest.Status.CRITICAL,
+        ],
         is_deleted=False,
         timetable_event__end_datetime__lt=now,
         tenant__is_active=True,
@@ -225,19 +229,127 @@ def expire_stale_cover_requests():
 @shared_task(name="cover.send_cover_reminders")
 def send_cover_reminders():
     """
-    Runs hourly.  Sends reminders for open cover requests that have not yet
-    been accepted.
+    Runs hourly.  Sends an in-app reminder to instructors who still have a
+    pending cover offer on an unfilled request.
     """
-    open_requests = CoverRequest.objects.filter(
-        status__in=[CoverRequest.Status.OPEN, CoverRequest.Status.OFFERED],
+    from apps.notifications.models import Notification
+
+    pending_offers = CoverOffer.objects.filter(
+        status=CoverOffer.Status.PENDING,
         is_deleted=False,
-        tenant__is_active=True,
-    ).select_related("timetable_event__class_type", "tenant")
+        cover_request__status__in=[
+            CoverRequest.Status.OFFERED,
+            CoverRequest.Status.CRITICAL,
+        ],
+        cover_request__tenant__is_active=True,
+    ).select_related(
+        "staff__user",
+        "cover_request__timetable_event__class_type",
+        "cover_request__tenant",
+    )
 
     reminder_count = 0
-    for cover_request in open_requests:
-        logger.info("Reminder for cover request %s", cover_request.pk)
+    for offer in pending_offers:
+        if not offer.staff.user:
+            continue
+        event = offer.cover_request.timetable_event
+        Notification.objects.create(
+            tenant=offer.cover_request.tenant,
+            recipient=offer.staff.user,
+            notification_type=Notification.NotificationType.COVER_REQUEST,
+            title="Reminder: cover still needs you",
+            body=(
+                f"{event.class_type.name} on {event.start_datetime:%d %b %Y at %H:%M} "
+                f"still needs cover. Accept code: {offer.accept_code}"
+            ),
+            related_object_type="cover_offer",
+            related_object_id=str(offer.pk),
+            action_type="accept_cover",
+            action_payload={"offer_id": offer.pk, "accept_code": offer.accept_code},
+        )
         reminder_count += 1
 
     logger.info("send_cover_reminders: sent %d reminders", reminder_count)
     return reminder_count
+
+
+@shared_task(name="cover.advance_cover_requests")
+def advance_cover_requests():
+    """
+    PythonAnywhere-safe replacement for the Celery `countdown` escalation.
+
+    Runs each scheduler tick and, idempotently:
+      - marks unfilled requests Critical once they cross the critical timeframe
+        (and alerts managers once, guarded by critical_notified_at);
+      - escalates to the next tier with fresh eligible candidates once the
+        current tier has no pending offers left (expired/declined).
+    """
+    from apps.tenants.models import TenantSettings
+
+    from . import notifications
+    from .models import CoverOffer, CoverRequest
+    from .services import _create_offers, get_cover_candidates
+    from .state import hours_until, transition
+
+    now = timezone.now()
+    settings_by_tenant = {
+        ts.tenant_id: ts for ts in TenantSettings.objects.filter(tenant__is_active=True)
+    }
+
+    requests = CoverRequest.objects.filter(
+        status__in=[
+            CoverRequest.Status.OPEN,
+            CoverRequest.Status.OFFERED,
+            CoverRequest.Status.CRITICAL,
+        ],
+        is_deleted=False,
+        tenant__is_active=True,
+    ).select_related("timetable_event__class_type", "tenant", "absence")
+
+    critical_count = 0
+    escalated = 0
+
+    for cover_request in requests:
+        ts = settings_by_tenant.get(cover_request.tenant_id)
+        threshold = getattr(ts, "cover_critical_threshold_hours", 4) or 4
+        hours_left = hours_until(cover_request)
+
+        # 1. Critical detection (once).
+        if (
+            cover_request.critical_notified_at is None
+            and hours_left <= threshold
+            and cover_request.status in (CoverRequest.Status.OPEN, CoverRequest.Status.OFFERED)
+        ):
+            transition(
+                cover_request,
+                CoverRequest.Status.CRITICAL,
+                None,
+                extra_fields={
+                    "urgency": CoverRequest.Urgency.CRITICAL,
+                    "critical_notified_at": now,
+                },
+            )
+            notifications.notify_critical(cover_request)
+            critical_count += 1
+
+        # 2. Escalation: current tier exhausted (no pending offers left).
+        offers = list(
+            CoverOffer.objects.filter(cover_request=cover_request).select_related("staff")
+        )
+        pending = [o for o in offers if o.status == CoverOffer.Status.PENDING]
+        if offers and not pending:
+            offered_ids = {o.staff_id for o in offers}
+            max_tier = max((getattr(o.staff, "priority_tier", 1) or 1) for o in offers)
+            candidates = get_cover_candidates(cover_request)
+            for tier in range(max_tier + 1, 4):
+                fresh = [i for i in candidates.get(tier, []) if i.pk not in offered_ids]
+                if fresh:
+                    system_user = cover_request.created_by
+                    _create_offers(cover_request, fresh, system_user)
+                    escalated += 1
+                    break
+
+    logger.info(
+        "advance_cover_requests: %d critical, %d escalated", critical_count, escalated
+    )
+    return {"critical": critical_count, "escalated": escalated}

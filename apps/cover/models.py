@@ -28,8 +28,12 @@ class Absence(TenantAwareModel):
 
 class CoverRequest(TenantAwareModel):
     class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        PENDING_APPROVAL = "pending_approval", "Pending Approval"
+        DENIED = "denied", "Denied"
         OPEN = "open", "Open"
         OFFERED = "offered", "Offered"
+        CRITICAL = "critical", "Critical"
         ACCEPTED = "accepted", "Accepted"
         CANCELLED = "cancelled", "Cancelled"
         EXPIRED = "expired", "Expired"
@@ -59,6 +63,39 @@ class CoverRequest(TenantAwareModel):
     )
     urgency = models.CharField(max_length=20, choices=Urgency.choices, default=Urgency.HIGH)
     bonus_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    # Who raised the request (the instructor for self-service, or a manager).
+    requested_by = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="requested_cover_requests",
+    )
+
+    # Manager approval audit (manager-gated mode).
+    approved_by = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_cover_requests",
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+
+    # Acceptance audit on the request itself (offer also records responded_at).
+    accepted_by = models.ForeignKey(
+        "staff.StaffProfile",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="accepted_cover_requests",
+    )
+    accepted_at = models.DateTimeField(null=True, blank=True)
+
+    # Set once when the request first crosses the critical timeframe, so the
+    # manager alert fires exactly once.
+    critical_notified_at = models.DateTimeField(null=True, blank=True)
 
     # Cancellation audit trail
     cancellation_reason = models.TextField(blank=True, default="")

@@ -9,8 +9,10 @@ from rest_framework.viewsets import ModelViewSet
 logger = logging.getLogger(__name__)
 
 from apps.core.mixins import TenantScopedMixin
-from apps.core.permissions import IsGymManager, IsTeamLeader
+from apps.core.permissions import IsGymManager, IsInstructorOrAbove, IsTeamLeader
+from apps.staff.models import StaffProfile
 from apps.timetable.models import TimetableEvent
+from apps.users.constants import UserRole
 
 from .models import Absence, CoverOffer, CoverRequest
 from .serializers import (
@@ -19,7 +21,18 @@ from .serializers import (
     CoverOfferSerializer,
     CoverRequestSerializer,
 )
-from .services import accept_cover_offer, create_cover_request, send_cover_offers
+from .services import (
+    accept_cover_offer,
+    approve_cover_request,
+    create_cover_request,
+    deny_cover_request,
+    dispatch_cover_offers,
+    get_cover_candidates,
+    initial_status_for_tenant,
+    submit_cover_request,
+)
+
+MANAGER_ROLES = (UserRole.OWNER, UserRole.ADMIN, UserRole.GYM_MANAGER, UserRole.TEAM_LEADER)
 
 
 class AbsenceViewSet(TenantScopedMixin, ModelViewSet):
@@ -36,7 +49,9 @@ class AbsenceViewSet(TenantScopedMixin, ModelViewSet):
 
 class CoverRequestViewSet(TenantScopedMixin, ModelViewSet):
     serializer_class = CoverRequestSerializer
-    permission_classes = [IsTeamLeader]
+    # Instructors may raise their own; managers manage everything. Object-level
+    # ownership for instructors is enforced in perform_create.
+    permission_classes = [IsInstructorOrAbove]
     filterset_fields = ["status", "urgency", "timetable_event"]
 
     def get_queryset(self):
@@ -47,40 +62,96 @@ class CoverRequestViewSet(TenantScopedMixin, ModelViewSet):
             .order_by("-created_at")
         )
 
+    def _user_is_manager(self) -> bool:
+        return self.request.user.role in MANAGER_ROLES
+
     def perform_create(self, serializer):
         event = TimetableEvent.objects.get(
             pk=self.request.data.get("timetable_event"),
             tenant=self.request.tenant,
         )
-        absence_id = self.request.data.get("absence")
+
+        # Instructors may only request cover for a class they are assigned to.
+        if not self._user_is_manager():
+            own_staff_ids = set(
+                StaffProfile.objects.filter(
+                    user=self.request.user, tenant=self.request.tenant, is_deleted=False
+                ).values_list("pk", flat=True)
+            )
+            if event.instructor_id not in own_staff_ids:
+                from rest_framework.exceptions import PermissionDenied
+
+                raise PermissionDenied("You can only request cover for your own classes.")
+
         absence = None
+        absence_id = self.request.data.get("absence")
         if absence_id:
-            from .models import Absence
             absence = Absence.objects.get(pk=absence_id, tenant=self.request.tenant)
 
         cover_request = create_cover_request(
             timetable_event=event,
             absence=absence,
             created_by=self.request.user,
-            urgency=self.request.data.get("urgency", CoverRequest.Urgency.HIGH),
+            requested_by=self.request.user,
+            urgency=self.request.data.get("urgency"),
             bonus_amount=self.request.data.get("bonus_amount", 0),
+            initial_status=initial_status_for_tenant(self.request.tenant),
         )
-        # Overwrite default serializer save with the service-created instance
         serializer.instance = cover_request
 
-        # Automatically dispatch notifications to tier-1 instructors
         try:
-            offers = send_cover_offers(cover_request, created_by=self.request.user, tier=1)
-            logger.info("perform_create: dispatched %d offers for cover request %s", len(offers), cover_request.pk)
+            submit_cover_request(cover_request, actor=self.request.user)
         except Exception:
-            logger.exception("perform_create: send_cover_offers failed for cover request %s", cover_request.pk)
+            logger.exception("perform_create: submit failed for cover request %s", cover_request.pk)
+
+    @action(detail=True, methods=["get"], url_path="candidates", permission_classes=[IsTeamLeader])
+    def candidates(self, request, pk=None):
+        """Tiered, ranked eligible instructors for the manager review screen."""
+        cover_request = self.get_object()
+        tiers = get_cover_candidates(cover_request)
+        offered_ids = set(
+            CoverOffer.objects.filter(cover_request=cover_request).values_list("staff_id", flat=True)
+        )
+        data = {
+            str(tier): [
+                {
+                    "staff_id": s.pk,
+                    "name": s.name,
+                    "priority_tier": getattr(s, "priority_tier", 1) or 1,
+                    "already_offered": s.pk in offered_ids,
+                }
+                for s in staff_list
+            ]
+            for tier, staff_list in tiers.items()
+        }
+        return Response(data)
+
+    @action(detail=True, methods=["post"], url_path="approve", permission_classes=[IsGymManager])
+    def approve(self, request, pk=None):
+        cover_request = self.get_object()
+        if cover_request.status != CoverRequest.Status.PENDING_APPROVAL:
+            return Response(
+                {"detail": "Only requests pending approval can be approved."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        approve_cover_request(cover_request, actor=request.user)
+        return Response(CoverRequestSerializer(cover_request).data)
+
+    @action(detail=True, methods=["post"], url_path="deny", permission_classes=[IsGymManager])
+    def deny(self, request, pk=None):
+        cover_request = self.get_object()
+        if cover_request.status != CoverRequest.Status.PENDING_APPROVAL:
+            return Response(
+                {"detail": "Only requests pending approval can be denied."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        reason = (request.data.get("reason") or "").strip()
+        deny_cover_request(cover_request, actor=request.user, reason=reason)
+        return Response(CoverRequestSerializer(cover_request).data)
 
     @action(detail=True, methods=["post"], url_path="cancel", permission_classes=[IsGymManager])
     def cancel(self, request, pk=None):
-        """
-        Cancel an open or offered cover request.
-        Requires a non-empty cancellation_reason explaining why it was cancelled.
-        """
+        """Cancel an open/offered/critical request. Requires a reason."""
         cover_request = self.get_object()
 
         if cover_request.status in (CoverRequest.Status.ACCEPTED, CoverRequest.Status.CANCELLED):
@@ -96,31 +167,31 @@ class CoverRequestViewSet(TenantScopedMixin, ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        cover_request.status = CoverRequest.Status.CANCELLED
-        cover_request.cancellation_reason = reason
-        cover_request.cancelled_at = timezone.now()
-        cover_request.cancelled_by = request.user
-        cover_request.save(update_fields=[
-            "status", "cancellation_reason", "cancelled_at", "cancelled_by", "updated_at"
-        ])
+        from .state import transition
 
-        logger.info(
-            "Cover request %s cancelled by user %s: %s",
-            cover_request.pk,
-            request.user.pk,
-            reason,
+        transition(
+            cover_request,
+            CoverRequest.Status.CANCELLED,
+            request.user,
+            extra_fields={
+                "cancellation_reason": reason,
+                "cancelled_at": timezone.now(),
+                "cancelled_by": request.user,
+            },
         )
-
+        logger.info("Cover request %s cancelled by %s: %s", cover_request.pk, request.user.pk, reason)
         return Response(CoverRequestSerializer(cover_request).data)
 
-    @action(detail=True, methods=["post"], url_path="send-offers")
+    @action(detail=True, methods=["post"], url_path="send-offers", permission_classes=[IsTeamLeader])
     def send_offers(self, request, pk=None):
+        """Manual dispatch: optionally to a chosen set of staff (manual select)."""
         cover_request = self.get_object()
-        offers = send_cover_offers(cover_request, created_by=request.user)
-        return Response(
-            {"offers_sent": len(offers)},
-            status=status.HTTP_200_OK,
+        staff_ids = request.data.get("staff_ids")
+        tier = int(request.data.get("tier", 1))
+        offers = dispatch_cover_offers(
+            cover_request, created_by=request.user, staff_ids=staff_ids, tier=tier
         )
+        return Response({"offers_sent": len(offers)}, status=status.HTTP_200_OK)
 
 
 class CoverOfferViewSet(TenantScopedMixin, ModelViewSet):
@@ -130,31 +201,20 @@ class CoverOfferViewSet(TenantScopedMixin, ModelViewSet):
 
     def get_queryset(self):
         return (
-            CoverOffer.objects.filter(
-                tenant=self.request.tenant, is_deleted=False
-            )
+            CoverOffer.objects.filter(tenant=self.request.tenant, is_deleted=False)
             .select_related("staff", "cover_request__timetable_event")
             .order_by("-offered_at")
         )
 
     @action(detail=False, methods=["post"], url_path="accept-by-code", permission_classes=[])
     def accept_by_code(self, request):
-        """
-        Public endpoint — no authentication required.
-
-        The accept_code is a sufficiently unique secret that acts as its own
-        auth token.  We resolve the tenant from the offer itself so this works
-        even when the middleware cannot resolve a tenant (e.g. the instructor
-        clicks the email link without being logged in).
-        """
+        """Public endpoint — the accept_code acts as its own auth token."""
         serializer = AcceptCodeSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         code = serializer.validated_data["accept_code"].upper()
 
         try:
-            offer = CoverOffer.objects.select_related(
-                "cover_request__tenant"
-            ).get(
+            offer = CoverOffer.objects.select_related("cover_request__tenant").get(
                 accept_code=code,
                 status=CoverOffer.Status.PENDING,
                 is_deleted=False,

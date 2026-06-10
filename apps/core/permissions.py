@@ -87,6 +87,20 @@ class IsInstructor(TenantPermission):
         return super().has_permission(request, view) and request.user.role == UserRole.INSTRUCTOR
 
 
+class IsInstructorOrAbove(TenantPermission):
+    """Any staff role that can participate in the cover flow — instructors
+    (self-service requests) plus team leaders / managers / admins / owner."""
+
+    def has_permission(self, request, view):
+        return super().has_permission(request, view) and request.user.role in (
+            UserRole.OWNER,
+            UserRole.ADMIN,
+            UserRole.GYM_MANAGER,
+            UserRole.TEAM_LEADER,
+            UserRole.INSTRUCTOR,
+        )
+
+
 class IsClassCountAdmin(TenantPermission):
     def has_permission(self, request, view):
         return super().has_permission(request, view) and request.user.role in (
