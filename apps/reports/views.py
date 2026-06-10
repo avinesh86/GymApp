@@ -424,6 +424,10 @@ class PayrollReportView(APIView):
             period_start__lte=to_date,
         )
 
+        instructor_id = request.query_params.get("instructor")
+        if instructor_id:
+            invoice_qs = invoice_qs.filter(instructor_id=instructor_id)
+
         totals = invoice_qs.aggregate(
             total=Coalesce(Sum("total_amount"), 0, output_field=DecimalField()),
             paid=Coalesce(
