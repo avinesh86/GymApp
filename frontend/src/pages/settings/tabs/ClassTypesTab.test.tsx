@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ClassTypesTab } from './ClassTypesTab'
-import { listClassTypes, createClassType } from '../../../api/timetable'
+import { listClassTypes, createClassType, updateClassType } from '../../../api/timetable'
 import { listSites } from '../../../api/settings'
 
 vi.mock('react-hot-toast', () => ({ default: { success: vi.fn(), error: vi.fn() } }))
@@ -32,6 +32,7 @@ describe('ClassTypesTab — colour picker (F11)', () => {
     ] as never)
     vi.mocked(listSites).mockResolvedValue([])
     vi.mocked(createClassType).mockResolvedValue({ id: 2 } as never)
+    vi.mocked(updateClassType).mockResolvedValue({ id: 1 } as never)
   })
 
   it('shows a colour swatch in the class-type list', async () => {
@@ -52,6 +53,26 @@ describe('ClassTypesTab — colour picker (F11)', () => {
 
     await waitFor(() =>
       expect(createClassType).toHaveBeenCalledWith(expect.objectContaining({ name: 'Spin', color: '#ff0055' })),
+    )
+  })
+
+  it('prefills the form when editing and saves the populated values', async () => {
+    renderTab()
+    await userEvent.click(await screen.findByLabelText('Edit Yoga'))
+
+    // Regression: the edit form must load the existing data, not blanks.
+    const nameInput = await screen.findByLabelText('Name')
+    expect(nameInput).toHaveValue('Yoga')
+    expect(screen.getByLabelText('Class colour')).toHaveValue('#06b6d4')
+
+    fireEvent.change(screen.getByLabelText('Class colour'), { target: { value: '#123456' } })
+    await userEvent.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() =>
+      expect(updateClassType).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({ name: 'Yoga', color: '#123456' }),
+      ),
     )
   })
 })
