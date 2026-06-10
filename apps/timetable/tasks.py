@@ -2,6 +2,7 @@ import logging
 from datetime import date, timedelta
 
 from celery import shared_task
+from django.utils import timezone
 
 from apps.tenants.models import Tenant
 
@@ -53,4 +54,35 @@ def check_unfilled_classes():
         .update(status=TimetableEvent.Status.UNFILLED)
     )
     logger.info("check_unfilled_classes: flagged %d events as unfilled", count)
+    return count
+
+
+@shared_task(name="timetable.mark_past_events_completed")
+def mark_past_events_completed():
+    """
+    Runs hourly.  Transitions past events that were never closed out
+    (scheduled / unfilled / needs_cover) to COMPLETED, so the timetable
+    stops showing a finished class as 'Scheduled'.
+
+    Cancelled and already-completed events are left untouched.  Attendance
+    can still be recorded afterwards: the awaiting-attendance list keys off
+    "has no AttendanceRecord", not status, so completed-but-unrecorded
+    classes continue to prompt for an attendance count.
+    """
+    now = timezone.now()
+    open_statuses = [
+        TimetableEvent.Status.SCHEDULED,
+        TimetableEvent.Status.UNFILLED,
+        TimetableEvent.Status.NEEDS_COVER,
+    ]
+    count = (
+        TimetableEvent.objects.filter(
+            is_deleted=False,
+            end_datetime__lt=now,
+            status__in=open_statuses,
+        )
+        # .update() bypasses auto_now, so set updated_at explicitly.
+        .update(status=TimetableEvent.Status.COMPLETED, updated_at=now)
+    )
+    logger.info("mark_past_events_completed: completed %d past events", count)
     return count
