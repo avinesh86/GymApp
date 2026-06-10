@@ -26,6 +26,7 @@ function ClassTypeFormModal({
   const [description, setDescription] = useState(initial?.description ?? '')
   const [duration, setDuration] = useState(String(initial?.duration_minutes ?? 60))
   const [defaultLocation, setDefaultLocation] = useState(initial?.default_location ?? '')
+  const [color, setColor] = useState(initial?.color ?? '#06b6d4')
 
   const { data: sites = [] } = useQuery({
     queryKey: ['sites'],
@@ -35,8 +36,8 @@ function ClassTypeFormModal({
   const { mutate: save, isPending } = useMutation({
     mutationFn: () =>
       initial
-        ? updateClassType(initial.id, { name, description, duration_minutes: Number(duration), default_location: defaultLocation })
-        : createClassType({ name, description, duration_minutes: Number(duration), default_location: defaultLocation }),
+        ? updateClassType(initial.id, { name, description, duration_minutes: Number(duration), default_location: defaultLocation, color })
+        : createClassType({ name, description, duration_minutes: Number(duration), default_location: defaultLocation, color }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['class-types'] })
       toast.success(initial ? 'Class type updated' : 'Class type created')
@@ -72,6 +73,20 @@ function ClassTypeFormModal({
           />
         </div>
         <Input label="Default Duration (min)" type="number" value={duration} onChange={(e) => setDuration(e.target.value)} />
+        <div className="flex flex-col gap-1">
+          <label htmlFor="class-type-color" className="text-sm font-medium text-gray-700">Colour</label>
+          <div className="flex items-center gap-3">
+            <input
+              id="class-type-color"
+              type="color"
+              aria-label="Class colour"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+              className="h-9 w-12 rounded border border-gray-300 cursor-pointer p-0.5"
+            />
+            <span className="text-sm text-gray-500 tabular-nums">{color}</span>
+          </div>
+        </div>
         <Select
           label="Default Location"
           value={defaultLocation}
@@ -122,11 +137,18 @@ export function ClassTypesTab() {
             key={ct.id}
             className={['flex items-center justify-between px-4 py-3', index < classTypes.length - 1 ? 'border-b border-gray-100' : ''].join(' ')}
           >
-            <div>
-              <p className="text-sm font-medium text-gray-900">{ct.name}</p>
-              <p className="text-xs text-gray-400 mt-0.5">
-                {ct.duration_minutes}min{ct.default_location ? ` · ${ct.default_location}` : ''}
-              </p>
+            <div className="flex items-center gap-3">
+              <span
+                className="h-4 w-4 rounded-full shrink-0 border border-gray-200"
+                style={{ backgroundColor: ct.color }}
+                data-testid="class-type-swatch"
+              />
+              <div>
+                <p className="text-sm font-medium text-gray-900">{ct.name}</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {ct.duration_minutes}min{ct.default_location ? ` · ${ct.default_location}` : ''}
+                </p>
+              </div>
             </div>
             <div className="flex items-center gap-2">
               <button
