@@ -1174,7 +1174,7 @@ export function StaffDetailModal({ staffId, onClose }: StaffDetailModalProps) {
         </div>
 
         {/* Tab bar */}
-        <div className="flex border-b border-gray-100 px-6 overflow-x-auto">
+        <div className="flex flex-shrink-0 border-b border-gray-100 px-6 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {tabs.map((tab) => (
             <button
               key={tab.id}
