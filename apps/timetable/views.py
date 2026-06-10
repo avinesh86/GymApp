@@ -138,6 +138,8 @@ class TimetableEventViewSet(TenantScopedMixin, ModelViewSet):
             events = events.filter(site_id=params["site"])
         if params.get("instructor"):
             events = events.filter(instructor_id=params["instructor"])
+        if params.get("class_type"):
+            events = events.filter(class_type_id=params["class_type"])
         if params.get("search"):
             events = events.filter(class_type__name__icontains=params["search"])
         if params.get("awaiting") == "true":

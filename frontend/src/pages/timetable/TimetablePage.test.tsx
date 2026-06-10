@@ -14,12 +14,14 @@ vi.mock('../../api/timetable', () => ({
 }))
 vi.mock('../../api/staff', () => ({ listStaff: vi.fn() }))
 vi.mock('../../api/settings', () => ({ listSites: vi.fn() }))
+// Guards depend on auth context we don't need for this test.
 vi.mock('../../components/shared/RoleGuard', () => ({
   RoleGuard: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 vi.mock('../../components/shared/SetupGuard', () => ({
   SetupGuard: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
+// Closed modals — keep them inert.
 vi.mock('./ClassDetailModal', () => ({ ClassDetailModal: () => null }))
 vi.mock('./AddClassModal', () => ({ AddClassModal: () => null }))
 
@@ -32,16 +34,51 @@ function renderPage() {
   )
 }
 
-describe('TimetablePage — awaiting attendance filter', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    vi.mocked(getWeekEvents).mockResolvedValue([])
-    vi.mocked(listEventsPaginated).mockResolvedValue({ count: 0, next: null, previous: null, results: [] })
-    vi.mocked(listStaff).mockResolvedValue({ count: 0, next: null, previous: null, results: [] })
-    vi.mocked(listSites).mockResolvedValue([])
-    vi.mocked(listClassTypes).mockResolvedValue([])
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.mocked(getWeekEvents).mockResolvedValue([])
+  vi.mocked(listEventsPaginated).mockResolvedValue({ count: 0, next: null, previous: null, results: [] })
+  vi.mocked(listStaff).mockResolvedValue({ count: 0, next: null, previous: null, results: [] })
+  vi.mocked(listSites).mockResolvedValue([])
+  vi.mocked(listClassTypes).mockResolvedValue([
+    { id: 7, name: 'Yoga' },
+    { id: 8, name: 'Spin' },
+  ] as never)
+})
+
+describe('TimetablePage — filter by class (F2)', () => {
+  it('renders a class filter populated from class types', async () => {
+    renderPage()
+    const select = await screen.findByLabelText('Filter by class')
+    expect(select).toBeInTheDocument()
+    expect(await screen.findByRole('option', { name: 'Yoga' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Spin' })).toBeInTheDocument()
   })
 
+  it('passes the selected class_type to the week query', async () => {
+    renderPage()
+    const select = await screen.findByLabelText('Filter by class')
+    await screen.findByRole('option', { name: 'Spin' })
+
+    await userEvent.selectOptions(select, '8')
+
+    await waitFor(() =>
+      expect(getWeekEvents).toHaveBeenCalledWith(expect.objectContaining({ class_type: 8 })),
+    )
+  })
+
+  it('omits class_type when "All Classes" is selected', async () => {
+    renderPage()
+    await screen.findByLabelText('Filter by class')
+
+    await waitFor(() => expect(getWeekEvents).toHaveBeenCalled())
+    expect(getWeekEvents).toHaveBeenLastCalledWith(
+      expect.objectContaining({ class_type: undefined }),
+    )
+  })
+})
+
+describe('TimetablePage — awaiting attendance filter (F3)', () => {
   it('defaults to not awaiting-only', async () => {
     renderPage()
     const button = await screen.findByRole('button', { name: /awaiting attendance/i })
