@@ -360,6 +360,11 @@ export interface InstructorReliabilityReport {
   cover_requests_count: number
 }
 
+export interface InstructorChartsReport {
+  avg_attendance_per_class: Array<{ class_type_name: string; avg_attendance: number; color: string }>
+  attendance_trend: Array<{ week_start: string; avg_attendance: number }>
+}
+
 export interface PayrollReport {
   total_payroll: string
   paid_amount: string
@@ -382,7 +387,7 @@ export interface InstructorPayrollSummary {
   status: string
 }
 
-export interface ClassViabilityReport {
+export interface ClassViabilityRow {
   class_type_id: number
   class_type_name: string
   total_classes: number
@@ -394,14 +399,36 @@ export interface ClassViabilityReport {
   purple_count: number
 }
 
-export interface ClassesReport {
+export interface ViabilitySnapshot {
+  excellent: number
+  good: number
+  moderate: number
+  low: number
+  pending: number
+}
+
+export interface ClassViabilityReport {
+  by_class_type: ClassViabilityRow[]
+  overall_snapshot: ViabilitySnapshot
+  viability_trend: Array<{ week_start: string; viability_percentage: number }>
+}
+
+export interface ClassReportRow {
   class_type_id: number
   class_type_name: string
   total_classes: number
   avg_attendance: number
   viability_percentage: number
   cancellation_percentage: number
+  capacity: number
+  target: number
   color: string
+}
+
+export interface ClassesReport {
+  by_class_type: ClassReportRow[]
+  attendance_trend: Array<{ week_start: string; avg_attendance: number }>
+  by_day_of_week: Array<{ day: string; avg_attendance: number }>
 }
 
 // ─── Notifications ───────────────────────────────────────────────────────────

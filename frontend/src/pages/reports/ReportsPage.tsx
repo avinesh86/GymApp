@@ -42,7 +42,7 @@ export function ReportsPage() {
     queryFn: () => getPayrollReport(),
   })
 
-  const { data: viability = [] } = useQuery({
+  const { data: viability } = useQuery({
     queryKey: ['reports', 'viability'],
     queryFn: () => getClassViabilityReport(),
   })
@@ -52,7 +52,8 @@ export function ReportsPage() {
     queryFn: () => getAttendanceReport(thisMonthFrom, thisMonthTo),
   })
 
-  const goodViabilityCount = viability.filter(
+  const viabilityRows = viability?.by_class_type ?? []
+  const goodViabilityCount = viabilityRows.filter(
     (v) => parseFloat(String(v.viability_percentage ?? 0)) >= 60
   ).length
 
@@ -89,7 +90,7 @@ export function ReportsPage() {
         />
         <SummaryCard
           label="Good Viability"
-          value={`${goodViabilityCount}/${viability.length}`}
+          value={`${goodViabilityCount}/${viabilityRows.length}`}
         />
       </div>
 
