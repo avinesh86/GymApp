@@ -60,11 +60,11 @@ export async function getPayrollReport(
 export async function getClassViabilityReport(
   from?: string,
   to?: string
-): Promise<ClassViabilityReport[]> {
-  const response = await apiClient.get<ClassViabilityReport[] | PaginatedResponse<ClassViabilityReport>>('reports/class-viability/', {
+): Promise<ClassViabilityReport> {
+  const response = await apiClient.get<ClassViabilityReport>('reports/class-viability/', {
     params: { from, to },
   })
-  return unwrapList(response.data)
+  return response.data
 }
 
 export async function getClassesReport(
