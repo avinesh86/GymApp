@@ -9,7 +9,7 @@ import {
   isSameWeek,
   parseISO,
 } from 'date-fns'
-import { ChevronLeft, ChevronRight, Plus, LayoutGrid, List, Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, LayoutGrid, List, Search, ClipboardCheck } from 'lucide-react'
 import { getWeekEvents, listEventsPaginated, listClassTypes } from '../../api/timetable'
 import { listStaff } from '../../api/staff'
 import { listSites } from '../../api/settings'
@@ -50,6 +50,7 @@ export function TimetablePage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [siteFilter, setSiteFilter] = useState('')
   const [instructorFilter, setInstructorFilter] = useState('')
+  const [awaitingOnly, setAwaitingOnly] = useState(false)
   const [listPage, setListPage] = useState(1)
 
   const search = useDebounce(searchInput, 300)
@@ -62,7 +63,7 @@ export function TimetablePage() {
     queryKey: [
       'timetable-events', 'week',
       format(currentWeekStart, 'yyyy-MM-dd'),
-      statusFilter, siteFilter, instructorFilter, search,
+      statusFilter, siteFilter, instructorFilter, awaitingOnly, search,
     ],
     queryFn: () =>
       getWeekEvents({
@@ -71,6 +72,7 @@ export function TimetablePage() {
         status: statusFilter || undefined,
         site: siteFilter ? Number(siteFilter) : undefined,
         instructor: instructorFilter ? Number(instructorFilter) : undefined,
+        awaiting: awaitingOnly ? 'true' : undefined,
       }),
     enabled: viewMode === 'week',
   })
@@ -80,7 +82,7 @@ export function TimetablePage() {
     queryKey: [
       'timetable-events', 'list',
       format(currentWeekStart, 'yyyy-MM-dd'),
-      listPage, statusFilter, siteFilter, instructorFilter, search,
+      listPage, statusFilter, siteFilter, instructorFilter, awaitingOnly, search,
     ],
     queryFn: () =>
       listEventsPaginated({
@@ -90,6 +92,7 @@ export function TimetablePage() {
         status: statusFilter || undefined,
         site: siteFilter ? Number(siteFilter) : undefined,
         instructor: instructorFilter ? Number(instructorFilter) : undefined,
+        awaiting: awaitingOnly ? 'true' : undefined,
         page: listPage,
         page_size: 20,
       }),
@@ -269,6 +272,24 @@ export function TimetablePage() {
             </option>
           ))}
         </select>
+
+        <button
+          type="button"
+          onClick={() => {
+            setAwaitingOnly((v) => !v)
+            setListPage(1)
+          }}
+          aria-pressed={awaitingOnly}
+          className={[
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-sm font-medium transition-colors',
+            awaitingOnly
+              ? 'bg-orange-500 border-orange-500 text-white hover:bg-orange-600'
+              : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50',
+          ].join(' ')}
+        >
+          <ClipboardCheck className="h-4 w-4" />
+          Awaiting Attendance
+        </button>
       </div>
 
       {/* Main content */}
