@@ -331,7 +331,16 @@ class InstructorReliabilityReportView(APIView):
 
 class ClassesReportView(APIView):
     """
-    GET /api/v1/reports/classes/?from=YYYY-MM-DD&to=YYYY-MM-DD
+    GET /api/v1/reports/classes/?from=YYYY-MM-DD&to=YYYY-MM-DD&class_type=<id>
+
+    Returns:
+      {
+        "by_class_type":   [ per-class-type stats incl. capacity & target ],
+        "attendance_trend":[ {week_start, avg_attendance} ],
+        "by_day_of_week":  [ {day, avg_attendance} ],
+      }
+
+    The optional class_type param scopes every section to one class type.
     """
 
     permission_classes = [IsGymManager]
@@ -341,13 +350,17 @@ class ClassesReportView(APIView):
         if error:
             return error
 
+        class_type_filter = request.query_params.get("class_type")
+
         class_types = ClassType.objects.filter(
             tenant=request.tenant,
             is_deleted=False,
             is_active=True,
         )
+        if class_type_filter:
+            class_types = class_types.filter(id=class_type_filter)
 
-        results = []
+        by_class_type = []
         for class_type in class_types:
             all_events = TimetableEvent.objects.filter(
                 tenant=request.tenant,
@@ -364,6 +377,7 @@ class ClassesReportView(APIView):
             total_cancelled = all_events.filter(
                 status=TimetableEvent.Status.CANCELLED
             ).count()
+            avg_capacity = all_events.aggregate(c=Avg("capacity"))["c"] or 0
 
             attended_records = AttendanceRecord.objects.filter(
                 tenant=request.tenant,
@@ -388,18 +402,57 @@ class ClassesReportView(APIView):
 
             cancellation_percentage = round(total_cancelled / total_scheduled * 100, 1)
 
-            results.append({
+            by_class_type.append({
                 "class_type_id": class_type.id,
                 "class_type_name": class_type.name,
                 "total_classes": total_scheduled,
                 "avg_attendance": avg_attendance,
                 "viability_percentage": viability_percentage,
                 "cancellation_percentage": cancellation_percentage,
+                # F7: capacity vs attendance, and attendance vs target charts.
+                "capacity": round(avg_capacity, 1),
+                "target": class_type.green_threshold,
                 "color": get_class_color(class_type),
             })
 
-        results.sort(key=lambda r: r["avg_attendance"], reverse=True)
-        return Response(results)
+        by_class_type.sort(key=lambda r: r["avg_attendance"], reverse=True)
+
+        # --- attendance_trend (weekly avg) + by_day_of_week, across the range ---
+        attendance_qs = AttendanceRecord.objects.filter(
+            tenant=request.tenant,
+            is_deleted=False,
+            timetable_event__start_datetime__date__gte=from_date,
+            timetable_event__start_datetime__date__lte=to_date,
+        ).select_related("timetable_event")
+        if class_type_filter:
+            attendance_qs = attendance_qs.filter(
+                timetable_event__class_type_id=class_type_filter
+            )
+
+        weekly = defaultdict(list)
+        by_dow = defaultdict(list)
+        for record in attendance_qs:
+            event_date = record.timetable_event.start_datetime.date()
+            weekly[monday_of_week(event_date).isoformat()].append(record.count)
+            by_dow[event_date.weekday()].append(record.count)
+
+        attendance_trend = [
+            {"week_start": week, "avg_attendance": round(sum(counts) / len(counts), 1)}
+            for week, counts in sorted(weekly.items())
+        ]
+        by_day_of_week = [
+            {
+                "day": DAY_NAMES[i],
+                "avg_attendance": round(sum(by_dow[i]) / len(by_dow[i]), 1) if by_dow[i] else 0.0,
+            }
+            for i in range(7)
+        ]
+
+        return Response({
+            "by_class_type": by_class_type,
+            "attendance_trend": attendance_trend,
+            "by_day_of_week": by_day_of_week,
+        })
 
 
 class PayrollReportView(APIView):
