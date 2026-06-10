@@ -394,14 +394,22 @@ export interface ClassViabilityReport {
   purple_count: number
 }
 
-export interface ClassesReport {
+export interface ClassReportRow {
   class_type_id: number
   class_type_name: string
   total_classes: number
   avg_attendance: number
   viability_percentage: number
   cancellation_percentage: number
+  capacity: number
+  target: number
   color: string
+}
+
+export interface ClassesReport {
+  by_class_type: ClassReportRow[]
+  attendance_trend: Array<{ week_start: string; avg_attendance: number }>
+  by_day_of_week: Array<{ day: string; avg_attendance: number }>
 }
 
 // ─── Notifications ───────────────────────────────────────────────────────────

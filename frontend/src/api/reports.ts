@@ -53,12 +53,13 @@ export async function getClassViabilityReport(
 
 export async function getClassesReport(
   from?: string,
-  to?: string
-): Promise<ClassesReport[]> {
-  const response = await apiClient.get<ClassesReport[] | PaginatedResponse<ClassesReport>>('reports/classes/', {
-    params: { from, to },
+  to?: string,
+  classType?: number
+): Promise<ClassesReport> {
+  const response = await apiClient.get<ClassesReport>('reports/classes/', {
+    params: { from, to, class_type: classType },
   })
-  return unwrapList(response.data)
+  return response.data
 }
 
 export interface ClassTypeOption {
