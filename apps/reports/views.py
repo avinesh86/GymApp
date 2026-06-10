@@ -329,6 +329,67 @@ class InstructorReliabilityReportView(APIView):
         return Response(results)
 
 
+class InstructorChartsReportView(APIView):
+    """
+    GET /api/v1/reports/instructor-charts/?from&to&instructor=<id>
+
+    Per-instructor chart data (F8):
+      - avg_attendance_per_class: average attendance per class type taught
+      - attendance_trend: weekly average attendance
+
+    Returns empty arrays when no instructor is given.
+    """
+
+    permission_classes = [IsGymManager]
+
+    def get(self, request):
+        from_date, to_date, error = parse_date_params(request)
+        if error:
+            return error
+
+        instructor_id = request.query_params.get("instructor")
+        if not instructor_id:
+            return Response({"avg_attendance_per_class": [], "attendance_trend": []})
+
+        records = AttendanceRecord.objects.filter(
+            tenant=request.tenant,
+            is_deleted=False,
+            timetable_event__instructor_id=instructor_id,
+            timetable_event__start_datetime__date__gte=from_date,
+            timetable_event__start_datetime__date__lte=to_date,
+        ).select_related("timetable_event__class_type")
+
+        per_class = defaultdict(list)
+        per_class_meta = {}
+        weekly = defaultdict(list)
+        for record in records:
+            event = record.timetable_event
+            class_type = event.class_type
+            per_class[class_type.id].append(record.count)
+            per_class_meta[class_type.id] = class_type
+            weekly[monday_of_week(event.start_datetime.date()).isoformat()].append(record.count)
+
+        avg_attendance_per_class = [
+            {
+                "class_type_name": per_class_meta[cid].name,
+                "avg_attendance": round(sum(counts) / len(counts), 1),
+                "color": get_class_color(per_class_meta[cid]),
+            }
+            for cid, counts in per_class.items()
+        ]
+        avg_attendance_per_class.sort(key=lambda r: r["avg_attendance"], reverse=True)
+
+        attendance_trend = [
+            {"week_start": week, "avg_attendance": round(sum(counts) / len(counts), 1)}
+            for week, counts in sorted(weekly.items())
+        ]
+
+        return Response({
+            "avg_attendance_per_class": avg_attendance_per_class,
+            "attendance_trend": attendance_trend,
+        })
+
+
 class ClassesReportView(APIView):
     """
     GET /api/v1/reports/classes/?from=YYYY-MM-DD&to=YYYY-MM-DD

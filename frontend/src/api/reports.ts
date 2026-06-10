@@ -2,6 +2,7 @@ import apiClient from './client'
 import type {
   AttendanceReport,
   InstructorReliabilityReport,
+  InstructorChartsReport,
   PayrollReport,
   ClassViabilityReport,
   ClassesReport,
@@ -32,6 +33,17 @@ export async function getInstructorReliabilityReport(
     { params: { from, to } }
   )
   return unwrapList(response.data)
+}
+
+export async function getInstructorCharts(
+  from?: string,
+  to?: string,
+  instructor?: number
+): Promise<InstructorChartsReport> {
+  const response = await apiClient.get<InstructorChartsReport>('reports/instructor-charts/', {
+    params: { from, to, instructor },
+  })
+  return response.data
 }
 
 export async function getPayrollReport(from?: string, to?: string): Promise<PayrollReport> {

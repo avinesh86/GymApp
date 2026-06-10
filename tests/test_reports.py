@@ -16,6 +16,7 @@ from apps.reports.views import (
     ClassesReportView,
     ClassViabilityReportView,
     CoverReportView,
+    InstructorChartsReportView,
     InstructorReliabilityReportView,
     PayrollReportView,
 )
@@ -169,6 +170,45 @@ class TestInstructorReliabilityReport:
         response = InstructorReliabilityReportView.as_view()(request)
         assert response.status_code == 200
         assert response.data == []
+
+
+@pytest.mark.django_db
+class TestInstructorChartsReport:
+    def test_returns_per_class_and_trend_for_instructor(self, tenant, manager_user, class_type, instructor):
+        start = timezone.now() - timedelta(hours=2)
+        event = TimetableEventFactory(
+            tenant=tenant, class_type=class_type, instructor=instructor,
+            start_datetime=start, end_datetime=start + timedelta(hours=1),
+            status="completed",
+        )
+        AttendanceRecord.objects.create(tenant=tenant, timetable_event=event, count=18)
+
+        from_date = (date.today() - timedelta(days=7)).isoformat()
+        to_date = date.today().isoformat()
+        request = _make_request(
+            f"/api/v1/reports/instructor-charts/?from={from_date}&to={to_date}&instructor={instructor.id}",
+            manager_user, tenant,
+        )
+
+        response = InstructorChartsReportView.as_view()(request)
+        assert response.status_code == 200
+        assert "avg_attendance_per_class" in response.data
+        assert "attendance_trend" in response.data
+        per_class = response.data["avg_attendance_per_class"]
+        assert per_class and per_class[0]["class_type_name"] == class_type.name
+        assert per_class[0]["avg_attendance"] == 18.0
+        assert len(response.data["attendance_trend"]) == 1
+
+    def test_empty_without_instructor(self, tenant, manager_user):
+        from_date = (date.today() - timedelta(days=7)).isoformat()
+        to_date = date.today().isoformat()
+        request = _make_request(
+            f"/api/v1/reports/instructor-charts/?from={from_date}&to={to_date}",
+            manager_user, tenant,
+        )
+        response = InstructorChartsReportView.as_view()(request)
+        assert response.status_code == 200
+        assert response.data == {"avg_attendance_per_class": [], "attendance_trend": []}
 
 
 # ---------------------------------------------------------------------------
