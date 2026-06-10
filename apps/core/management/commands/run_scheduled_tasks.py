@@ -43,6 +43,14 @@ class Command(BaseCommand):
             "check_unfilled_classes",
         ))
 
+        # 2b. Mark past events completed (hourly) — stops finished classes
+        #     showing as 'Scheduled'; they still appear in awaiting-attendance.
+        results.append(self._run_task(
+            "Mark past events completed",
+            "apps.timetable.tasks",
+            "mark_past_events_completed",
+        ))
+
         # 3. Expire stale cover offers (every 30 min — fine to run hourly)
         results.append(self._run_task(
             "Expire cover offers",
