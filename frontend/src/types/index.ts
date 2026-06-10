@@ -382,7 +382,7 @@ export interface InstructorPayrollSummary {
   status: string
 }
 
-export interface ClassViabilityReport {
+export interface ClassViabilityRow {
   class_type_id: number
   class_type_name: string
   total_classes: number
@@ -392,6 +392,20 @@ export interface ClassViabilityReport {
   amber_count: number
   green_count: number
   purple_count: number
+}
+
+export interface ViabilitySnapshot {
+  excellent: number
+  good: number
+  moderate: number
+  low: number
+  pending: number
+}
+
+export interface ClassViabilityReport {
+  by_class_type: ClassViabilityRow[]
+  overall_snapshot: ViabilitySnapshot
+  viability_trend: Array<{ week_start: string; viability_percentage: number }>
 }
 
 export interface ClassesReport {

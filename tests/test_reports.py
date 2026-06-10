@@ -280,24 +280,33 @@ class TestClassViabilityReport:
 
         response = ClassViabilityReportView.as_view()(request)
         assert response.status_code == 200
-        assert isinstance(response.data, list)
+        # F10: response is now an object with snapshot + trend sections.
+        assert "by_class_type" in response.data
+        assert "overall_snapshot" in response.data
+        assert "viability_trend" in response.data
 
-        if response.data:
-            entry = response.data[0]
-            assert "red_count" in entry
-            assert "amber_count" in entry
-            assert "green_count" in entry
-            assert "purple_count" in entry
-            assert "viability_percentage" in entry
+        entry = response.data["by_class_type"][0]
+        assert "red_count" in entry
+        assert "green_count" in entry
+        assert "viability_percentage" in entry
 
-    def test_no_data_returns_empty(self, tenant, manager_user):
+        snapshot = response.data["overall_snapshot"]
+        for key in ("excellent", "good", "moderate", "low", "pending"):
+            assert key in snapshot
+        # count=12 with default thresholds (amber 6, green 10, purple 20) → Good.
+        assert snapshot["good"] == 1
+        assert len(response.data["viability_trend"]) == 1
+
+    def test_no_data_returns_empty_sections(self, tenant, manager_user):
         request = _make_request(
             "/api/v1/reports/class-viability/",
             manager_user, tenant,
         )
         response = ClassViabilityReportView.as_view()(request)
         assert response.status_code == 200
-        assert response.data == []
+        assert response.data["by_class_type"] == []
+        assert response.data["viability_trend"] == []
+        assert response.data["overall_snapshot"]["good"] == 0
 
 
 # ---------------------------------------------------------------------------

@@ -511,7 +511,10 @@ class ClassViabilityReportView(APIView):
             tenant=request.tenant, is_deleted=False, is_active=True
         )
 
-        results = []
+        # F10: overall snapshot buckets aggregated across all class types.
+        snapshot = {"excellent": 0, "good": 0, "moderate": 0, "low": 0, "pending": 0}
+
+        by_class_type = []
         for class_type in class_types:
             counts = list(
                 AttendanceRecord.objects.filter(
@@ -538,7 +541,13 @@ class ClassViabilityReportView(APIView):
             viable = green + purple
             viability_percentage = round(viable / total * 100, 1) if total else 0.0
 
-            results.append({
+            # Snapshot: Excellent/Good/Moderate, and Low = everything else attended.
+            snapshot["excellent"] += purple
+            snapshot["good"] += green
+            snapshot["moderate"] += amber
+            snapshot["low"] += total - purple - green - amber
+
+            by_class_type.append({
                 "class_type_id": class_type.pk,
                 "class_type_name": class_type.name,
                 "total_classes": total,
@@ -550,7 +559,43 @@ class ClassViabilityReportView(APIView):
                 "purple_count": purple,
             })
 
-        return Response(results)
+        # Pending = past-or-scheduled events with no attendance recorded yet.
+        event_filter = Q(tenant=request.tenant, is_deleted=False)
+        if from_str:
+            event_filter &= Q(start_datetime__date__gte=date.fromisoformat(from_str))
+        if to_str:
+            event_filter &= Q(start_datetime__date__lte=date.fromisoformat(to_str))
+        snapshot["pending"] = (
+            TimetableEvent.objects.filter(event_filter, attendance_record__isnull=True)
+            .exclude(status=TimetableEvent.Status.CANCELLED)
+            .count()
+        )
+
+        # F10: weekly viability trend (% of attended classes that hit green+).
+        trend_weekly = defaultdict(lambda: {"viable": 0, "total": 0})
+        records = AttendanceRecord.objects.filter(
+            Q(tenant=request.tenant, is_deleted=False) & date_filter
+        ).select_related("timetable_event__class_type")
+        for record in records:
+            event = record.timetable_event
+            week = monday_of_week(event.start_datetime.date()).isoformat()
+            trend_weekly[week]["total"] += 1
+            if record.count >= event.class_type.green_threshold:
+                trend_weekly[week]["viable"] += 1
+
+        viability_trend = [
+            {
+                "week_start": week,
+                "viability_percentage": round(vals["viable"] / vals["total"] * 100, 1) if vals["total"] else 0.0,
+            }
+            for week, vals in sorted(trend_weekly.items())
+        ]
+
+        return Response({
+            "by_class_type": by_class_type,
+            "overall_snapshot": snapshot,
+            "viability_trend": viability_trend,
+        })
 
 
 class CoverReportView(APIView):
