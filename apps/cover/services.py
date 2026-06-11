@@ -30,6 +30,14 @@ def _auto_dispatch_enabled(tenant) -> bool:
     return getattr(settings, "cover_auto_dispatch", True)
 
 
+def _absent_staff_id(cover_request: CoverRequest):
+    """The instructor being covered — from the linked Absence, or (when none)
+    the event's current instructor. They are never offered their own cover."""
+    if cover_request.absence:
+        return cover_request.absence.staff_id
+    return cover_request.timetable_event.instructor_id
+
+
 def create_cover_request(
     timetable_event: TimetableEvent,
     absence: Absence | None,
@@ -237,7 +245,7 @@ def _all_active_staff(tenant) -> list:
 def find_eligible_instructors(cover_request: CoverRequest) -> list:
     """All eligible instructors for the request's event (qualification + role)."""
     event = cover_request.timetable_event
-    absent_staff_id = cover_request.absence.staff_id if cover_request.absence else None
+    absent_staff_id = _absent_staff_id(cover_request)
     return [
         i for i in _all_active_staff(cover_request.tenant)
         if is_eligible_for_cover(i, event, absent_staff_id)
@@ -247,7 +255,7 @@ def find_eligible_instructors(cover_request: CoverRequest) -> list:
 def get_cover_candidates(cover_request: CoverRequest) -> dict:
     """Tiered, ranked candidate list for the manager review screen."""
     event = cover_request.timetable_event
-    absent_staff_id = cover_request.absence.staff_id if cover_request.absence else None
+    absent_staff_id = _absent_staff_id(cover_request)
     return build_tiered_offer_list(_all_active_staff(cover_request.tenant), event, absent_staff_id)
 
 
@@ -289,7 +297,7 @@ def _create_offers(cover_request: CoverRequest, instructors: list, created_by) -
 def send_cover_offers(cover_request: CoverRequest, created_by, tier: int = 1) -> list:
     """Create offers for the given tier's eligible instructors and notify them."""
     event = cover_request.timetable_event
-    absent_staff_id = cover_request.absence.staff_id if cover_request.absence else None
+    absent_staff_id = _absent_staff_id(cover_request)
     tiers = build_tiered_offer_list(_all_active_staff(cover_request.tenant), event, absent_staff_id)
     target = tiers.get(tier, [])
     if not target:
@@ -302,7 +310,7 @@ def dispatch_cover_offers(cover_request: CoverRequest, created_by, staff_ids: li
     """Manual dispatch: offer to a manager-chosen set of staff, or fall back to a tier."""
     if staff_ids:
         event = cover_request.timetable_event
-        absent_staff_id = cover_request.absence.staff_id if cover_request.absence else None
+        absent_staff_id = _absent_staff_id(cover_request)
         chosen = [
             i for i in _all_active_staff(cover_request.tenant)
             if i.pk in set(staff_ids) and is_eligible_for_cover(i, event, absent_staff_id)

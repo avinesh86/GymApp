@@ -1,6 +1,5 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import {
   format,
@@ -14,7 +13,7 @@ import {
 } from 'date-fns'
 import { ChevronLeft, ChevronRight, Clock, MapPin } from 'lucide-react'
 import { listEvents } from '../../api/timetable'
-import { createCoverRequest } from '../../api/cover'
+import { createCoverRequest, acceptCoverForEvent } from '../../api/cover'
 import { getMyStaffProfile } from '../../api/staff'
 import type { TimetableEvent, TimetableEventStatus } from '../../types'
 import { useAuth } from '../../hooks/useAuth'
@@ -117,12 +116,24 @@ export function OwnEventCard({ event }: { event: TimetableEvent }) {
 
 // ─── Cover opportunity card ───────────────────────────────────────────────────
 
-interface CoverOpportunityCardProps {
-  event: TimetableEvent
-  onAccept: () => void
-}
+export function CoverOpportunityCard({ event }: { event: TimetableEvent }) {
+  const queryClient = useQueryClient()
+  const [confirming, setConfirming] = useState(false)
 
-function CoverOpportunityCard({ event, onAccept }: CoverOpportunityCardProps) {
+  const { mutate: accept, isPending } = useMutation({
+    mutationFn: () => acceptCoverForEvent(event.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['instructor-calendar'] })
+      queryClient.invalidateQueries({ queryKey: ['cover-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
+      toast.success("Cover accepted — you're on!")
+    },
+    onError: (err) => {
+      const status = (err as { response?: { status?: number } })?.response?.status
+      toast.error(status === 404 ? 'No cover offer for you on this class yet' : 'Failed to accept cover')
+    },
+  })
+
   return (
     <div className="rounded-lg border border-orange-200 bg-orange-50 p-2 flex flex-col gap-1">
       <p className="text-xs font-semibold text-orange-900 truncate">{event.class_type_name}</p>
@@ -134,12 +145,30 @@ function CoverOpportunityCard({ event, onAccept }: CoverOpportunityCardProps) {
         <MapPin className="h-3 w-3 shrink-0" />
         <span className="truncate">{event.site_name}</span>
       </div>
-      <button
-        onClick={onAccept}
-        className="mt-1 w-full rounded-md bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium py-1 transition-colors"
-      >
-        Accept Cover
-      </button>
+      {confirming ? (
+        <div className="flex items-center gap-1 mt-1">
+          <button
+            onClick={() => accept()}
+            disabled={isPending}
+            className="flex-1 rounded-md bg-orange-600 hover:bg-orange-700 text-white text-xs font-medium py-1 disabled:opacity-50"
+          >
+            Confirm accept
+          </button>
+          <button
+            onClick={() => setConfirming(false)}
+            className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button
+          onClick={() => setConfirming(true)}
+          className="mt-1 w-full rounded-md bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium py-1 transition-colors"
+        >
+          Accept Cover
+        </button>
+      )}
     </div>
   )
 }
@@ -150,10 +179,9 @@ interface DayColumnProps {
   day: Date
   ownEvents: TimetableEvent[]
   coverEvents: TimetableEvent[]
-  onAcceptCover: () => void
 }
 
-function DayColumn({ day, ownEvents, coverEvents, onAcceptCover }: DayColumnProps) {
+function DayColumn({ day, ownEvents, coverEvents }: DayColumnProps) {
   const isToday = isSameDay(day, new Date())
   const dayOwnEvents = eventsForDay(ownEvents, day)
   const dayCoverEvents = eventsForDay(coverEvents, day)
@@ -188,11 +216,7 @@ function DayColumn({ day, ownEvents, coverEvents, onAcceptCover }: DayColumnProp
               <OwnEventCard key={event.id} event={event} />
             ))}
             {dayCoverEvents.map((event) => (
-              <CoverOpportunityCard
-                key={event.id}
-                event={event}
-                onAccept={onAcceptCover}
-              />
+              <CoverOpportunityCard key={event.id} event={event} />
             ))}
           </>
         )}
@@ -205,7 +229,6 @@ function DayColumn({ day, ownEvents, coverEvents, onAcceptCover }: DayColumnProp
 
 export function InstructorCalendarPage() {
   const { user } = useAuth()
-  const navigate = useNavigate()
 
   const [weekStart, setWeekStart] = useState(() =>
     startOfWeek(new Date(), { weekStartsOn: 1 })
@@ -256,11 +279,6 @@ export function InstructorCalendarPage() {
 
   function goToToday() {
     setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }))
-  }
-
-  function handleAcceptCover() {
-    // Navigate to the cover board where the instructor can accept the cover request
-    navigate('/cover')
   }
 
   const weekLabel = `${format(weekStart, 'd MMM')} – ${format(weekEnd, 'd MMM yyyy')}`
@@ -321,7 +339,6 @@ export function InstructorCalendarPage() {
                 day={day}
                 ownEvents={ownEvents}
                 coverEvents={coverOpportunities}
-                onAcceptCover={handleAcceptCover}
               />
             ))}
           </div>

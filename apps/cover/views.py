@@ -199,12 +199,49 @@ class CoverOfferViewSet(TenantScopedMixin, ModelViewSet):
     permission_classes = [IsTeamLeader]
     filterset_fields = ["status", "cover_request"]
 
+    def get_permissions(self):
+        action = getattr(self, "action", None)
+        if action == "accept_by_code":
+            return []  # public — the accept_code is its own auth token
+        if action == "accept_mine":
+            return [IsInstructorOrAbove()]  # instructors accept their own offers
+        return [IsTeamLeader()]
+
     def get_queryset(self):
         return (
             CoverOffer.objects.filter(tenant=self.request.tenant, is_deleted=False)
             .select_related("staff", "cover_request__timetable_event")
             .order_by("-offered_at")
         )
+
+    @action(detail=False, methods=["post"], url_path="accept-mine", permission_classes=[IsInstructorOrAbove])
+    def accept_mine(self, request):
+        """Authenticated instructor accepts their own pending offer for an event
+        (powers the 'Accept Cover' button on My Calendar)."""
+        event_id = request.data.get("event")
+        own_staff_ids = list(
+            StaffProfile.objects.filter(
+                user=request.user, tenant=request.tenant, is_deleted=False
+            ).values_list("pk", flat=True)
+        )
+        offer = (
+            CoverOffer.objects.filter(
+                cover_request__tenant=request.tenant,
+                cover_request__timetable_event_id=event_id,
+                staff_id__in=own_staff_ids,
+                status=CoverOffer.Status.PENDING,
+                is_deleted=False,
+            )
+            .select_related("cover_request__timetable_event")
+            .first()
+        )
+        if offer is None:
+            return Response(
+                {"detail": "No pending cover offer for you on this class."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        accept_cover_offer(offer, accepted_by=request.user, ip_address=request.META.get("REMOTE_ADDR"))
+        return Response({"detail": "Cover accepted successfully."})
 
     @action(detail=False, methods=["post"], url_path="accept-by-code", permission_classes=[])
     def accept_by_code(self, request):

@@ -84,6 +84,11 @@ export async function acceptCoverByCode(acceptCode: string): Promise<void> {
   await apiClient.post('cover/offers/accept-by-code/', { accept_code: acceptCode })
 }
 
+export async function acceptCoverForEvent(eventId: number): Promise<void> {
+  // Authenticated instructor accepts their own pending offer for this class.
+  await apiClient.post('cover/offers/accept-mine/', { event: eventId })
+}
+
 export async function cancelCoverRequest(
   requestId: number,
   cancellationReason: string

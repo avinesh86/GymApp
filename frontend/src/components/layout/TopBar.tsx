@@ -106,7 +106,7 @@ export function TopBar({ title }: TopBarProps) {
                       <p className="text-xs text-gray-400">
                         {formatDistanceToNow(new Date(notification.created_at), { addSuffix: true })}
                       </p>
-                      {notification.action_type === 'accept_cover' && !notification.is_read && (
+                      {notification.action_type === 'accept_cover' && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation()

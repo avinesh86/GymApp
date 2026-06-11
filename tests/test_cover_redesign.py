@@ -241,6 +241,59 @@ class TestInstructorSelfService:
 
 # ─── Candidates endpoint ─────────────────────────────────────────────────────
 
+class TestAcceptMine:
+    def test_instructor_accepts_own_offer(self, tenant, class_type, instructor, manager_user):
+        from apps.cover.views import CoverOfferViewSet
+
+        event = _event(tenant, class_type, instructor)
+        user = UserFactory(tenant=tenant, role="instructor")
+        cover = StaffProfileFactory(tenant=tenant, role="instructor", email="cov@t.com", user=user)
+        _capable(tenant, cover, class_type, event)
+        cr = services.create_cover_request(event, None, manager_user)
+        services.send_cover_offers(cr, created_by=manager_user, tier=1)
+
+        request = APIRequestFactory().post("/api/v1/cover/offers/accept-mine/", {"event": event.id}, format="json")
+        force_authenticate(request, user=user)
+        request.tenant = tenant
+        resp = CoverOfferViewSet.as_view({"post": "accept_mine"})(request)
+
+        assert resp.status_code == 200
+        cr.refresh_from_db(); event.refresh_from_db()
+        assert cr.status == S.ACCEPTED
+        assert event.instructor_id == cover.pk
+
+    def test_404_when_no_offer_for_me(self, tenant, class_type, instructor, manager_user):
+        from apps.cover.views import CoverOfferViewSet
+
+        event = _event(tenant, class_type, instructor)
+        user = UserFactory(tenant=tenant, role="instructor")
+        StaffProfileFactory(tenant=tenant, role="instructor", email="cov@t.com", user=user)  # no offer
+        services.create_cover_request(event, None, manager_user)
+
+        request = APIRequestFactory().post("/api/v1/cover/offers/accept-mine/", {"event": event.id}, format="json")
+        force_authenticate(request, user=user)
+        request.tenant = tenant
+        resp = CoverOfferViewSet.as_view({"post": "accept_mine"})(request)
+        assert resp.status_code == 404
+
+
+class TestOriginalInstructorNotOffered:
+    def test_event_instructor_excluded_without_absence(self, tenant, class_type, instructor, manager_user):
+        # Original instructor is qualified + available, but must not be offered
+        # cover for their own class even when there's no Absence record.
+        event = _event(tenant, class_type, instructor)
+        _capable(tenant, instructor, class_type, event)
+        other = StaffProfileFactory(tenant=tenant, role="instructor", email="other@t.com")
+        _capable(tenant, other, class_type, event)
+
+        cr = services.create_cover_request(event, None, manager_user)
+        offers = services.send_cover_offers(cr, created_by=manager_user, tier=1)
+
+        offered_ids = {o.staff_id for o in offers}
+        assert instructor.pk not in offered_ids  # original excluded
+        assert other.pk in offered_ids
+
+
 class TestInstructorTimetableAccess:
     """My Calendar: instructors can read their own classes + cover opportunities,
     but not the whole timetable, and cannot mutate."""
