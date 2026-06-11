@@ -1,3 +1,5 @@
+from datetime import date
+
 from django.conf import settings as django_settings
 from django.db import models
 
@@ -97,6 +99,9 @@ class TenantSettings(models.Model):
         choices=InvoiceFrequency.choices,
         default=InvoiceFrequency.FORTNIGHTLY,
     )
+    # Anchor date that recurring pay periods are counted from (set by
+    # manager/owner/payroll). Fortnightly/8-weekly blocks are measured from here.
+    pay_period_anchor_date = models.DateField(default=date(2024, 1, 1))
     payroll_approval_required = models.BooleanField(default=True)
     whatsapp_enabled = models.BooleanField(default=False)
     email_enabled = models.BooleanField(default=True)
