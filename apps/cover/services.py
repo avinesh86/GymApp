@@ -1,5 +1,4 @@
 import logging
-from datetime import date
 
 from django.utils import timezone
 
@@ -7,26 +6,68 @@ from apps.core.audit import log_audit
 from apps.staff.models import StaffAvailability, StaffClassTypeCapability, StaffProfile
 from apps.timetable.models import TimetableEvent
 
+from . import notifications
 from .models import Absence, CoverOffer, CoverRequest, CoverResponse
+from .state import transition, urgency_for_hours
 
 logger = logging.getLogger(__name__)
+
+S = CoverRequest.Status
+
+
+def _tenant_settings(tenant):
+    return getattr(tenant, "settings", None)
+
+
+def _critical_threshold(tenant) -> int:
+    settings = _tenant_settings(tenant)
+    return getattr(settings, "cover_critical_threshold_hours", 4) or 4
+
+
+def _auto_dispatch_enabled(tenant) -> bool:
+    settings = _tenant_settings(tenant)
+    # Default to True so gyms without explicit settings keep auto-dispatch.
+    return getattr(settings, "cover_auto_dispatch", True)
+
+
+def _absent_staff_id(cover_request: CoverRequest):
+    """The instructor being covered — from the linked Absence, or (when none)
+    the event's current instructor. They are never offered their own cover."""
+    if cover_request.absence:
+        return cover_request.absence.staff_id
+    return cover_request.timetable_event.instructor_id
 
 
 def create_cover_request(
     timetable_event: TimetableEvent,
     absence: Absence | None,
     created_by,
-    urgency: str = CoverRequest.Urgency.HIGH,
+    urgency: str | None = None,
     bonus_amount=0,
+    requested_by=None,
+    initial_status: str = S.OPEN,
 ) -> CoverRequest:
-    """Creates a cover request for an event and flags the event as needing cover."""
+    """Creates a cover request for an event and flags the event as needing cover.
+
+    `urgency` is auto-computed from the time remaining before the class when not
+    supplied. `initial_status` lets the caller open immediately (default) or hold
+    for approval (PENDING_APPROVAL). `requested_by` is the instructor for
+    self-service requests, otherwise the acting manager.
+    """
+    if urgency is None:
+        urgency = urgency_for_hours(
+            (timetable_event.start_datetime - timezone.now()).total_seconds() / 3600.0,
+            _critical_threshold(timetable_event.tenant),
+        )
+
     cover_request = CoverRequest.objects.create(
         tenant=timetable_event.tenant,
         timetable_event=timetable_event,
         absence=absence,
-        status=CoverRequest.Status.OPEN,
+        status=initial_status,
         urgency=urgency,
-        bonus_amount=bonus_amount,
+        bonus_amount=bonus_amount or 0,
+        requested_by=requested_by or created_by,
         created_by=created_by,
         updated_by=created_by,
     )
@@ -36,6 +77,48 @@ def create_cover_request(
 
     log_audit(created_by, "create_cover_request", cover_request)
     return cover_request
+
+
+def initial_status_for_tenant(tenant) -> str:
+    """OPEN when auto-dispatch is on, otherwise PENDING_APPROVAL (manager-gated)."""
+    return S.OPEN if _auto_dispatch_enabled(tenant) else S.PENDING_APPROVAL
+
+
+def submit_cover_request(cover_request: CoverRequest, actor) -> CoverRequest:
+    """Act on a freshly created request based on the status the caller chose.
+
+    OPEN (auto-dispatch) → send Tier-1 offers. PENDING_APPROVAL (manager-gated)
+    → notify managers. Always confirms to the requester.
+    """
+    notifications.notify_request_submitted(cover_request)
+
+    if cover_request.status == S.OPEN:
+        send_cover_offers(cover_request, created_by=actor, tier=1)
+    elif cover_request.status == S.PENDING_APPROVAL:
+        notifications.notify_managers_pending_approval(cover_request)
+    return cover_request
+
+
+def approve_cover_request(cover_request: CoverRequest, actor) -> CoverRequest:
+    """Manager approves a pending request → open it and dispatch Tier-1 offers."""
+    transition(
+        cover_request,
+        S.OPEN,
+        actor,
+        extra_fields={"approved_by": actor, "approved_at": timezone.now()},
+    )
+    send_cover_offers(cover_request, created_by=actor, tier=1)
+    return cover_request
+
+
+def deny_cover_request(cover_request: CoverRequest, actor, reason: str = "") -> CoverRequest:
+    """Manager denies a pending request. The event stays needing manual handling."""
+    return transition(
+        cover_request,
+        S.DENIED,
+        actor,
+        extra_fields={"cancellation_reason": reason or ""},
+    )
 
 
 def _get_time_band(hour: int) -> str:
@@ -49,16 +132,32 @@ def _get_time_band(hour: int) -> str:
     return "evening"
 
 
+def is_eligible_for_cover(instructor: StaffProfile, event: TimetableEvent, absent_staff_id=None) -> bool:
+    """Hard eligibility gate (doc: qualification + role + active + not the absentee).
+
+    Qualification is required here — unlike scoring, an instructor who cannot
+    teach the class type is never offered the cover.
+    """
+    if instructor.status != StaffProfile.Status.ACTIVE:
+        return False
+    if instructor.role not in ("instructor", "team_leader"):
+        return False
+    if absent_staff_id and instructor.pk == absent_staff_id:
+        return False
+    return StaffClassTypeCapability.objects.filter(
+        staff=instructor,
+        class_type=event.class_type,
+        is_active=True,
+        is_deleted=False,
+    ).exists()
+
+
 def score_instructor_for_cover(instructor: StaffProfile, event: TimetableEvent, absent_staff_id=None) -> int | None:
     """
-    Scores an instructor for a cover slot. Returns None if disqualified.
-
-    Scoring breakdown (max ~230):
-    - Qualified for class type:  +0 (required) or disqualified
-    - Availability match:        +30
-    - Priority tier bonus:       tier 1 → +60, tier 2 → +40, tier 3 → +20
-    - Cover reliability:         up to +30
-    - Role check:                instructor role required
+    Scores an instructor for ranking within the eligible set. Returns None if
+    hard-disqualified (inactive / wrong role / the absentee). Lacking the class
+    capability is penalised here but eligibility is enforced separately by
+    is_eligible_for_cover (the doc's qualification gate).
     """
     if instructor.status != StaffProfile.Status.ACTIVE:
         return None
@@ -69,11 +168,9 @@ def score_instructor_for_cover(instructor: StaffProfile, event: TimetableEvent, 
 
     event_day = event.start_datetime.weekday()
     event_time = event.start_datetime.time()
-    time_band = _get_time_band(event.start_datetime.hour)
 
     score = 0
 
-    # Class type capability check
     capable = StaffClassTypeCapability.objects.filter(
         staff=instructor,
         class_type=event.class_type,
@@ -81,9 +178,8 @@ def score_instructor_for_cover(instructor: StaffProfile, event: TimetableEvent, 
         is_deleted=False,
     ).exists()
     if not capable:
-        score -= 20  # not disqualified but penalised
+        score -= 20
 
-    # Availability check
     availability = StaffAvailability.objects.filter(
         staff=instructor,
         day_of_week=event_day,
@@ -105,11 +201,9 @@ def score_instructor_for_cover(instructor: StaffProfile, event: TimetableEvent, 
     if availability.exists():
         score += 30
 
-    # Priority tier bonus: tier 1 best
     tier = getattr(instructor, "priority_tier", 1) or 1
     score += (4 - tier) * 20
 
-    # Cover reliability
     cover_reliability = float(getattr(instructor, "cover_reliability_score", instructor.reliability_score) or 0)
     score += int((cover_reliability / 100) * 30)
 
@@ -118,125 +212,115 @@ def score_instructor_for_cover(instructor: StaffProfile, event: TimetableEvent, 
 
 def build_tiered_offer_list(all_staff: list, event: TimetableEvent, absent_staff_id=None) -> dict:
     """
-    Returns instructors grouped by tier, ordered by score within each tier.
-    Only includes instructors with score >= 0.
+    Returns eligible instructors grouped by priority tier, ranked by score within
+    each tier. Only instructors that pass the hard eligibility gate are included.
     """
     scored = []
     for instructor in all_staff:
+        if not is_eligible_for_cover(instructor, event, absent_staff_id):
+            continue
         s = score_instructor_for_cover(instructor, event, absent_staff_id)
-        if s is not None and s >= 0:
+        if s is not None:
             scored.append((instructor, s))
 
     scored.sort(key=lambda x: x[1], reverse=True)
 
     tiers: dict[int, list] = {1: [], 2: [], 3: []}
-    for instructor, score in scored:
+    for instructor, _score in scored:
         tier = getattr(instructor, "priority_tier", 1) or 1
-        tiers[tier].append(instructor)
-
+        tiers.setdefault(tier, []).append(instructor)
     return tiers
 
 
-def find_eligible_instructors(cover_request: CoverRequest) -> list:
-    """
-    Returns all active staff for the tenant, sorted by cover score for the event.
-    Used internally; callers should use send_cover_offers for tiered dispatch.
-    """
-    event = cover_request.timetable_event
-    absent_staff_id = cover_request.absence.staff_id if cover_request.absence else None
-
-    all_staff = list(
+def _all_active_staff(tenant) -> list:
+    return list(
         StaffProfile.objects.filter(
-            tenant=cover_request.tenant,
-            status=StaffProfile.Status.ACTIVE,
-            is_deleted=False,
-        ).select_related()
-        .prefetch_related("capabilities", "availability")
-    )
-
-    result = []
-    for instructor in all_staff:
-        score = score_instructor_for_cover(instructor, event, absent_staff_id)
-        if score is not None and score >= 0:
-            result.append(instructor)
-    return result
-
-
-def send_cover_offers(cover_request: CoverRequest, created_by, tier: int = 1) -> list:
-    """
-    Creates CoverOffer records for instructors in the given tier and triggers
-    WhatsApp / email notifications.  Only sends to instructors not already offered.
-
-    Returns the list of newly created CoverOffer instances.
-    """
-    event = cover_request.timetable_event
-    absent_staff_id = cover_request.absence.staff_id if cover_request.absence else None
-
-    all_staff = list(
-        StaffProfile.objects.filter(
-            tenant=cover_request.tenant,
+            tenant=tenant,
             status=StaffProfile.Status.ACTIVE,
             is_deleted=False,
         ).prefetch_related("capabilities", "availability")
     )
 
-    tiers = build_tiered_offer_list(all_staff, event, absent_staff_id)
-    target_instructors = tiers.get(tier, [])
 
-    if not target_instructors:
-        logger.warning(
-            "No tier-%d instructors for cover request %s; escalating.",
-            tier, cover_request.pk
-        )
-        return []
+def find_eligible_instructors(cover_request: CoverRequest) -> list:
+    """All eligible instructors for the request's event (qualification + role)."""
+    event = cover_request.timetable_event
+    absent_staff_id = _absent_staff_id(cover_request)
+    return [
+        i for i in _all_active_staff(cover_request.tenant)
+        if is_eligible_for_cover(i, event, absent_staff_id)
+    ]
 
+
+def get_cover_candidates(cover_request: CoverRequest) -> dict:
+    """Tiered, ranked candidate list for the manager review screen."""
+    event = cover_request.timetable_event
+    absent_staff_id = _absent_staff_id(cover_request)
+    return build_tiered_offer_list(_all_active_staff(cover_request.tenant), event, absent_staff_id)
+
+
+def _create_offers(cover_request: CoverRequest, instructors: list, created_by) -> list:
+    """Create PENDING offers for instructors not already offered; flip to OFFERED."""
     already_offered_ids = set(
-        CoverOffer.objects.filter(cover_request=cover_request)
-        .values_list("staff_id", flat=True)
+        CoverOffer.objects.filter(cover_request=cover_request).values_list("staff_id", flat=True)
     )
-
     offers = []
-    for instructor in target_instructors:
+    for instructor in instructors:
         if instructor.pk in already_offered_ids:
             continue
-        offer = CoverOffer.objects.create(
-            cover_request=cover_request,
-            staff=instructor,
-            tenant=cover_request.tenant,
-            status=CoverOffer.Status.PENDING,
-            created_by=created_by,
-            updated_by=created_by,
+        offers.append(
+            CoverOffer.objects.create(
+                cover_request=cover_request,
+                staff=instructor,
+                tenant=cover_request.tenant,
+                status=CoverOffer.Status.PENDING,
+                created_by=created_by,
+                updated_by=created_by,
+            )
         )
-        offers.append(offer)
 
-    if offers:
-        cover_request.status = CoverRequest.Status.OFFERED
-        cover_request.updated_by = created_by
-        cover_request.save(update_fields=["status", "updated_by", "updated_at"])
+    if offers and cover_request.status != S.OFFERED:
+        # OPEN/CRITICAL → OFFERED (CRITICAL stays critical-urgency but is dispatchable).
+        transition(cover_request, S.OFFERED, created_by)
 
-    # Trigger async notifications
     try:
-        from apps.cover.tasks import notify_cover_offers, schedule_cover_escalation
+        from apps.cover.tasks import notify_cover_offers
         for offer in offers:
             notify_cover_offers.delay(offer.pk)
-        # Schedule escalation to next tier after 24 hours if no one accepts
-        if offers and tier < 3:
-            schedule_cover_escalation.apply_async(
-                args=[cover_request.pk, tier + 1],
-                countdown=86400,
-            )
     except Exception:
         logger.exception("Failed to enqueue cover offer notifications")
 
-    log_audit(created_by, "send_cover_offers", cover_request, after_data={"tier": tier, "offer_count": len(offers)})
+    log_audit(created_by, "send_cover_offers", cover_request, after_data={"offer_count": len(offers)})
     return offers
 
 
+def send_cover_offers(cover_request: CoverRequest, created_by, tier: int = 1) -> list:
+    """Create offers for the given tier's eligible instructors and notify them."""
+    event = cover_request.timetable_event
+    absent_staff_id = _absent_staff_id(cover_request)
+    tiers = build_tiered_offer_list(_all_active_staff(cover_request.tenant), event, absent_staff_id)
+    target = tiers.get(tier, [])
+    if not target:
+        logger.warning("No tier-%d instructors for cover request %s.", tier, cover_request.pk)
+        return []
+    return _create_offers(cover_request, target, created_by)
+
+
+def dispatch_cover_offers(cover_request: CoverRequest, created_by, staff_ids: list | None = None, tier: int = 1) -> list:
+    """Manual dispatch: offer to a manager-chosen set of staff, or fall back to a tier."""
+    if staff_ids:
+        event = cover_request.timetable_event
+        absent_staff_id = _absent_staff_id(cover_request)
+        chosen = [
+            i for i in _all_active_staff(cover_request.tenant)
+            if i.pk in set(staff_ids) and is_eligible_for_cover(i, event, absent_staff_id)
+        ]
+        return _create_offers(cover_request, chosen, created_by)
+    return send_cover_offers(cover_request, created_by, tier=tier)
+
+
 def escalate_cover_request(cover_request_id: int, next_tier: int):
-    """
-    Called by Celery after the offer window expires.  If the request is still
-    open/offered, sends offers to the next tier or notifies admins.
-    """
+    """Dispatch the next tier, or notify admins when all tiers are exhausted."""
     try:
         cover_request = CoverRequest.objects.select_related(
             "timetable_event__class_type", "absence"
@@ -244,58 +328,24 @@ def escalate_cover_request(cover_request_id: int, next_tier: int):
     except CoverRequest.DoesNotExist:
         return
 
-    # Already accepted or cancelled — nothing to do
-    if cover_request.status in (CoverRequest.Status.ACCEPTED, CoverRequest.Status.CANCELLED):
+    if cover_request.status in (S.ACCEPTED, S.CANCELLED, S.DENIED, S.EXPIRED):
         return
 
     if next_tier <= 3:
         from apps.users.models import User
-        system_user = User.objects.filter(
-            tenant=cover_request.tenant, role="admin"
-        ).first()
-        send_cover_offers(cover_request, created_by=system_user, tier=next_tier)
+        system_user = User.objects.filter(tenant=cover_request.tenant, role="admin").first()
+        offers = send_cover_offers(cover_request, created_by=system_user, tier=next_tier)
+        if not offers:
+            # Nobody left in this tier — keep climbing.
+            escalate_cover_request(cover_request_id, next_tier + 1)
     else:
-        # All tiers exhausted — notify admins/team leaders
-        _notify_admins_cover_unfilled(cover_request)
-
-
-def _notify_admins_cover_unfilled(cover_request: CoverRequest):
-    """Sends in-app notifications to all admins/team_leaders when cover is exhausted."""
-    from apps.notifications.models import Notification
-    from apps.users.models import User
-
-    admin_staff = StaffProfile.objects.filter(
-        tenant=cover_request.tenant,
-        role__in=["admin", "gym_manager", "team_leader"],
-        status=StaffProfile.Status.ACTIVE,
-        is_deleted=False,
-    ).select_related("user")
-
-    event = cover_request.timetable_event
-    for staff_member in admin_staff:
-        if staff_member.user:
-            Notification.objects.create(
-                tenant=cover_request.tenant,
-                recipient=staff_member.user,
-                notification_type=Notification.NotificationType.SYSTEM,
-                title="Cover Not Filled — Action Required",
-                body=(
-                    f"No instructor accepted cover for "
-                    f"{event.class_type.name} on {event.start_datetime:%d %b %Y %H:%M}. "
-                    f"Manual assignment required."
-                ),
-                related_object_type="cover_request",
-                related_object_id=str(cover_request.pk),
-            )
+        notifications.notify_admins_unfilled(cover_request)
 
 
 def accept_cover_offer(cover_offer: CoverOffer, accepted_by, ip_address=None) -> CoverOffer:
     """
-    Accepts a cover offer:
-    - Assigns the instructor to the timetable event
-    - Closes the cover request
-    - Expires all other pending offers for the same request
-    - Records a CoverResponse audit row
+    Accepts a cover offer: assigns the cover instructor (retaining the original
+    as SUB), closes the request, expires sibling offers, and audits the response.
     """
     if cover_offer.status != CoverOffer.Status.PENDING:
         raise ValueError(f"Cover offer {cover_offer.pk} is not in PENDING state.")
@@ -303,21 +353,24 @@ def accept_cover_offer(cover_offer: CoverOffer, accepted_by, ip_address=None) ->
     cover_request = cover_offer.cover_request
     event = cover_request.timetable_event
 
-    # Assign instructor
+    # Retain who was originally scheduled, so the timetable can show "SUB: <name>".
+    if event.original_instructor_id is None and event.instructor_id and event.instructor_id != cover_offer.staff_id:
+        event.original_instructor = event.instructor
     event.instructor = cover_offer.staff
     event.status = TimetableEvent.Status.SCHEDULED
-    event.save(update_fields=["instructor", "status", "updated_at"])
+    event.save(update_fields=["instructor", "original_instructor", "status", "updated_at"])
 
-    # Accept the offer
     cover_offer.status = CoverOffer.Status.ACCEPTED
     cover_offer.responded_at = timezone.now()
     cover_offer.save(update_fields=["status", "responded_at", "updated_at"])
 
-    # Close the request
-    cover_request.status = CoverRequest.Status.ACCEPTED
-    cover_request.save(update_fields=["status", "updated_at"])
+    transition(
+        cover_request,
+        S.ACCEPTED,
+        accepted_by,
+        extra_fields={"accepted_by": cover_offer.staff, "accepted_at": timezone.now()},
+    )
 
-    # Expire other pending offers
     CoverOffer.objects.filter(
         cover_request=cover_request,
         status=CoverOffer.Status.PENDING,
@@ -326,99 +379,32 @@ def accept_cover_offer(cover_offer: CoverOffer, accepted_by, ip_address=None) ->
         responded_at=timezone.now(),
     )
 
-    # Audit response
-    CoverResponse.objects.create(
-        cover_offer=cover_offer,
-        action="accept",
-        ip_address=ip_address,
-    )
-
+    CoverResponse.objects.create(cover_offer=cover_offer, action="accept", ip_address=ip_address)
     log_audit(accepted_by, "accept_cover_offer", cover_offer)
-
-    _notify_cover_accepted(cover_offer)
-
+    notifications.notify_cover_accepted(cover_offer)
     return cover_offer
 
 
-def _notify_cover_accepted(accepted_offer: CoverOffer) -> None:
-    """
-    After a cover offer is accepted:
-    - Notifies the accepting instructor they are confirmed.
-    - Notifies all other staff whose pending offers were just expired.
-    """
-    from apps.notifications.models import Notification
-
-    cover_request = accepted_offer.cover_request
-    event = cover_request.timetable_event
-    accepting_staff = accepted_offer.staff
-    event_label = f"{event.class_type.name} on {event.start_datetime.strftime('%d %b %Y at %H:%M')}"
-
-    # Personal confirmation to the accepting instructor
-    if accepting_staff.user:
-        Notification.objects.create(
-            tenant=cover_request.tenant,
-            recipient=accepting_staff.user,
-            notification_type=Notification.NotificationType.COVER_ACCEPTED,
-            title="Cover confirmed — you're on!",
-            body=f"You've been confirmed to cover {event_label}. See you there!",
-            related_object_type="cover_offer",
-            related_object_id=str(accepted_offer.pk),
-        )
-
-    # Inform all other staff that the slot has been filled
-    other_expired_offers = CoverOffer.objects.filter(
-        cover_request=cover_request,
-        status=CoverOffer.Status.EXPIRED,
-    ).exclude(pk=accepted_offer.pk).select_related("staff__user")
-
-    for expired_offer in other_expired_offers:
-        if expired_offer.staff.user:
-            Notification.objects.create(
-                tenant=cover_request.tenant,
-                recipient=expired_offer.staff.user,
-                notification_type=Notification.NotificationType.COVER_ACCEPTED,
-                title="Cover slot filled",
-                body=(
-                    f"{accepting_staff.name} has accepted the cover for {event_label}. "
-                    f"No action needed from you."
-                ),
-                related_object_type="cover_request",
-                related_object_id=str(cover_request.pk),
-            )
-
-
 def process_whatsapp_cover_reply(phone_number: str, message_body: str, tenant) -> dict:
-    """
-    Parses an inbound WhatsApp message of the form "ACCEPT <code>" and
-    accepts the matching cover offer.
-
-    Returns a dict with keys: success, message.
-    """
+    """Parses 'ACCEPT <code>' and accepts the matching offer."""
     parts = message_body.strip().upper().split()
     if len(parts) != 2 or parts[0] != "ACCEPT":
         return {"success": False, "message": "Unrecognised reply format."}
 
     accept_code = parts[1]
-
     try:
         offer = (
             CoverOffer.objects.select_related("cover_request__timetable_event", "staff")
-            .get(
-                accept_code=accept_code,
-                cover_request__tenant=tenant,
-                status=CoverOffer.Status.PENDING,
-            )
+            .get(accept_code=accept_code, cover_request__tenant=tenant, status=CoverOffer.Status.PENDING)
         )
     except CoverOffer.DoesNotExist:
         return {"success": False, "message": "No matching cover offer found."}
 
-    # Verify phone matches the staff member
     from apps.whatsapp.models import StaffWhatsAppConsent
 
     consent = StaffWhatsAppConsent.objects.filter(
         staff=offer.staff, phone_number=phone_number, consent_given=True, revoked_at__isnull=True
     ).first()
-
     if consent is None:
         return {"success": False, "message": "Phone number not recognised for this staff member."}
 

@@ -65,6 +65,14 @@ class Command(BaseCommand):
             "expire_stale_cover_requests",
         ))
 
+        # 3c. Advance cover requests: mark critical + escalate exhausted tiers.
+        #     Runs AFTER expire_cover_offers so escalation sees expired offers.
+        results.append(self._run_task(
+            "Advance cover requests",
+            "apps.cover.tasks",
+            "advance_cover_requests",
+        ))
+
         # 4. Send cover reminders (hourly)
         results.append(self._run_task(
             "Send cover reminders",

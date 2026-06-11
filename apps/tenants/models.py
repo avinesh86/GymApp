@@ -105,6 +105,11 @@ class TenantSettings(models.Model):
     timezone = models.CharField(max_length=64, default="Australia/Sydney")
     currency_symbol = models.CharField(max_length=10, default="$")
     cover_offer_expiry_hours = models.PositiveSmallIntegerField(default=24)
+    # When true, a submitted cover request opens and dispatches Tier-1 offers
+    # immediately. When false, it waits in Pending Approval for a manager.
+    cover_auto_dispatch = models.BooleanField(default=True)
+    # Hours-before-class at which an unfilled request becomes Critical.
+    cover_critical_threshold_hours = models.PositiveSmallIntegerField(default=4)
     auto_generate_invoices = models.BooleanField(default=True)
     # Outgoing email configuration for notifications
     notification_from_email = models.EmailField(blank=True, default="")

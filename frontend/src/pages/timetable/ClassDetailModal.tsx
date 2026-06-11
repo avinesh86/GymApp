@@ -75,8 +75,13 @@ function DetailsTab({ event }: { event: TimetableEvent }) {
           <div>
             <p className="text-xs text-gray-400">Instructor</p>
             <p className="text-sm font-medium text-gray-800">
-              {event.instructor_name ?? 'Unassigned'}
+              {event.original_instructor_name
+                ? `SUB: ${event.instructor_name ?? 'Unassigned'}`
+                : (event.instructor_name ?? 'Unassigned')}
             </p>
+            {event.original_instructor_name && (
+              <p className="text-xs text-gray-400">Originally: {event.original_instructor_name}</p>
+            )}
           </div>
         </div>
       </div>

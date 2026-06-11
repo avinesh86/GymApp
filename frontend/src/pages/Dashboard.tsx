@@ -237,6 +237,11 @@ export function DashboardPage() {
   const { user } = useAuth()
   const today = todayIso()
 
+  // Attendance-awaiting and pending-invoice widgets are manager/admin tools —
+  // instructors aren't permitted to read those endpoints (they'd 403), so only
+  // fetch them for roles that can see them.
+  const isManagerial = !!user && user.role !== 'instructor'
+
   const { data: todayEvents = [], isLoading: eventsLoading } = useQuery({
     queryKey: ['timetable-events', 'today', today],
     queryFn: () => listEvents({ from: today, to: today }),
@@ -246,19 +251,23 @@ export function DashboardPage() {
   const { data: awaitingAttendance = [], isLoading: attendanceLoading } = useQuery({
     queryKey: ['attendance', 'awaiting'],
     queryFn: () => listAttendance({ awaiting: true }),
-    enabled: !!user,
+    enabled: isManagerial,
   })
 
-  const { data: openCoverRequests = [], isLoading: coverLoading } = useQuery({
-    queryKey: ['cover-requests', { status: 'open' }],
-    queryFn: () => listCoverRequests({ status: 'open' }),
+  // "Open" here means still unfilled — covers auto-dispatch (offered), critical,
+  // and manager-gated (pending_approval), not just the literal 'open' status.
+  const { data: allCoverRequests = [], isLoading: coverLoading } = useQuery({
+    queryKey: ['cover-requests', 'dashboard'],
+    queryFn: () => listCoverRequests({}),
     enabled: !!user,
   })
+  const UNFILLED_COVER = ['open', 'offered', 'critical', 'pending_approval']
+  const openCoverRequests = allCoverRequests.filter((r) => UNFILLED_COVER.includes(r.status))
 
   const { data: pendingInvoicesPage, isLoading: invoicesLoading } = useQuery({
     queryKey: ['invoices', { status: ['submitted', 'manager_approved'] }],
     queryFn: () => listInvoices({ status: ['submitted', 'manager_approved'] }),
-    enabled: !!user,
+    enabled: isManagerial,
   })
 
   const isLoading = eventsLoading || attendanceLoading || coverLoading || invoicesLoading
