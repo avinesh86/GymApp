@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query'
+import { useRef } from 'react'
 import { Toaster } from 'react-hot-toast'
 import axios from 'axios'
 import { useAuthStore } from './store/auth'
@@ -121,6 +122,26 @@ function PermissionRoute({
   return <>{children}</>
 }
 
+// ─── Reset cached data when the logged-in user changes ────────────────────────
+// The QueryClient lives for the whole SPA session and query keys aren't scoped
+// per user, so without this a logout→login as a different user would serve the
+// previous user's cached timetable / calendar data until a hard refresh.
+
+export function CacheReset() {
+  const queryClient = useQueryClient()
+  const userId = useAuthStore((s) => s.user?.id ?? null)
+  const prevUserId = useRef<number | null | undefined>(undefined)
+
+  useEffect(() => {
+    if (prevUserId.current !== undefined && prevUserId.current !== userId) {
+      queryClient.clear()
+    }
+    prevUserId.current = userId
+  }, [userId, queryClient])
+
+  return null
+}
+
 // ─── App ──────────────────────────────────────────────────────────────────────
 
 export default function App() {
@@ -128,6 +149,7 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <UserInitializer />
+        <CacheReset />
         <Routes>
           {/* Public */}
           <Route path="/login" element={<LoginPage />} />
