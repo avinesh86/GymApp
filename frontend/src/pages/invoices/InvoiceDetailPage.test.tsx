@@ -72,6 +72,21 @@ describe('InvoiceDetailPage (invoice redesign)', () => {
     expect(await screen.findByTestId('flagged-warning')).toBeInTheDocument()
   })
 
+  it('does NOT show Approve to an instructor on a submitted invoice', async () => {
+    setRole('instructor')
+    vi.mocked(getInvoice).mockResolvedValue(makeInvoice({ status: 'submitted' }))
+    renderPage()
+    await screen.findByText('INV-1')
+    expect(screen.queryByRole('button', { name: /^approve$/i })).not.toBeInTheDocument()
+  })
+
+  it('shows Approve to a manager on a submitted invoice', async () => {
+    setRole('gym_manager')
+    vi.mocked(getInvoice).mockResolvedValue(makeInvoice({ status: 'submitted' }))
+    renderPage()
+    expect(await screen.findByRole('button', { name: /^approve$/i })).toBeInTheDocument()
+  })
+
   it('lets payroll mark a manager-approved invoice paid', async () => {
     setRole('payroll')
     vi.mocked(getInvoice).mockResolvedValue(makeInvoice({ status: 'manager_approved' }))
