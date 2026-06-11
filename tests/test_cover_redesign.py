@@ -258,7 +258,8 @@ class TestAcceptMine:
         resp = CoverOfferViewSet.as_view({"post": "accept_mine"})(request)
 
         assert resp.status_code == 200
-        cr.refresh_from_db(); event.refresh_from_db()
+        cr.refresh_from_db()
+        event.refresh_from_db()
         assert cr.status == S.ACCEPTED
         assert event.instructor_id == cover.pk
 
