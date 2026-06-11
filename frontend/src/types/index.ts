@@ -201,7 +201,23 @@ export interface TimetableEvent {
 // ─── Cover ───────────────────────────────────────────────────────────────────
 
 export type CoverUrgency = 'low' | 'high' | 'critical'
-export type CoverRequestStatus = 'open' | 'offered' | 'accepted' | 'cancelled' | 'expired'
+export type CoverRequestStatus =
+  | 'draft'
+  | 'pending_approval'
+  | 'denied'
+  | 'open'
+  | 'offered'
+  | 'critical'
+  | 'accepted'
+  | 'cancelled'
+  | 'expired'
+
+export interface CoverCandidate {
+  staff_id: number
+  name: string
+  priority_tier: number
+  already_offered: boolean
+}
 
 export interface CoverRequest {
   id: number
@@ -213,6 +229,9 @@ export interface CoverRequest {
   bonus_amount: string | null
   status: CoverRequestStatus
   notes: string
+  approved_at?: string | null
+  accepted_by_name?: string | null
+  accepted_at?: string | null
   cancellation_reason: string
   cancelled_at: string | null
   cancelled_by_name: string | null

@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { Plus, CheckCircle, X, XCircle, AlertTriangle } from 'lucide-react'
-import { listCoverRequests, acceptCoverOffer, cancelCoverRequest } from '../../api/cover'
+import { listCoverRequests, acceptCoverOffer, cancelCoverRequest, approveCoverRequest, denyCoverRequest } from '../../api/cover'
 import type { CoverRequest, CoverOffer } from '../../types'
 import { CoverRequestCard } from './CoverRequestCard'
 import { CreateCoverRequestModal } from './CreateCoverRequestModal'
@@ -56,8 +56,27 @@ export function CoverBoardPage() {
     onError: () => toast.error('Failed to cancel cover request'),
   })
 
-  const openRequests = allRequests.filter((r) => ['open', 'offered'].includes(r.status))
-  const resolvedRequests = allRequests.filter((r) => ['accepted', 'cancelled', 'expired'].includes(r.status))
+  const { mutate: approve } = useMutation({
+    mutationFn: (requestId: number) => approveCoverRequest(requestId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cover-requests'] })
+      toast.success('Cover request approved — offers sent')
+    },
+    onError: () => toast.error('Failed to approve cover request'),
+  })
+
+  const { mutate: deny } = useMutation({
+    mutationFn: (requestId: number) => denyCoverRequest(requestId, ''),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cover-requests'] })
+      toast.success('Cover request denied')
+    },
+    onError: () => toast.error('Failed to deny cover request'),
+  })
+
+  const pendingRequests = allRequests.filter((r) => r.status === 'pending_approval')
+  const openRequests = allRequests.filter((r) => ['open', 'offered', 'critical'].includes(r.status))
+  const resolvedRequests = allRequests.filter((r) => ['accepted', 'cancelled', 'expired', 'denied'].includes(r.status))
 
   if (isLoading) return <PageSpinner />
 
@@ -85,9 +104,12 @@ export function CoverBoardPage() {
           className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
         >
           <option value="">All Status</option>
+          <option value="pending_approval">Pending Approval</option>
           <option value="open">Open</option>
           <option value="offered">Offered</option>
+          <option value="critical">Critical</option>
           <option value="accepted">Accepted</option>
+          <option value="denied">Denied</option>
           <option value="cancelled">Cancelled</option>
           <option value="expired">Expired</option>
         </select>
@@ -103,6 +125,24 @@ export function CoverBoardPage() {
           <option value="critical">Critical</option>
         </select>
       </div>
+
+      {/* Pending approval (manager-gated mode) */}
+      {pendingRequests.length > 0 && (
+        <section className="mb-8">
+          <h2 className="text-sm font-semibold text-gray-700 mb-3">Pending Approval</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {pendingRequests.map((request) => (
+              <CoverRequestCard
+                key={request.id}
+                request={request}
+                onViewDetails={setSelectedRequest}
+                onApprove={(r) => approve(r.id)}
+                onDeny={(r) => deny(r.id)}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Open requests */}
       <section className="mb-8">
@@ -155,8 +195,8 @@ export function CoverBoardPage() {
           title="Cover Request Details"
           size="md"
           footer={
-            // Cancel footer — always visible, only for open/offered requests
-            ['open', 'offered'].includes(selectedRequest.status) ? (
+            // Cancel footer — for still-unfilled requests
+            ['open', 'offered', 'critical'].includes(selectedRequest.status) ? (
               !showCancelForm ? (
                 <button
                   onClick={() => setShowCancelForm(true)}
@@ -237,7 +277,7 @@ export function CoverBoardPage() {
                         >
                           {offer.status}
                         </Badge>
-                        {offer.status === 'pending' && selectedRequest.status === 'offered' && (
+                        {offer.status === 'pending' && ['offered', 'critical'].includes(selectedRequest.status) && (
                           <Button
                             size="sm"
                             leftIcon={<CheckCircle className="h-3.5 w-3.5" />}

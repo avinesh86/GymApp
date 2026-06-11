@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
+import toast from 'react-hot-toast'
 import {
   format,
   startOfWeek,
@@ -13,6 +14,7 @@ import {
 } from 'date-fns'
 import { ChevronLeft, ChevronRight, Clock, MapPin } from 'lucide-react'
 import { listEvents } from '../../api/timetable'
+import { createCoverRequest } from '../../api/cover'
 import { getMyStaffProfile } from '../../api/staff'
 import type { TimetableEvent, TimetableEventStatus } from '../../types'
 import { useAuth } from '../../hooks/useAuth'
@@ -50,8 +52,23 @@ function eventsForDay(events: TimetableEvent[], day: Date): TimetableEvent[] {
 
 // ─── Own event card ───────────────────────────────────────────────────────────
 
-function OwnEventCard({ event }: { event: TimetableEvent }) {
+export function OwnEventCard({ event }: { event: TimetableEvent }) {
   const statusMeta = STATUS_BADGE[event.status] ?? { label: event.status, variant: 'grey' as const }
+  const queryClient = useQueryClient()
+  const [confirming, setConfirming] = useState(false)
+
+  const { mutate: requestCover, isPending } = useMutation({
+    mutationFn: () => createCoverRequest({ timetable_event: event.id }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['instructor-calendar'] })
+      queryClient.invalidateQueries({ queryKey: ['cover-requests'] })
+      toast.success('Cover requested')
+      setConfirming(false)
+    },
+    onError: () => toast.error('Failed to request cover'),
+  })
+
+  const canRequest = event.status === 'scheduled'
 
   return (
     <div className="rounded-lg border border-cyan-200 bg-cyan-50 p-2 flex flex-col gap-1">
@@ -67,6 +84,33 @@ function OwnEventCard({ event }: { event: TimetableEvent }) {
         <MapPin className="h-3 w-3 shrink-0" />
         <span className="truncate">{event.site_name}</span>
       </div>
+
+      {canRequest && (
+        confirming ? (
+          <div className="flex items-center gap-1 mt-0.5">
+            <button
+              onClick={() => requestCover()}
+              disabled={isPending}
+              className="flex-1 text-xs font-medium text-white bg-cyan-600 hover:bg-cyan-700 rounded px-2 py-1 disabled:opacity-50"
+            >
+              Confirm request
+            </button>
+            <button
+              onClick={() => setConfirming(false)}
+              className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setConfirming(true)}
+            className="mt-0.5 text-xs font-medium text-cyan-700 hover:text-cyan-900 border border-cyan-300 rounded px-2 py-1"
+          >
+            Request Cover
+          </button>
+        )
+      )}
     </div>
   )
 }

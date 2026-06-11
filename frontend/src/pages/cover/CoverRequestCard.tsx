@@ -11,23 +11,29 @@ const URGENCY_CONFIG = {
   critical: { label: 'Critical',       variant: 'darkred' as const },
 }
 
-const STATUS_CONFIG = {
-  open:      { label: 'Open',     variant: 'yellow' as const },
-  offered:   { label: 'Offered',  variant: 'blue' as const },
-  accepted:  { label: 'Accepted', variant: 'green' as const },
-  cancelled: { label: 'Cancelled',variant: 'grey' as const },
-  expired:   { label: 'Expired',  variant: 'grey' as const },
+const STATUS_CONFIG: Record<string, { label: string; variant: 'yellow' | 'blue' | 'green' | 'grey' | 'orange' | 'darkred' | 'purple' }> = {
+  draft:            { label: 'Draft',            variant: 'grey' },
+  pending_approval: { label: 'Pending Approval', variant: 'purple' },
+  denied:           { label: 'Denied',           variant: 'grey' },
+  open:             { label: 'Open',             variant: 'yellow' },
+  offered:          { label: 'Offered',          variant: 'blue' },
+  critical:         { label: 'Critical',         variant: 'darkred' },
+  accepted:         { label: 'Accepted',         variant: 'green' },
+  cancelled:        { label: 'Cancelled',        variant: 'grey' },
+  expired:          { label: 'Expired',          variant: 'grey' },
 }
 
 interface CoverRequestCardProps {
   request: CoverRequest
   onViewDetails: (request: CoverRequest) => void
+  onApprove?: (request: CoverRequest) => void
+  onDeny?: (request: CoverRequest) => void
   muted?: boolean
 }
 
-export function CoverRequestCard({ request, onViewDetails, muted = false }: CoverRequestCardProps) {
+export function CoverRequestCard({ request, onViewDetails, onApprove, onDeny, muted = false }: CoverRequestCardProps) {
   const urgency = URGENCY_CONFIG[request.urgency]
-  const status = STATUS_CONFIG[request.status]
+  const status = STATUS_CONFIG[request.status] ?? { label: request.status, variant: 'grey' as const }
   const event = request.event_detail
   const eventIsPast = event?.start_datetime
     ? isPast(parseISO(event.start_datetime))
@@ -86,6 +92,26 @@ export function CoverRequestCard({ request, onViewDetails, muted = false }: Cove
         <div className="flex gap-1.5 bg-red-50 rounded-lg px-3 py-2 mb-3 text-xs text-red-600">
           <XCircle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
           <span className="line-clamp-2">{request.cancellation_reason}</span>
+        </div>
+      )}
+
+      {/* Manager approval actions (manager-gated mode) */}
+      {request.status === 'pending_approval' && (onApprove || onDeny) && (
+        <div className="flex gap-2 mb-2">
+          {onApprove && (
+            <Button
+              size="sm"
+              className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-white"
+              onClick={() => onApprove(request)}
+            >
+              Approve
+            </Button>
+          )}
+          {onDeny && (
+            <Button variant="secondary" size="sm" className="flex-1" onClick={() => onDeny(request)}>
+              Deny
+            </Button>
+          )}
         </div>
       )}
 
