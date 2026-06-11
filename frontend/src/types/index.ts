@@ -47,6 +47,7 @@ export interface TenantSettings {
   currency_symbol: string
   timezone: string
   invoice_frequency: 'weekly' | 'fortnightly' | 'monthly' | '8-weekly'
+  pay_period_anchor_date?: string
   payroll_approval_required: boolean
   email_enabled: boolean
   whatsapp_enabled: boolean
@@ -294,7 +295,13 @@ export interface Invoice {
   status: InvoiceStatus
   total_amount: string
   class_count: number
+  has_flagged_items?: boolean
   submitted_at: string | null
+  manager_approved_at?: string | null
+  payroll_approved_at?: string | null
+  payment_date?: string | null
+  payment_reference?: string | null
+  rejection_reason?: string | null
   notes: string
   line_items: InvoiceLineItem[]
   approvals: ApprovalEvent[]

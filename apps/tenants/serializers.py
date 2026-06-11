@@ -41,6 +41,7 @@ class TenantSettingsSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "invoice_frequency",
+            "pay_period_anchor_date",
             "payroll_approval_required",
             "whatsapp_enabled",
             "email_enabled",

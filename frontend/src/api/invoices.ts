@@ -37,3 +37,34 @@ export async function downloadInvoicePdf(id: number): Promise<Blob> {
   const response = await apiClient.get(`invoices/${id}/pdf/`, { responseType: 'blob' })
   return response.data
 }
+
+export async function submitInvoice(id: number): Promise<Invoice> {
+  const response = await apiClient.post<Invoice>(`invoices/${id}/submit/`)
+  return response.data
+}
+
+export async function generateInvoice(data: {
+  period_start: string
+  period_end: string
+  instructor_id?: number
+}): Promise<Invoice> {
+  const response = await apiClient.post<Invoice>('invoices/generate/', data)
+  return response.data
+}
+
+export async function markInvoicePaid(
+  id: number,
+  data: { payment_date?: string; payment_reference?: string } = {}
+): Promise<Invoice> {
+  const response = await apiClient.post<Invoice>(`invoices/${id}/mark-paid/`, data)
+  return response.data
+}
+
+export async function updateInvoiceLineItem(
+  invoiceId: number,
+  lineItemId: number,
+  data: { quantity?: string; rate?: string; description?: string }
+): Promise<unknown> {
+  const response = await apiClient.patch(`invoices/${invoiceId}/line-items/${lineItemId}/`, data)
+  return response.data
+}
