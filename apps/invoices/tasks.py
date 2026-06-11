@@ -24,7 +24,8 @@ def auto_generate_invoices():
         except TenantSettings.DoesNotExist:
             continue
 
-        period_start, period_end = _calculate_period(today, settings.invoice_frequency)
+        anchor = getattr(settings, "pay_period_anchor_date", None) or date(2024, 1, 1)
+        period_start, period_end = _calculate_period(today, settings.invoice_frequency, anchor)
         if period_start is None:
             continue
 
@@ -42,9 +43,15 @@ def auto_generate_invoices():
                 logger.exception("Failed to generate invoice for instructor %s", instructor.pk)
 
 
-def _calculate_period(today: date, frequency: str) -> tuple:
-    """Returns (period_start, period_end) for the current period based on frequency."""
+def _calculate_period(today: date, frequency: str, anchor: date = None) -> tuple:
+    """Returns (period_start, period_end) for the current period based on frequency.
+
+    Fortnightly / 8-weekly blocks are counted from the tenant's configurable
+    `anchor` (pay_period_anchor_date), defaulting to 2024-01-01.
+    """
     from apps.tenants.models import TenantSettings
+
+    anchor = anchor or date(2024, 1, 1)
 
     if frequency == TenantSettings.InvoiceFrequency.WEEKLY:
         # Monday to Sunday of current week
@@ -53,11 +60,9 @@ def _calculate_period(today: date, frequency: str) -> tuple:
         return start, end
 
     if frequency == TenantSettings.InvoiceFrequency.FORTNIGHTLY:
-        # Two-week block, arbitrary epoch: 2024-01-01
-        epoch = date(2024, 1, 1)
-        days_since = (today - epoch).days
-        fortnight_num = days_since // 14
-        start = epoch + timedelta(days=fortnight_num * 14)
+        days_since = (today - anchor).days
+        block = days_since // 14
+        start = anchor + timedelta(days=block * 14)
         end = start + timedelta(days=13)
         return start, end
 
@@ -70,10 +75,9 @@ def _calculate_period(today: date, frequency: str) -> tuple:
         return start, end
 
     if frequency == TenantSettings.InvoiceFrequency.EIGHT_WEEKLY:
-        epoch = date(2024, 1, 1)
-        days_since = (today - epoch).days
-        block_num = days_since // 56
-        start = epoch + timedelta(days=block_num * 56)
+        days_since = (today - anchor).days
+        block = days_since // 56
+        start = anchor + timedelta(days=block * 56)
         end = start + timedelta(days=55)
         return start, end
 
@@ -85,6 +89,8 @@ def send_invoice_reminders():
     """
     Runs weekly.  Reminds instructors to submit their draft invoices.
     """
+    from apps.notifications.models import Notification
+
     from .models import Invoice
 
     drafts = Invoice.objects.filter(
@@ -95,10 +101,21 @@ def send_invoice_reminders():
 
     reminder_count = 0
     for invoice in drafts:
-        logger.info(
-            "Invoice reminder for %s — invoice %s",
-            invoice.instructor.name,
-            invoice.invoice_number,
+        user = getattr(invoice.instructor, "user", None)
+        if not user:
+            continue
+        Notification.objects.create(
+            tenant=invoice.tenant,
+            recipient=user,
+            notification_type=Notification.NotificationType.SYSTEM,
+            title="Reminder: submit your invoice",
+            body=(
+                f"Your draft invoice {invoice.invoice_number} "
+                f"({invoice.period_start:%d %b} – {invoice.period_end:%d %b %Y}) "
+                f"is still unsubmitted."
+            ),
+            related_object_type="invoice",
+            related_object_id=str(invoice.pk),
         )
         reminder_count += 1
 

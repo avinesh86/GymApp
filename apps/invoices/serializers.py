@@ -65,34 +65,47 @@ class InvoiceSerializer(serializers.ModelSerializer):
     approval_history = InvoiceApprovalSerializer(source="approvals", many=True, read_only=True)
     instructor_name = serializers.CharField(source="instructor.name", read_only=True)
     class_count = serializers.SerializerMethodField()
+    has_flagged_items = serializers.SerializerMethodField()
 
     def get_class_count(self, obj):
         return obj.line_items.filter(is_deleted=False).count()
+
+    def get_has_flagged_items(self, obj):
+        return obj.line_items.filter(is_deleted=False, is_flagged=True).exists()
 
     class Meta:
         model = Invoice
         fields = [
             "id", "invoice_number", "instructor", "instructor_name",
             "period_start", "period_end", "status", "submitted_at",
-            "total_amount", "notes", "pdf_file", "class_count",
+            "total_amount", "notes", "pdf_file", "class_count", "has_flagged_items",
+            "manager_approved_at", "payroll_approved_at",
+            "payment_date", "payment_reference", "rejection_reason",
             "line_items", "approvals", "approval_history",
             "created_at", "updated_at",
         ]
         read_only_fields = [
             "id", "invoice_number", "status", "submitted_at",
-            "total_amount", "pdf_file", "class_count",
+            "total_amount", "pdf_file", "class_count", "has_flagged_items",
+            "manager_approved_at", "payroll_approved_at",
+            "payment_date", "payment_reference", "rejection_reason",
             "approvals", "approval_history", "created_at", "updated_at",
         ]
 
 
 class InvoiceListSerializer(serializers.ModelSerializer):
     instructor_name = serializers.CharField(source="instructor.name", read_only=True)
+    has_flagged_items = serializers.SerializerMethodField()
+
+    def get_has_flagged_items(self, obj):
+        return obj.line_items.filter(is_deleted=False, is_flagged=True).exists()
 
     class Meta:
         model = Invoice
         fields = [
             "id", "invoice_number", "instructor", "instructor_name",
             "period_start", "period_end", "status", "total_amount", "submitted_at",
+            "has_flagged_items",
         ]
         read_only_fields = fields
 

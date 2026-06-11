@@ -43,6 +43,30 @@ class Invoice(TenantAwareModel):
     invoice_number = models.CharField(max_length=30, unique=True, default=_generate_invoice_number)
     pdf_file = models.FileField(upload_to="invoices/pdfs/", null=True, blank=True)
 
+    # Manager approval audit
+    manager_approver = models.ForeignKey(
+        "users.User", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="manager_approved_invoices",
+    )
+    manager_approved_at = models.DateTimeField(null=True, blank=True)
+
+    # Payroll approval / payment audit
+    payroll_approver = models.ForeignKey(
+        "users.User", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="payroll_approved_invoices",
+    )
+    payroll_approved_at = models.DateTimeField(null=True, blank=True)
+    payment_date = models.DateField(null=True, blank=True)
+    payment_reference = models.CharField(max_length=200, blank=True)
+
+    # Rejection audit
+    rejection_reason = models.CharField(max_length=500, blank=True)
+    rejected_by = models.ForeignKey(
+        "users.User", on_delete=models.SET_NULL, null=True, blank=True,
+        related_name="rejected_invoices",
+    )
+    rejected_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         db_table = "invoice"
         indexes = [

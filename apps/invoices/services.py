@@ -14,7 +14,9 @@ from apps.core.audit import log_audit
 from apps.staff.models import StaffPayRate, StaffPayRateOverride, StaffProfile
 from apps.timetable.models import TimetableEvent
 
+from . import notifications
 from .models import Invoice, InvoiceApproval, InvoiceLineItem, PayrollBatch, PayRun
+from .state import transition
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +80,15 @@ def generate_invoice_for_instructor(
         _apply_bonus_rules(invoice, event, attendance_count)
 
     invoice.recalculate_total()
+    notifications.notify_draft_generated(invoice)
     return invoice
+
+
+def flag_line_item_edited(line_item: InvoiceLineItem) -> None:
+    """Mark a line item as instructor-edited so managers review it carefully."""
+    line_item.is_flagged = True
+    line_item.flag_reason = "Edited by instructor"
+    line_item.save(update_fields=["is_flagged", "flag_reason", "amount", "updated_at"])
 
 
 def _get_attendance_count(event: TimetableEvent) -> int:
@@ -222,73 +232,80 @@ def apply_pay_rates(invoice: Invoice) -> Invoice:
 
 
 def submit_invoice(invoice: Invoice, submitted_by) -> Invoice:
-    """Transitions a draft invoice to submitted status."""
-    if invoice.status != Invoice.Status.DRAFT:
+    """Submit a draft (or amended-rejected) invoice; notify managers."""
+    if invoice.status not in (Invoice.Status.DRAFT, Invoice.Status.REJECTED):
         raise ValueError(f"Cannot submit invoice in status: {invoice.status}")
 
-    before = {"status": invoice.status}
-    invoice.status = Invoice.Status.SUBMITTED
-    invoice.submitted_at = timezone.now()
-    invoice.updated_by = submitted_by
-    invoice.save(update_fields=["status", "submitted_at", "updated_by", "updated_at"])
-
-    InvoiceApproval.objects.create(
-        invoice=invoice,
-        approved_by=submitted_by,
-        role=submitted_by.role,
+    transition(
+        invoice,
+        Invoice.Status.SUBMITTED,
+        submitted_by,
         action="submit",
+        extra_fields={"submitted_at": timezone.now()},
     )
-
-    log_audit(submitted_by, "submit_invoice", invoice, before, {"status": invoice.status})
+    notifications.notify_submitted(invoice)
     return invoice
 
 
 def approve_invoice(invoice: Invoice, approved_by, role: str) -> Invoice:
     """
-    Advances the invoice approval workflow one step:
-    submitted -> manager_approved -> payroll_approved
+    Advances the approval workflow one step:
+    submitted -> manager_approved (records manager approver; notifies)
+    manager_approved -> payroll_approved (records payroll approver; back-compat)
     """
-    valid_transitions = {
-        Invoice.Status.SUBMITTED: Invoice.Status.MANAGER_APPROVED,
-        Invoice.Status.MANAGER_APPROVED: Invoice.Status.PAYROLL_APPROVED,
-    }
-
-    if invoice.status not in valid_transitions:
+    if invoice.status == Invoice.Status.SUBMITTED:
+        transition(
+            invoice, Invoice.Status.MANAGER_APPROVED, approved_by,
+            action="approve", role=role,
+            extra_fields={"manager_approver": approved_by, "manager_approved_at": timezone.now()},
+        )
+        notifications.notify_manager_approved(invoice)
+    elif invoice.status == Invoice.Status.MANAGER_APPROVED:
+        transition(
+            invoice, Invoice.Status.PAYROLL_APPROVED, approved_by,
+            action="approve", role=role,
+            extra_fields={"payroll_approver": approved_by, "payroll_approved_at": timezone.now()},
+        )
+    else:
         raise ValueError(f"Cannot approve invoice in status: {invoice.status}")
-
-    before = {"status": invoice.status}
-    invoice.status = valid_transitions[invoice.status]
-    invoice.updated_by = approved_by
-    invoice.save(update_fields=["status", "updated_by", "updated_at"])
-
-    InvoiceApproval.objects.create(
-        invoice=invoice,
-        approved_by=approved_by,
-        role=role,
-        action="approve",
-    )
-
-    log_audit(approved_by, "approve_invoice", invoice, before, {"status": invoice.status})
     return invoice
 
 
 def reject_invoice(invoice: Invoice, rejected_by, reason: str) -> Invoice:
-    """Rejects an invoice at any approval stage."""
-    before = {"status": invoice.status}
-    invoice.status = Invoice.Status.REJECTED
-    invoice.notes = (invoice.notes + f"\nRejected: {reason}").strip()
-    invoice.updated_by = rejected_by
-    invoice.save(update_fields=["status", "notes", "updated_by", "updated_at"])
-
-    InvoiceApproval.objects.create(
-        invoice=invoice,
-        approved_by=rejected_by,
-        role=rejected_by.role,
-        action="reject",
-        notes=reason,
+    """Reject a submitted/manager-approved invoice; the instructor can amend + resubmit."""
+    notes = (invoice.notes + f"\nRejected: {reason}").strip()
+    transition(
+        invoice, Invoice.Status.REJECTED, rejected_by,
+        action="reject", notes=reason,
+        extra_fields={
+            "notes": notes,
+            "rejection_reason": reason,
+            "rejected_by": rejected_by,
+            "rejected_at": timezone.now(),
+        },
     )
+    notifications.notify_rejected(invoice, reason)
+    return invoice
 
-    log_audit(rejected_by, "reject_invoice", invoice, before, {"status": invoice.status, "reason": reason})
+
+def mark_invoice_paid(invoice: Invoice, paid_by, payment_date=None, payment_reference: str = "") -> Invoice:
+    """Payroll marks a manager-approved invoice as paid (payment happens outside
+    the system) — records the payroll approver, payment date + reference, and
+    sends the instructor a receipt notification."""
+    if invoice.status not in (Invoice.Status.MANAGER_APPROVED, Invoice.Status.PAYROLL_APPROVED):
+        raise ValueError(f"Cannot mark paid from status: {invoice.status}")
+
+    transition(
+        invoice, Invoice.Status.PAID, paid_by,
+        action="paid",
+        extra_fields={
+            "payroll_approver": invoice.payroll_approver or paid_by,
+            "payroll_approved_at": invoice.payroll_approved_at or timezone.now(),
+            "payment_date": payment_date or timezone.now().date(),
+            "payment_reference": payment_reference or "",
+        },
+    )
+    notifications.notify_paid(invoice)
     return invoice
 
 

@@ -2,16 +2,19 @@ import React, { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { ArrowLeft, Download, CheckCircle, XCircle } from 'lucide-react'
+import { ArrowLeft, Download, CheckCircle, XCircle, Send, DollarSign, AlertTriangle } from 'lucide-react'
 import { format } from 'date-fns'
-import { getInvoice, approveInvoice, rejectInvoice, downloadInvoicePdf } from '../../api/invoices'
+import {
+  getInvoice, approveInvoice, rejectInvoice, downloadInvoicePdf,
+  submitInvoice, markInvoicePaid,
+} from '../../api/invoices'
 import type { InvoiceStatus } from '../../types'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { PageSpinner } from '../../components/ui/Spinner'
 import { Modal } from '../../components/ui/Modal'
-import { usePermission } from '../../hooks/usePermission'
+import { useAuth } from '../../hooks/useAuth'
 
 const STATUS_CONFIG: Record<InvoiceStatus, { label: string; variant: 'blue' | 'green' | 'grey' | 'red' | 'orange' | 'purple' }> = {
   draft:            { label: 'Draft',             variant: 'grey' },
@@ -27,10 +30,14 @@ export function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { can } = usePermission()
+  const { user } = useAuth()
+  const role = user?.role
 
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [rejectNotes, setRejectNotes] = useState('')
+  const [showPaidModal, setShowPaidModal] = useState(false)
+  const [paymentDate, setPaymentDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [paymentReference, setPaymentReference] = useState('')
 
   const invoiceId = Number(id)
 
@@ -59,6 +66,25 @@ export function InvoiceDetailPage() {
     onError: () => toast.error('Failed to reject invoice'),
   })
 
+  const { mutate: submit, isPending: isSubmitting } = useMutation({
+    mutationFn: () => submitInvoice(invoiceId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      toast.success('Invoice submitted')
+    },
+    onError: () => toast.error('Failed to submit invoice'),
+  })
+
+  const { mutate: markPaid, isPending: isMarkingPaid } = useMutation({
+    mutationFn: () => markInvoicePaid(invoiceId, { payment_date: paymentDate, payment_reference: paymentReference }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      toast.success('Invoice marked as paid')
+      setShowPaidModal(false)
+    },
+    onError: () => toast.error('Failed to mark invoice paid'),
+  })
+
   async function handleDownload() {
     try {
       const blob = await downloadInvoicePdf(invoiceId)
@@ -77,7 +103,12 @@ export function InvoiceDetailPage() {
   if (!invoice) return <p className="text-gray-500">Invoice not found</p>
 
   const statusConfig = STATUS_CONFIG[invoice.status]
-  const canApprove = can('invoices') && ['submitted', 'manager_approved'].includes(invoice.status)
+  const isManager = ['owner', 'admin', 'gym_manager', 'team_leader'].includes(role ?? '')
+  // Only managers approve/reject — instructors have `invoices` access (their own)
+  // but must not see approval controls. (Backend also enforces IsGymManager.)
+  const canApprove = isManager && ['submitted', 'manager_approved'].includes(invoice.status)
+  const canSubmit = role === 'instructor' && ['draft', 'rejected'].includes(invoice.status)
+  const canMarkPaid = role === 'payroll' && ['manager_approved', 'payroll_approved'].includes(invoice.status)
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -112,6 +143,16 @@ export function InvoiceDetailPage() {
           <Button variant="secondary" size="sm" leftIcon={<Download className="h-4 w-4" />} onClick={handleDownload}>
             Download PDF
           </Button>
+          {canSubmit && (
+            <Button
+              size="sm"
+              leftIcon={<Send className="h-4 w-4" />}
+              onClick={() => submit()}
+              isLoading={isSubmitting}
+            >
+              Submit
+            </Button>
+          )}
           {canApprove && (
             <>
               <Button
@@ -132,8 +173,33 @@ export function InvoiceDetailPage() {
               </Button>
             </>
           )}
+          {canMarkPaid && (
+            <Button
+              size="sm"
+              leftIcon={<DollarSign className="h-4 w-4" />}
+              onClick={() => setShowPaidModal(true)}
+            >
+              Mark Paid
+            </Button>
+          )}
         </div>
       </Card>
+
+      {/* Rejection banner — shown to the instructor so they can amend + resubmit */}
+      {invoice.status === 'rejected' && invoice.rejection_reason && (
+        <div className="mb-4 flex gap-2 rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <XCircle className="h-4 w-4 shrink-0 mt-0.5" />
+          <span><strong>Rejected:</strong> {invoice.rejection_reason}. Amend the line items and resubmit.</span>
+        </div>
+      )}
+
+      {/* Flagged-edits warning — prompts managers to review instructor edits */}
+      {invoice.has_flagged_items && ['submitted', 'manager_approved'].includes(invoice.status) && (
+        <div className="mb-4 flex gap-2 rounded-lg border border-amber-100 bg-amber-50 px-4 py-3 text-sm text-amber-800" data-testid="flagged-warning">
+          <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+          <span>This invoice has line items edited by the instructor — please review the flagged items carefully.</span>
+        </div>
+      )}
 
       {/* Line items */}
       <Card className="mb-4" padding={false}>
@@ -159,6 +225,7 @@ export function InvoiceDetailPage() {
                     {item.class_name}
                     {item.has_bonus && <span className="ml-1.5 text-xs text-green-600">+bonus</span>}
                     {item.has_adjustment && <span className="ml-1.5 text-xs text-orange-600">adj.</span>}
+                    {item.is_flagged && <span className="ml-1.5 text-xs font-medium text-amber-600">edited</span>}
                   </td>
                   <td className="px-4 py-2 text-gray-600">{item.duration_minutes}min</td>
                   <td className="px-4 py-2 text-gray-600">${item.rate_per_hour}/hr</td>
@@ -228,6 +295,42 @@ export function InvoiceDetailPage() {
             className="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent"
             placeholder="Reason for rejection..."
           />
+        </div>
+      </Modal>
+
+      {/* Mark paid modal (payroll) */}
+      <Modal
+        isOpen={showPaidModal}
+        onClose={() => setShowPaidModal(false)}
+        title="Mark Invoice Paid"
+        size="sm"
+        footer={
+          <div className="flex justify-end gap-3">
+            <Button variant="secondary" onClick={() => setShowPaidModal(false)}>Cancel</Button>
+            <Button onClick={() => markPaid()} isLoading={isMarkingPaid}>Mark Paid</Button>
+          </div>
+        }
+      >
+        <div className="flex flex-col gap-3">
+          <label className="text-sm text-gray-600">
+            Payment date
+            <input
+              type="date"
+              value={paymentDate}
+              onChange={(e) => setPaymentDate(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            />
+          </label>
+          <label className="text-sm text-gray-600">
+            Payment reference
+            <input
+              type="text"
+              value={paymentReference}
+              onChange={(e) => setPaymentReference(e.target.value)}
+              placeholder="e.g. bank transfer ref"
+              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+            />
+          </label>
         </div>
       </Modal>
     </div>
