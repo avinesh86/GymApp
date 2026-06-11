@@ -241,6 +241,52 @@ class TestInstructorSelfService:
 
 # ─── Candidates endpoint ─────────────────────────────────────────────────────
 
+class TestInstructorTimetableAccess:
+    """My Calendar: instructors can read their own classes + cover opportunities,
+    but not the whole timetable, and cannot mutate."""
+
+    def _list(self, tenant, user, **params):
+        from apps.timetable.views import TimetableEventViewSet
+
+        request = APIRequestFactory().get("/api/v1/timetable/events/", params)
+        force_authenticate(request, user=user)
+        request.tenant = tenant
+        resp = TimetableEventViewSet.as_view({"get": "list"})(request)
+        resp.render()
+        return resp
+
+    def _ids(self, resp):
+        rows = resp.data["results"] if isinstance(resp.data, dict) else resp.data
+        return {r["id"] for r in rows}
+
+    def test_instructor_sees_own_and_cover_not_others(self, tenant, class_type, instructor):
+        user = UserFactory(tenant=tenant, role="instructor")
+        me = StaffProfileFactory(tenant=tenant, role="instructor", email="me@t.com", user=user)
+
+        mine = _event(tenant, class_type, me)
+        others = _event(tenant, class_type, instructor)  # someone else's scheduled class
+        cover = _event(tenant, class_type, instructor)
+        cover.status = "needs_cover"
+        cover.save(update_fields=["status"])
+
+        resp = self._list(tenant, user)
+        assert resp.status_code == 200
+        ids = self._ids(resp)
+        assert mine.id in ids          # own class
+        assert cover.id in ids         # cover opportunity
+        assert others.id not in ids    # not other people's classes
+
+    def test_instructor_cannot_create_event(self, tenant, class_type):
+        from apps.timetable.views import TimetableEventViewSet
+
+        user = UserFactory(tenant=tenant, role="instructor")
+        request = APIRequestFactory().post("/api/v1/timetable/events/", {}, format="json")
+        force_authenticate(request, user=user)
+        request.tenant = tenant
+        resp = TimetableEventViewSet.as_view({"post": "create"})(request)
+        assert resp.status_code == 403
+
+
 class TestCandidatesEndpoint:
     def test_returns_tiered_eligible(self, tenant, class_type, instructor, manager_user):
         event = _event(tenant, class_type, instructor)

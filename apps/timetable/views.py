@@ -7,8 +7,9 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
 from apps.core.mixins import TenantScopedMixin
-from apps.core.permissions import IsGymManager, IsTeamLeader
+from apps.core.permissions import IsGymManager, IsInstructorOrAbove, IsTeamLeader
 from apps.staff.models import StaffProfile
+from apps.users.constants import UserRole
 
 from .models import ClassBonus, ClassType, RecurringTimetableRule, TimetableEvent
 from .serializers import (
@@ -91,6 +92,35 @@ class TimetableEventViewSet(TenantScopedMixin, ModelViewSet):
     permission_classes = [IsTeamLeader]
     filterset_fields = ["status", "class_type", "site", "instructor"]
 
+    # Read-only actions instructors may use (their own classes + cover
+    # opportunities power My Calendar). Writes stay team-leader+.
+    READ_ACTIONS = {"list", "retrieve", "week"}
+
+    def get_permissions(self):
+        if getattr(self, "action", None) in self.READ_ACTIONS:
+            return [IsInstructorOrAbove()]
+        return [IsTeamLeader()]
+
+    def _is_manager(self) -> bool:
+        return self.request.user.role in (
+            UserRole.OWNER, UserRole.ADMIN, UserRole.GYM_MANAGER, UserRole.TEAM_LEADER,
+        )
+
+    def _scope_for_instructor(self, qs):
+        """Instructors see only their own classes plus open cover opportunities."""
+        if self._is_manager():
+            return qs
+        own_staff_ids = list(
+            StaffProfile.objects.filter(
+                user=self.request.user, tenant=self.request.tenant, is_deleted=False
+            ).values_list("pk", flat=True)
+        )
+        from django.db.models import Q
+
+        return qs.filter(
+            Q(instructor_id__in=own_staff_ids) | Q(status=TimetableEvent.Status.NEEDS_COVER)
+        )
+
     @staticmethod
     def _filter_awaiting_attendance(qs):
         """Past, non-cancelled events with no attendance record yet — i.e. the
@@ -119,7 +149,7 @@ class TimetableEventViewSet(TenantScopedMixin, ModelViewSet):
             pass
         if params.get("awaiting") == "true":
             qs = self._filter_awaiting_attendance(qs)
-        return qs
+        return self._scope_for_instructor(qs)
 
     @action(detail=False, methods=["get"], url_path="week")
     def week(self, request):
@@ -145,6 +175,7 @@ class TimetableEventViewSet(TenantScopedMixin, ModelViewSet):
         if params.get("awaiting") == "true":
             events = self._filter_awaiting_attendance(events)
 
+        events = self._scope_for_instructor(events)
         serializer = self.get_serializer(events, many=True)
         return Response(serializer.data)
 
