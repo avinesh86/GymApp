@@ -169,6 +169,35 @@ class TestInstructorAccess:
 
 # ─── Payroll mark-paid (view) ────────────────────────────────────────────────
 
+class TestPdfDownload:
+    def test_download_returns_pdf(self, tenant, instructor, manager_user):
+        from django.core.files.base import ContentFile
+
+        inv = _invoice(tenant, instructor, status=S.PAID)
+        inv.pdf_file.save("test.pdf", ContentFile(b"%PDF-1.4 test"), save=True)
+
+        request = APIRequestFactory().get("/x/")
+        force_authenticate(request, user=manager_user)
+        request.tenant = tenant
+        resp = InvoiceViewSet.as_view({"get": "pdf"})(request, pk=inv.id)
+        assert resp.status_code == 200
+        assert resp["Content-Type"] == "application/pdf"
+
+    def test_instructor_downloads_own(self, tenant):
+        from django.core.files.base import ContentFile
+
+        user = UserFactory(tenant=tenant, role="instructor")
+        me = StaffProfileFactory(tenant=tenant, role="instructor", email="me@t.com", user=user)
+        inv = _invoice(tenant, me, status=S.SUBMITTED)
+        inv.pdf_file.save("own.pdf", ContentFile(b"%PDF-1.4 own"), save=True)
+
+        request = APIRequestFactory().get("/x/")
+        force_authenticate(request, user=user)
+        request.tenant = tenant
+        resp = InvoiceViewSet.as_view({"get": "pdf"})(request, pk=inv.id)
+        assert resp.status_code == 200
+
+
 class TestPayrollMarkPaid:
     def test_payroll_marks_paid(self, tenant, instructor, payroll_user):
         inv = _invoice(tenant, instructor, status=S.MANAGER_APPROVED)

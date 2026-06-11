@@ -14,7 +14,6 @@ import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { PageSpinner } from '../../components/ui/Spinner'
 import { Modal } from '../../components/ui/Modal'
-import { usePermission } from '../../hooks/usePermission'
 import { useAuth } from '../../hooks/useAuth'
 
 const STATUS_CONFIG: Record<InvoiceStatus, { label: string; variant: 'blue' | 'green' | 'grey' | 'red' | 'orange' | 'purple' }> = {
@@ -31,7 +30,6 @@ export function InvoiceDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { can } = usePermission()
   const { user } = useAuth()
   const role = user?.role
 
@@ -105,7 +103,10 @@ export function InvoiceDetailPage() {
   if (!invoice) return <p className="text-gray-500">Invoice not found</p>
 
   const statusConfig = STATUS_CONFIG[invoice.status]
-  const canApprove = can('invoices') && ['submitted', 'manager_approved'].includes(invoice.status)
+  const isManager = ['owner', 'admin', 'gym_manager', 'team_leader'].includes(role ?? '')
+  // Only managers approve/reject — instructors have `invoices` access (their own)
+  // but must not see approval controls. (Backend also enforces IsGymManager.)
+  const canApprove = isManager && ['submitted', 'manager_approved'].includes(invoice.status)
   const canSubmit = role === 'instructor' && ['draft', 'rejected'].includes(invoice.status)
   const canMarkPaid = role === 'payroll' && ['manager_approved', 'payroll_approved'].includes(invoice.status)
 

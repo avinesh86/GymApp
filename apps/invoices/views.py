@@ -153,6 +153,22 @@ class InvoiceViewSet(TenantScopedMixin, ModelViewSet):
         updated = generate_invoice_pdf(invoice)
         return Response(InvoiceSerializer(updated).data)
 
+    @action(detail=True, methods=["get"], url_path="pdf")
+    def pdf(self, request, pk=None):
+        """Download the invoice PDF (generated on demand if not yet built).
+        Scoped via get_queryset — instructors get their own only."""
+        from django.http import FileResponse
+
+        invoice = self.get_object()
+        if not invoice.pdf_file:
+            generate_invoice_pdf(invoice)
+            invoice.refresh_from_db()
+        return FileResponse(
+            invoice.pdf_file.open("rb"),
+            content_type="application/pdf",
+            filename=f"{invoice.invoice_number}.pdf",
+        )
+
     @action(detail=False, methods=["post"], url_path="generate")
     def generate(self, request):
         """Generate a draft invoice for a period. Instructors generate their own;
