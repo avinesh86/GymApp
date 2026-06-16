@@ -134,7 +134,7 @@ class TimetableEventViewSet(TenantScopedMixin, ModelViewSet):
     def get_queryset(self):
         qs = (
             TimetableEvent.objects.filter(tenant=self.request.tenant, is_deleted=False)
-            .select_related("class_type", "site", "instructor")
+            .select_related("class_type", "site", "instructor", "attendance_record")
             .order_by("start_datetime")
         )
         params = self.request.query_params

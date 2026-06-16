@@ -19,7 +19,11 @@ from apps.timetable.models import TimetableEvent
 from apps.timetable.serializers import TimetableEventSerializer
 from apps.timetable.tasks import mark_past_events_completed
 from rest_framework.test import APIRequestFactory, force_authenticate
-from tests.factories import TenantSettingsFactory, TimetableEventFactory
+from tests.factories import (
+    AttendanceRecordFactory,
+    TenantSettingsFactory,
+    TimetableEventFactory,
+)
 
 
 def _event(tenant, class_type, *, start, hours=1, status="scheduled"):
@@ -119,3 +123,63 @@ class TestSerializerLocalTime:
         # UTC project default → unchanged wall-clock time.
         assert data["start_time"] == "21:00"
         assert data["end_time"] == "22:00"
+
+
+@pytest.mark.django_db
+class TestSerializerDisplayStatus:
+    """The serialized `status` is derived from ground truth (time + attendance),
+    not the stored field, so the timetable shows the right label regardless of
+    whether the hourly sweep tasks have run. Guards the reported bugs:
+    future classes shown 'Awaiting Attendance', past classes still 'Scheduled',
+    and recorded classes still 'Awaiting Attendance'."""
+
+    def _status(self, event):
+        return TimetableEventSerializer(event).data["status"]
+
+    def test_future_without_instructor_is_unfilled(self, tenant, class_type):
+        future = timezone.now() + timedelta(hours=3)
+        event = TimetableEventFactory(
+            tenant=tenant, class_type=class_type, instructor=None,
+            start_datetime=future, end_datetime=future + timedelta(hours=1),
+            status="scheduled",
+        )
+        assert self._status(event) == "unfilled"
+
+    def test_future_with_instructor_is_scheduled(self, tenant, class_type, instructor):
+        future = timezone.now() + timedelta(hours=3)
+        event = TimetableEventFactory(
+            tenant=tenant, class_type=class_type, instructor=instructor,
+            start_datetime=future, end_datetime=future + timedelta(hours=1),
+            status="scheduled",
+        )
+        assert self._status(event) == "scheduled"
+
+    def test_past_without_attendance_is_awaiting(self, tenant, class_type, instructor):
+        past = timezone.now() - timedelta(hours=3)
+        # Stored status is stale ('scheduled'); derived must be awaiting.
+        event = TimetableEventFactory(
+            tenant=tenant, class_type=class_type, instructor=instructor,
+            start_datetime=past, end_datetime=past + timedelta(hours=1),
+            status="scheduled",
+        )
+        assert self._status(event) == "awaiting_attendance"
+
+    def test_with_attendance_is_completed(self, tenant, class_type, instructor):
+        past = timezone.now() - timedelta(hours=3)
+        # Stored status left at the no-instructor flag; a recorded count wins.
+        event = TimetableEventFactory(
+            tenant=tenant, class_type=class_type, instructor=instructor,
+            start_datetime=past, end_datetime=past + timedelta(hours=1),
+            status="unfilled",
+        )
+        AttendanceRecordFactory(tenant=tenant, timetable_event=event, count=12)
+        assert self._status(event) == "completed"
+
+    def test_cancelled_stays_cancelled(self, tenant, class_type):
+        past = timezone.now() - timedelta(hours=3)
+        event = TimetableEventFactory(
+            tenant=tenant, class_type=class_type,
+            start_datetime=past, end_datetime=past + timedelta(hours=1),
+            status="cancelled",
+        )
+        assert self._status(event) == "cancelled"

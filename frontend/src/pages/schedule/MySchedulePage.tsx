@@ -39,11 +39,12 @@ interface AbsencePayload {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const STATUS_BADGE: Record<TimetableEventStatus, { label: string; variant: 'green' | 'blue' | 'orange' | 'red' | 'grey' | 'cyan' }> = {
-  scheduled:   { label: 'Scheduled',    variant: 'blue' },
-  completed:   { label: 'Completed',    variant: 'green' },
-  unfilled:    { label: 'Unfilled',     variant: 'orange' },
-  needs_cover: { label: 'Needs Cover',  variant: 'red' },
-  cancelled:   { label: 'Cancelled',    variant: 'grey' },
+  scheduled:           { label: 'Scheduled',    variant: 'blue' },
+  completed:           { label: 'Completed',    variant: 'green' },
+  unfilled:            { label: 'Unfilled',     variant: 'orange' },
+  awaiting_attendance: { label: 'Awaiting Attendance', variant: 'orange' },
+  needs_cover:         { label: 'Needs Cover',  variant: 'red' },
+  cancelled:           { label: 'Cancelled',    variant: 'grey' },
 }
 
 // Maps attendance count to a viability colour dot using class viability thresholds.

@@ -11,7 +11,8 @@ const STATUS_CONFIG: Record<
 > = {
   completed:   { label: 'Completed',          borderColor: 'border-l-green-400',  badgeBg: 'bg-green-100',  badgeText: 'text-green-700',  dotBg: 'bg-green-500' },
   scheduled:   { label: 'Scheduled',          borderColor: 'border-l-cyan-400',   badgeBg: 'bg-cyan-100',   badgeText: 'text-cyan-700',   dotBg: 'bg-cyan-500' },
-  unfilled:    { label: 'Awaiting Attendance', borderColor: 'border-l-amber-400',  badgeBg: 'bg-amber-100',  badgeText: 'text-amber-700',  dotBg: 'bg-amber-500' },
+  unfilled:    { label: 'Unfilled',           borderColor: 'border-l-amber-400',  badgeBg: 'bg-amber-100',  badgeText: 'text-amber-700',  dotBg: 'bg-amber-500' },
+  awaiting_attendance: { label: 'Awaiting Attendance', borderColor: 'border-l-orange-400', badgeBg: 'bg-orange-100', badgeText: 'text-orange-700', dotBg: 'bg-orange-500' },
   needs_cover: { label: 'Needs Cover',         borderColor: 'border-l-red-400',    badgeBg: 'bg-red-100',    badgeText: 'text-red-700',    dotBg: 'bg-red-500' },
   cancelled:   { label: 'Cancelled',           borderColor: 'border-l-gray-300',   badgeBg: 'bg-gray-100',   badgeText: 'text-gray-500',   dotBg: 'bg-gray-400' },
 }

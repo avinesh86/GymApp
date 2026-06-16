@@ -24,19 +24,21 @@ const VIABILITY_DOT_CLASS: Record<string, string> = {
 }
 
 const STATUS_VARIANTS: Record<string, 'green' | 'blue' | 'orange' | 'red' | 'grey'> = {
-  completed:   'green',
-  scheduled:   'blue',
-  unfilled:    'orange',
-  needs_cover: 'red',
-  cancelled:   'grey',
+  completed:           'green',
+  scheduled:           'blue',
+  unfilled:            'orange',
+  awaiting_attendance: 'orange',
+  needs_cover:         'red',
+  cancelled:           'grey',
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  completed:   'Completed',
-  scheduled:   'Scheduled',
-  unfilled:    'Awaiting Attendance',
-  needs_cover: 'Needs Cover',
-  cancelled:   'Cancelled',
+  completed:           'Completed',
+  scheduled:           'Scheduled',
+  unfilled:            'Unfilled',
+  awaiting_attendance: 'Awaiting Attendance',
+  needs_cover:         'Needs Cover',
+  cancelled:           'Cancelled',
 }
 
 export function ListView({

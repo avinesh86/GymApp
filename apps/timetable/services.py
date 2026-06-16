@@ -80,7 +80,7 @@ def get_week_events(tenant, from_date: date) -> list:
             start_datetime__date__gte=from_date,
             start_datetime__date__lte=to_date,
         )
-        .select_related("class_type", "site", "instructor")
+        .select_related("class_type", "site", "instructor", "attendance_record")
         .order_by("start_datetime")
     )
 

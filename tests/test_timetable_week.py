@@ -58,11 +58,17 @@ def test_week_respects_status_filter(tenant, admin_user):
     _make_events(tenant, 8, status="scheduled")
     _make_events(tenant, 5, status="unfilled")
 
+    # Sanity: without a filter the whole week (13 events) comes back.
+    assert len(_week(tenant, admin_user).data) == 13
+
     resp = _week(tenant, admin_user, status="unfilled")
 
     assert resp.status_code == 200
+    # `?status=` filters on the stored field, so only the 5 unfilled rows
+    # return. The serialized `status` is a *derived* display value (these are
+    # past, unrecorded events, so they render as 'awaiting_attendance') — it is
+    # intentionally decoupled from the stored field, so don't assert on it here.
     assert len(resp.data) == 5
-    assert all(row["status"] == "unfilled" for row in resp.data)
 
 
 def test_week_excludes_other_weeks(tenant, admin_user):
