@@ -82,8 +82,11 @@ class TimetableEventSerializer(serializers.ModelSerializer):
             return None
 
     def get_viability_color(self, obj):
+        # Viability is known the moment a count is recorded — don't gate on the
+        # stored `status` field, which can lag behind reality (e.g. a count
+        # recorded against a still-'unfilled' class).
         count = self.get_attendance_count(obj)
-        if count is None or obj.status != TimetableEvent.Status.COMPLETED:
+        if count is None:
             return "pending"
         if count >= obj.effective_purple_threshold:
             return "purple"
@@ -92,6 +95,43 @@ class TimetableEventSerializer(serializers.ModelSerializer):
         if count >= obj.effective_amber_threshold:
             return "amber"
         return "red"
+
+    def _display_status(self, obj):
+        """Lifecycle status derived from ground truth (time + attendance), not
+        the stored ``status`` field alone.
+
+        The stored field drifts: it depends on hourly sweep tasks running and on
+        every write path remembering to transition it. That produced the
+        reported bugs — future classes shown as 'Awaiting Attendance', finished
+        classes still 'Scheduled', and recorded classes still 'Awaiting'.
+
+        We trust the stored field only for the explicit operational states
+        (cancelled, needs_cover) and derive the rest:
+          - has an attendance count            -> completed
+          - in the past, no count yet          -> awaiting_attendance
+          - in the future, no instructor       -> unfilled
+          - otherwise                          -> scheduled
+        """
+        s = TimetableEvent.Status
+        if obj.status == s.CANCELLED:
+            return s.CANCELLED.value
+        if self.get_attendance_count(obj) is not None:
+            return s.COMPLETED.value
+        if obj.end_datetime and obj.end_datetime < djtz.now():
+            # Display-only status — past class still owed an attendance count.
+            return "awaiting_attendance"
+        if obj.status == s.NEEDS_COVER:
+            return s.NEEDS_COVER.value
+        if obj.instructor_id is None:
+            return s.UNFILLED.value
+        return s.SCHEDULED.value
+
+    def to_representation(self, obj):
+        data = super().to_representation(obj)
+        # Override the stored field with the derived lifecycle status for display.
+        # Writes still go through the real `status` model field.
+        data["status"] = self._display_status(obj)
+        return data
 
     class Meta:
         model = TimetableEvent

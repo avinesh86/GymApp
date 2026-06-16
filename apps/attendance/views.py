@@ -18,6 +18,23 @@ from .serializers import (
     SubmitQRAttendanceSerializer,
 )
 
+# Statuses that an attendance count closes out into COMPLETED. Recording a count
+# is the signal a class actually ran, so it completes the class regardless of
+# whether it was still scheduled, flagged unfilled (no instructor), or in
+# needs_cover — previously only SCHEDULED transitioned, leaving recorded classes
+# stuck showing 'Awaiting Attendance'.
+_OPEN_STATUSES = {
+    TimetableEvent.Status.SCHEDULED,
+    TimetableEvent.Status.UNFILLED,
+    TimetableEvent.Status.NEEDS_COVER,
+}
+
+
+def _complete_on_attendance(event):
+    if event.status in _OPEN_STATUSES:
+        event.status = TimetableEvent.Status.COMPLETED
+        event.save(update_fields=["status", "updated_at"])
+
 
 class AttendanceRecordViewSet(TenantScopedMixin, ModelViewSet):
     serializer_class = AttendanceRecordSerializer
@@ -118,9 +135,7 @@ class AttendanceRecordViewSet(TenantScopedMixin, ModelViewSet):
                 "updated_by": request.user,
             },
         )
-        if event.status == TimetableEvent.Status.SCHEDULED:
-            event.status = TimetableEvent.Status.COMPLETED
-            event.save(update_fields=["status", "updated_at"])
+        _complete_on_attendance(event)
 
         return Response(
             AttendanceRecordSerializer(record).data,
@@ -211,10 +226,7 @@ class QRAttendanceTokenViewSet(TenantScopedMixin, ModelViewSet):
         qr_token.is_used = True
         qr_token.save(update_fields=["is_used"])
 
-        event = qr_token.timetable_event
-        if event.status == TimetableEvent.Status.SCHEDULED:
-            event.status = TimetableEvent.Status.COMPLETED
-            event.save(update_fields=["status", "updated_at"])
+        _complete_on_attendance(qr_token.timetable_event)
 
         return Response(
             AttendanceRecordSerializer(record).data,

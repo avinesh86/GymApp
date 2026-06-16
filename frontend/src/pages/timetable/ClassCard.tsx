@@ -7,7 +7,8 @@ const STATUS_CONFIG: Record<
   { label: string; border: string; badge: string; dot: string }
 > = {
   scheduled:          { label: 'Scheduled',          border: 'border-cyan-400',   badge: 'bg-cyan-100 text-cyan-700',   dot: 'bg-cyan-500' },
-  unfilled:           { label: 'Awaiting Attendance', border: 'border-orange-400', badge: 'bg-orange-100 text-orange-700', dot: 'bg-orange-500' },
+  unfilled:           { label: 'Unfilled',           border: 'border-amber-400',  badge: 'bg-amber-100 text-amber-700', dot: 'bg-amber-500' },
+  awaiting_attendance:{ label: 'Awaiting Attendance', border: 'border-orange-400', badge: 'bg-orange-100 text-orange-700', dot: 'bg-orange-500' },
   needs_cover:        { label: 'Needs Cover',         border: 'border-red-400',    badge: 'bg-red-100 text-red-700',     dot: 'bg-red-500' },
   cancelled:          { label: 'Cancelled',           border: 'border-gray-300',   badge: 'bg-gray-100 text-gray-500',   dot: 'bg-gray-400' },
   completed:          { label: 'Completed',           border: 'border-green-400',  badge: 'bg-green-100 text-green-700', dot: 'bg-green-500' },

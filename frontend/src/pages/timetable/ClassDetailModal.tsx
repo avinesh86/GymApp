@@ -29,11 +29,12 @@ const STATUS_CONFIG: Record<
   TimetableEventStatus,
   { label: string; variant: 'green' | 'cyan' | 'orange' | 'red' | 'grey' }
 > = {
-  completed:   { label: 'Completed',           variant: 'green' },
-  scheduled:   { label: 'Scheduled',           variant: 'cyan' },
-  unfilled:    { label: 'Awaiting Attendance',  variant: 'orange' },
-  needs_cover: { label: 'Needs Cover',          variant: 'red' },
-  cancelled:   { label: 'Cancelled',            variant: 'grey' },
+  completed:           { label: 'Completed',           variant: 'green' },
+  scheduled:           { label: 'Scheduled',           variant: 'cyan' },
+  unfilled:            { label: 'Unfilled',            variant: 'orange' },
+  awaiting_attendance: { label: 'Awaiting Attendance', variant: 'orange' },
+  needs_cover:         { label: 'Needs Cover',          variant: 'red' },
+  cancelled:           { label: 'Cancelled',            variant: 'grey' },
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

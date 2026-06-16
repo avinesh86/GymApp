@@ -169,7 +169,8 @@ export interface Availability {
 
 export type TimetableEventStatus =
   | 'scheduled'
-  | 'unfilled'
+  | 'unfilled'             // future class with no instructor assigned
+  | 'awaiting_attendance'  // past class still owed an attendance count (derived)
   | 'needs_cover'
   | 'cancelled'
   | 'completed'

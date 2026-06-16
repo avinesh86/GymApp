@@ -275,7 +275,7 @@ export function TimetablePage() {
           <option value="">All Status</option>
           <option value="scheduled">Scheduled</option>
           <option value="completed">Completed</option>
-          <option value="unfilled">Awaiting Attendance</option>
+          <option value="unfilled">Unfilled</option>
           <option value="needs_cover">Needs Cover</option>
           <option value="cancelled">Cancelled</option>
         </select>

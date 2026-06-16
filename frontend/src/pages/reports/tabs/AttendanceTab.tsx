@@ -110,7 +110,9 @@ export function AttendanceTab() {
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [selectedClassType, setSelectedClassType] = useState<number | undefined>(undefined)
-  const [calendarWeekOffset, setCalendarWeekOffset] = useState(0)
+  // null = follow the default week (the week containing today, or the first
+  // week with classes). A number means the user has navigated explicitly.
+  const [calendarWeekOffset, setCalendarWeekOffset] = useState<number | null>(null)
   const [logPage, setLogPage] = useState(1)
 
   const now = new Date()
@@ -165,7 +167,23 @@ export function AttendanceTab() {
   })()
 
   const totalWeeks = weeks.length
-  const currentWeekIndex = Math.max(0, Math.min(calendarWeekOffset, totalWeeks - 1))
+
+  // Land on a populated week by default: classes often start partway through the
+  // selected range, so opening on week 1 showed an almost-empty calendar.
+  const defaultWeekIndex = (() => {
+    const todayKey = format(now, 'yyyy-MM-dd')
+    const todayIdx = weeks.findIndex((wk) =>
+      wk.days.some((d) => format(d.date, 'yyyy-MM-dd') === todayKey)
+    )
+    if (todayIdx !== -1) return todayIdx
+    const firstWithEvents = weeks.findIndex((wk) => wk.days.some((d) => d.events.length > 0))
+    return firstWithEvents === -1 ? 0 : firstWithEvents
+  })()
+
+  const currentWeekIndex = Math.max(
+    0,
+    Math.min(calendarWeekOffset ?? defaultWeekIndex, totalWeeks - 1)
+  )
   const currentWeek = weeks[currentWeekIndex]
 
   const LOG_PAGE_SIZE = 20
@@ -238,7 +256,7 @@ export function AttendanceTab() {
           value={selectedClassType ?? ''}
           onChange={(e) => {
             setSelectedClassType(e.target.value ? Number(e.target.value) : undefined)
-            setCalendarWeekOffset(0)
+            setCalendarWeekOffset(null)
             setLogPage(1)
           }}
           className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
@@ -275,7 +293,7 @@ export function AttendanceTab() {
               <h3 className="text-sm font-semibold text-gray-900">Weekly Class Calendar</h3>
               <div className="flex items-center gap-2 text-sm text-gray-600">
                 <button
-                  onClick={() => setCalendarWeekOffset((w) => Math.max(0, w - 1))}
+                  onClick={() => setCalendarWeekOffset(Math.max(0, currentWeekIndex - 1))}
                   disabled={currentWeekIndex === 0}
                   className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
                 >
@@ -287,7 +305,7 @@ export function AttendanceTab() {
                     ` · ${format(currentWeek.weekStart, 'd MMM')} – ${format(addDays(currentWeek.weekStart, 6), 'd MMM yyyy')}`}
                 </span>
                 <button
-                  onClick={() => setCalendarWeekOffset((w) => Math.min(totalWeeks - 1, w + 1))}
+                  onClick={() => setCalendarWeekOffset(Math.min(totalWeeks - 1, currentWeekIndex + 1))}
                   disabled={currentWeekIndex >= totalWeeks - 1}
                   className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
                 >
