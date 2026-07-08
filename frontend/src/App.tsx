@@ -36,7 +36,7 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 5 * 60 * 1000,
-      retry: 1,
+      retry: 0,
       refetchOnWindowFocus: false,
     },
   },
@@ -92,8 +92,9 @@ function UserInitializer() {
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth()
   const isRestoring = useAuthStore((s) => s.isRestoring)
+  const accessToken = useAuthStore((s) => s.accessToken)
 
-  if (isRestoring) {
+  if (isRestoring || (isAuthenticated && !accessToken)) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#F0F2F5]">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
