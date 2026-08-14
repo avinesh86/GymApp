@@ -6,6 +6,11 @@ from django.utils import timezone
 logger = logging.getLogger(__name__)
 
 
+def _job_error(message: str) -> dict:
+    """Whole-file failure, in the same shape as the row-level errors."""
+    return {"row": 0, "field": "", "message": message}
+
+
 @shared_task(bind=True, max_retries=0)
 def run_import_job(self, job_id: int) -> None:
     """
@@ -34,7 +39,7 @@ def run_import_job(self, job_id: int) -> None:
     handler = handlers.get(job.import_type)
     if handler is None:
         job.status = ImportJob.Status.FAILED
-        job.error_log = [{"error": f"Unknown import type: {job.import_type}"}]
+        job.error_log = [_job_error(f"Unknown import type: {job.import_type}")]
         job.save(update_fields=["status", "error_log"])
         return
 
@@ -55,7 +60,7 @@ def run_import_job(self, job_id: int) -> None:
     except Exception as exc:
         logger.exception("run_import_job: unhandled error for job %d", job_id)
         job.status = ImportJob.Status.FAILED
-        job.error_log = [{"error": str(exc)}]
+        job.error_log = [_job_error(str(exc))]
     finally:
         job.save(update_fields=[
             "rows_total", "rows_success", "rows_failed",

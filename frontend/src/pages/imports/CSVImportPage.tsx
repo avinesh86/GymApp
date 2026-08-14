@@ -109,8 +109,12 @@ export function CSVImportPage() {
       const anchor = document.createElement('a')
       anchor.href = url
       anchor.download = `${importType}-template.csv`
+      // Firefox only follows the click for an anchor that is in the document,
+      // and revoking the URL before the download starts aborts it.
+      document.body.appendChild(anchor)
       anchor.click()
-      URL.revokeObjectURL(url)
+      document.body.removeChild(anchor)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch {
       toast.error('Failed to download template')
     }
@@ -282,8 +286,8 @@ export function CSVImportPage() {
                   <tbody>
                     {(job.error_log ?? []).map((err, i) => (
                       <tr key={i} className="border-b border-red-50">
-                        <td className="px-3 py-1.5 text-red-600">{err.row}</td>
-                        <td className="px-3 py-1.5 text-red-600 font-medium">{err.field}</td>
+                        <td className="px-3 py-1.5 text-red-600">{err.row || '—'}</td>
+                        <td className="px-3 py-1.5 text-red-600 font-medium">{err.field || '—'}</td>
                         <td className="px-3 py-1.5 text-red-600">{err.message}</td>
                       </tr>
                     ))}
