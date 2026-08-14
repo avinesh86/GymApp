@@ -492,9 +492,13 @@ export interface ImportJob {
 }
 
 export interface ImportError {
+  /** 1-based CSV line number, or 0 when the whole file failed. */
   row: number
+  /** Offending column, empty when the failure is not tied to one. */
   field: string
   message: string
+  /** The raw CSV row, present for row-level failures only. */
+  data?: Record<string, string>
 }
 
 // ─── Users ───────────────────────────────────────────────────────────────────

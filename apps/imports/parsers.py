@@ -6,9 +6,73 @@ Each parser returns (rows_ok, rows_failed, error_log).
 import csv
 import io
 import logging
-from datetime import date
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
+
+
+# Columns each parser reads, in the order the downloadable CSV template lists
+# them. Single source of truth: the template endpoint builds its header from
+# here, so a parser change can never drift from the template users download.
+TEMPLATE_COLUMNS: dict[str, list[str]] = {
+    "staff": ["name", "email", "phone", "role"],
+    "timetable": ["class_type", "start_datetime", "instructor_email", "site"],
+    "attendance": ["event_id", "count"],
+}
+
+# One example row per template so the expected formats (especially the ISO
+# datetime) are obvious without reading docs.
+TEMPLATE_SAMPLE_ROWS: dict[str, list[str]] = {
+    "staff": ["Sarah Mitchell", "sarah@example.com", "+64211234567", "instructor"],
+    "timetable": [
+        "HIIT Blast",
+        "2026-06-08T06:00:00",
+        "sarah@example.com",
+        "Main Studio",
+    ],
+    "attendance": ["123", "18"],
+}
+
+
+class RowError(Exception):
+    """A row-level failure tied to a specific CSV column."""
+
+    def __init__(self, field: str, message: str):
+        super().__init__(message)
+        self.field = field
+
+
+def _row_error(row_number: int, exc: Exception, row: dict) -> dict:
+    """Build the error-log entry the frontend error table renders."""
+    return {
+        "row": row_number,
+        "field": getattr(exc, "field", "") or "",
+        "message": str(exc),
+        "data": row,
+    }
+
+
+def _tenant_timezone(tenant) -> ZoneInfo:
+    """Zone that a CSV datetime without an offset is understood to be in.
+
+    Gyms write local wall-clock times in their spreadsheets, so a bare
+    "2026-06-08T06:00:00" means 6am at the gym, not 6am UTC.
+    """
+    # Reverse one-to-one raises AttributeError when settings were never
+    # created, so getattr's default covers it.
+    name = getattr(getattr(tenant, "settings", None), "timezone", "") or settings.TIME_ZONE
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError):
+        logger.warning(
+            "Tenant %s has unknown timezone %r — falling back to %s",
+            tenant.pk,
+            name,
+            settings.TIME_ZONE,
+        )
+        return ZoneInfo(settings.TIME_ZONE)
 
 
 def _read_csv(file_content: bytes) -> list[dict]:
@@ -33,8 +97,10 @@ def import_staff(file_content: bytes, tenant, created_by) -> tuple[int, int, lis
             phone = row.get("phone", "").strip()
             role = row.get("role", "instructor").strip().lower()
 
-            if not name or not email:
-                raise ValueError("name and email are required")
+            if not name:
+                raise RowError("name", "name is required")
+            if not email:
+                raise RowError("email", "email is required")
 
             # Provision the login first — StaffProfile.user is required. New
             # accounts get an invite to set their password.
@@ -64,7 +130,7 @@ def import_staff(file_content: bytes, tenant, created_by) -> tuple[int, int, lis
             success += 1
         except Exception as exc:
             failed += 1
-            errors.append({"row": index, "error": str(exc), "data": row})
+            errors.append(_row_error(index, exc, row))
 
     return success, failed, errors
 
@@ -100,6 +166,7 @@ def import_timetable(file_content: bytes, tenant, created_by) -> tuple[int, int,
     from apps.timetable.models import ClassType, TimetableEvent
 
     rows = _read_csv(file_content)
+    local_zone = _tenant_timezone(tenant)
     success = 0
     failed = 0
     errors = []
@@ -111,8 +178,25 @@ def import_timetable(file_content: bytes, tenant, created_by) -> tuple[int, int,
             instructor_email = row.get("instructor_email", "").strip().lower()
             site_name = row.get("site", "").strip()
 
-            if not class_type_name or not start_str:
-                raise ValueError("class_type and start_datetime are required")
+            if not class_type_name:
+                raise RowError("class_type", "class_type is required")
+            if not start_str:
+                raise RowError("start_datetime", "start_datetime is required")
+
+            # Parse before any writes so a malformed row leaves no half-created
+            # class type behind.
+            try:
+                start_dt = datetime.fromisoformat(start_str)
+            except ValueError:
+                raise RowError(
+                    "start_datetime",
+                    f"{start_str!r} is not ISO format (e.g. 2026-06-08T06:00:00)",
+                )
+
+            # A CSV time without an offset is the gym's local wall-clock time.
+            # Django stores it as UTC once it is aware.
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.replace(tzinfo=local_zone)
 
             # Auto-create class type if it doesn't exist yet for this tenant.
             # Default duration is 60 minutes — the tenant can adjust it later
@@ -127,7 +211,6 @@ def import_timetable(file_content: bytes, tenant, created_by) -> tuple[int, int,
                 },
             )
 
-            start_dt = datetime.fromisoformat(start_str)
             end_dt = start_dt + timedelta(minutes=class_type.duration_minutes)
 
             # Resolve instructor. If an email is provided but no StaffProfile
@@ -178,7 +261,7 @@ def import_timetable(file_content: bytes, tenant, created_by) -> tuple[int, int,
             success += 1
         except Exception as exc:
             failed += 1
-            errors.append({"row": index, "error": str(exc), "data": row})
+            errors.append(_row_error(index, exc, row))
 
     return success, failed, errors
 
@@ -199,10 +282,17 @@ def import_attendance(file_content: bytes, tenant, created_by) -> tuple[int, int
             count_str = row.get("count", "0").strip()
 
             if not event_id:
-                raise ValueError("event_id is required")
+                raise RowError("event_id", "event_id is required")
 
-            event = TimetableEvent.objects.get(pk=int(event_id), tenant=tenant)
-            count = int(count_str)
+            try:
+                event = TimetableEvent.objects.get(pk=int(event_id), tenant=tenant)
+            except (TimetableEvent.DoesNotExist, ValueError):
+                raise RowError("event_id", f"no timetable event with id {event_id!r}")
+
+            try:
+                count = int(count_str)
+            except ValueError:
+                raise RowError("count", f"{count_str!r} is not a whole number")
 
             AttendanceRecord.objects.update_or_create(
                 timetable_event=event,
@@ -218,6 +308,6 @@ def import_attendance(file_content: bytes, tenant, created_by) -> tuple[int, int
             success += 1
         except Exception as exc:
             failed += 1
-            errors.append({"row": index, "error": str(exc), "data": row})
+            errors.append(_row_error(index, exc, row))
 
     return success, failed, errors
