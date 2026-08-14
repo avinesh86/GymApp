@@ -282,6 +282,72 @@ Then configure the Meta webhook URL to:
 
 ## Deployment Notes
 
+### Deploying
+
+Merging to `main` deploys automatically: `.github/workflows/deploy.yml` waits
+for CI to pass, then SSHes to the server and runs `scripts/deploy.sh`. You can
+also trigger it by hand from the Actions tab, optionally against a specific
+branch or SHA.
+
+To deploy directly on the server:
+
+```bash
+bash scripts/deploy.sh
+```
+
+The script records the current commit, dumps the database to `backups/`, checks
+for models missing a migration, prints the migration plan, applies it, rebuilds
+the backend and frontend images, and health-checks
+`/api/v1/public/health/`. **If the health check fails it rolls the code back to
+the previous commit automatically** and re-checks.
+
+Config via environment: `DEPLOY_BRANCH`, `HEALTHCHECK_URL`, `BACKUP_DIR`,
+`SKIP_BACKUP=1`.
+
+Exit codes: `0` deployed · `1` failed and rolled back · `2` failed and the
+rollback also failed — needs a human.
+
+Required repo secrets for the workflow: `DEPLOY_HOST`, `DEPLOY_USER`,
+`DEPLOY_KEY` (private key authorised on the server), `DEPLOY_PATH`, and
+optionally `DEPLOY_PORT`. Set the `PRODUCTION_URL` repo variable to link the
+deployment in the Actions UI.
+
+### Reverting a bad deploy
+
+The script rolls the code back on its own when the health check fails. These
+steps are for when a release is *healthy but wrong* — it starts fine and the
+bug shows up later.
+
+**1. Roll the code back.** On the server:
+
+```bash
+git log --oneline -5                 # find the last good commit
+git reset --hard <good-sha>
+docker compose build web frontend
+docker compose up -d --force-recreate web worker beat frontend
+```
+
+Or revert on GitHub (`git revert <bad-sha> && git push`) and let the deploy
+workflow ship it — slower, but keeps the server matching `main`.
+
+**2. Only if the schema is the problem, restore the database.** Migrations in
+this codebase are additive, so old code usually runs fine against the newer
+schema. Restoring **discards every write since the dump was taken**, so treat it
+as a last resort:
+
+```bash
+ls -lt backups/                      # newest pre-deploy dump
+docker compose exec -T mysql mysql -u root -p"${MYSQL_ROOT_PASSWORD}" \
+  "${MYSQL_DATABASE}" < backups/pre-deploy-<timestamp>.sql
+```
+
+**3. Confirm it is back.**
+
+```bash
+curl -fsS http://localhost/api/v1/public/health/
+docker compose logs --tail=50 web
+```
+
 ### Production Docker Compose
 
 ```bash
