@@ -28,7 +28,10 @@
 
 set -euo pipefail
 
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Normally derived from the script's own location. The CD workflow overrides it
+# because it runs a copy of this script fetched from origin, so that a server
+# sitting on an older commit can still be deployed by the newest script.
+PROJECT_DIR="${PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
 HEALTHCHECK_URL="${HEALTHCHECK_URL:-http://localhost/api/v1/public/health/}"
 BACKUP_DIR="${BACKUP_DIR:-${PROJECT_DIR}/backups}"

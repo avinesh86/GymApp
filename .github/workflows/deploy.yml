@@ -45,10 +45,16 @@ jobs:
           command_timeout: 20m
           script: |
             set -e
+            REF=${{ github.event.inputs.ref || 'main' }}
             cd ${{ secrets.DEPLOY_PATH }}
-            git fetch origin
-            git checkout ${{ github.event.inputs.ref || 'main' }}
-            DEPLOY_BRANCH=${{ github.event.inputs.ref || 'main' }} bash scripts/deploy.sh
+            git fetch origin "$REF"
+            # Run the script as it exists on the ref being deployed, not the
+            # copy in the working tree: the tree may predate the script
+            # entirely, and leaving it untouched keeps the rollback target
+            # accurate until the script decides to move it.
+            git show "origin/${REF}:scripts/deploy.sh" > /tmp/fitops-deploy.sh
+            PROJECT_DIR=${{ secrets.DEPLOY_PATH }} DEPLOY_BRANCH="$REF" \
+              bash /tmp/fitops-deploy.sh
 
       - name: Report rollback
         if: failure()
