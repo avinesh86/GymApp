@@ -301,8 +301,15 @@ the backend and frontend images, and health-checks
 `/api/v1/public/health/`. **If the health check fails it rolls the code back to
 the previous commit automatically** and re-checks.
 
-Config via environment: `DEPLOY_BRANCH`, `HEALTHCHECK_URL`, `BACKUP_DIR`,
-`SKIP_BACKUP=1`.
+Config via environment: `DEPLOY_BRANCH`, `HEALTHCHECK_URL`, `HEALTHCHECK_HOST`,
+`BACKUP_DIR`, `SKIP_BACKUP=1`.
+
+`HEALTHCHECK_HOST` matters more than it looks. Django answers **400
+DisallowedHost** when the Host header is not in `ALLOWED_HOSTS`, and
+`ALLOWED_HOSTS` rarely contains `localhost` — so a health check against
+`http://localhost/` fails on a perfectly healthy server, and the deploy rolls
+itself back for no reason. The script defaults this to the first entry in
+`ALLOWED_HOSTS` in `.env` and sends it as the Host header.
 
 Exit codes: `0` deployed · `1` failed and rolled back · `2` failed and the
 rollback also failed — needs a human.

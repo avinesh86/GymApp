@@ -16,6 +16,10 @@
 # Config via environment:
 #   DEPLOY_BRANCH    git branch to deploy      (default: main)
 #   HEALTHCHECK_URL  URL that must return 2xx  (default: http://localhost/api/v1/public/health/)
+#   HEALTHCHECK_HOST Host header to send with the check. Needed because Django
+#                    returns 400 DisallowedHost when the host it sees is absent
+#                    from ALLOWED_HOSTS, and "localhost" usually is. Defaults to
+#                    the first entry in ALLOWED_HOSTS in .env.
 #   BACKUP_DIR       where dumps are written   (default: <project>/backups)
 #   SKIP_BACKUP=1    skip the dump (fast redeploys of frontend-only changes)
 #
@@ -29,6 +33,16 @@ DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
 HEALTHCHECK_URL="${HEALTHCHECK_URL:-http://localhost/api/v1/public/health/}"
 BACKUP_DIR="${BACKUP_DIR:-${PROJECT_DIR}/backups}"
 SKIP_BACKUP="${SKIP_BACKUP:-0}"
+
+# Django rejects a request whose Host header is not in ALLOWED_HOSTS with a 400,
+# so probing http://localhost fails on a server that only allows its public
+# name. Borrow the first allowed host from .env unless one was passed in.
+if [ -z "${HEALTHCHECK_HOST:-}" ] && [ -f "${PROJECT_DIR}/.env" ]; then
+    HEALTHCHECK_HOST="$(
+        grep -E '^ALLOWED_HOSTS=' "${PROJECT_DIR}/.env" |
+        head -1 | cut -d= -f2- | cut -d, -f1 | tr -d '"'"'"' \r'
+    )"
+fi
 
 # docker-compose (v1) and docker compose (v2) are both in the wild.
 if docker compose version >/dev/null 2>&1; then
@@ -103,8 +117,13 @@ on_failure() {
 
 wait_for_health() {
     local attempts="$1"
+    local curl_args=(-fsS --max-time 5)
+    if [ -n "${HEALTHCHECK_HOST:-}" ]; then
+        curl_args+=(-H "Host: ${HEALTHCHECK_HOST}")
+    fi
+
     for _ in $(seq 1 "$attempts"); do
-        if curl -fsS --max-time 5 "$HEALTHCHECK_URL" >/dev/null 2>&1; then
+        if curl "${curl_args[@]}" "$HEALTHCHECK_URL" >/dev/null 2>&1; then
             return 0
         fi
         sleep 2
@@ -184,7 +203,7 @@ $COMPOSE up -d --force-recreate frontend
 
 # ─── 7. Health check ─────────────────────────────────────────────────────────
 echo ""
-echo "▸ Waiting for ${HEALTHCHECK_URL}..."
+echo "▸ Waiting for ${HEALTHCHECK_URL} (Host: ${HEALTHCHECK_HOST:-none})..."
 if ! wait_for_health 30; then
     echo "  No healthy response after 60s."
     echo ""
