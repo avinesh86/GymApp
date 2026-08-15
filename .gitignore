@@ -50,3 +50,7 @@ frontend/.vite/
 frontend/.env
 frontend/.env.local
 *.tsbuildinfo
+
+# Database dumps written by scripts/deploy.sh
+backups/
+*.sql
