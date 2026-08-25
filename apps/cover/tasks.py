@@ -7,39 +7,15 @@ from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.utils import timezone
 
+from apps.tenants.email import get_tenant_email_sender
+
 from .models import CoverOffer, CoverRequest
 
 logger = logging.getLogger(__name__)
 
 
-def _build_email_connection(tenant_settings) -> object | None:
-    """
-    Returns a Django email backend connection configured with the tenant's
-    outgoing email credentials.  Falls back to None (use global settings).
-    """
-    from django.core.mail import get_connection
-
-    from_email = getattr(tenant_settings, "notification_from_email", "") or ""
-    password = getattr(tenant_settings, "notification_email_password", "") or ""
-
-    if not from_email or not password:
-        return None
-
-    return get_connection(
-        backend="django.core.mail.backends.smtp.EmailBackend",
-        host=django_settings.EMAIL_HOST,
-        port=django_settings.EMAIL_PORT,
-        username=from_email,
-        password=password,
-        use_tls=django_settings.EMAIL_USE_TLS,
-        fail_silently=False,
-    )
-
-
 def _send_cover_request_email(offer: CoverOffer) -> None:
     """Renders and sends the cover request HTML email to the staff member."""
-    from apps.tenants.models import TenantSettings
-
     staff = offer.staff
     cover_request = offer.cover_request
     event = cover_request.timetable_event
@@ -49,22 +25,11 @@ def _send_cover_request_email(offer: CoverOffer) -> None:
         logger.warning("No email for staff %s — skipping cover email", staff.pk)
         return
 
-    try:
-        tenant_settings = TenantSettings.objects.get(tenant=cover_request.tenant)
-    except TenantSettings.DoesNotExist:
-        tenant_settings = None
-
-    # Resolve from_email: prefer tenant-configured address, fall back to global default
-    from_email_address = (
-        getattr(tenant_settings, "notification_from_email", "") or django_settings.DEFAULT_FROM_EMAIL
+    sender = get_tenant_email_sender(
+        cover_request.tenant,
+        default_display_name=cover_request.tenant.name,
     )
-    from_name = (
-        getattr(tenant_settings, "notification_from_name", "") or cover_request.tenant.name
-    )
-    from_email = f"{from_name} <{from_email_address}>" if from_name else from_email_address
-    reply_to = getattr(django_settings, "EMAIL_REPLY_TO", from_email_address) or from_email_address
-
-    connection = _build_email_connection(tenant_settings)
+    reply_to = getattr(django_settings, "EMAIL_REPLY_TO", "") or sender.address
 
     accept_url = (
         f"{getattr(django_settings, 'FRONTEND_URL', 'http://localhost:3000')}"
@@ -95,10 +60,10 @@ def _send_cover_request_email(offer: CoverOffer) -> None:
     message = EmailMultiAlternatives(
         subject=subject,
         body=plain_body,
-        from_email=from_email,
+        from_email=sender.from_email,
         to=[recipient_email],
         reply_to=[reply_to],
-        connection=connection,
+        connection=sender.connection,
     )
     message.attach_alternative(html_body, "text/html")
     message.send()

@@ -65,17 +65,23 @@ def _dispatch_notification(notification):
 
 
 def _send_email_notification(notification):
-    from django.core.mail import send_mail
-    from django.conf import settings
+    """Emails a notification from the tenant's own configured sender."""
+    from django.core.mail import EmailMessage
 
+    from apps.tenants.email import get_tenant_email_sender
+
+    sender = get_tenant_email_sender(
+        notification.tenant,
+        default_display_name=notification.tenant.name,
+    )
     try:
-        send_mail(
+        EmailMessage(
             subject=notification.title,
-            message=notification.body,
-            from_email=settings.DEFAULT_FROM_EMAIL,
-            recipient_list=[notification.recipient.email],
-            fail_silently=False,
-        )
+            body=notification.body,
+            from_email=sender.from_email,
+            to=[notification.recipient.email],
+            connection=sender.connection,
+        ).send()
     except Exception:
         logger.exception("Email notification failed for %s", notification.pk)
 
