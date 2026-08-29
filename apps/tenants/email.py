@@ -9,6 +9,7 @@ the global ``EMAIL_*`` settings.
 
 import logging
 from dataclasses import dataclass
+from email.utils import formataddr, parseaddr
 
 from django.conf import settings
 from django.core.mail import get_connection
@@ -30,9 +31,13 @@ class TenantEmailSender:
 
     @property
     def from_email(self) -> str:
-        """The value for a message's ``from_email`` — ``Name <addr>`` or ``addr``."""
+        """The value for a message's ``from_email`` — ``Name <addr>`` or ``addr``.
+
+        ``formataddr`` quotes names containing commas or quotes, which a plain
+        f-string would emit as a malformed header.
+        """
         if self.display_name:
-            return f"{self.display_name} <{self.address}>"
+            return formataddr((self.display_name, self.address))
         return self.address
 
 
@@ -52,10 +57,14 @@ def get_tenant_email_sender(tenant, default_display_name: str = "") -> TenantEma
     app_password = _read_app_password(tenant_settings)
 
     if not address or not app_password:
+        # DEFAULT_FROM_EMAIL is allowed to carry a display name of its own
+        # ("FitOps <noreply@fitops.io>"). Split it, or wrapping a name around
+        # it again produces "Gym <FitOps <noreply@fitops.io>>".
+        default_name, default_address = parseaddr(settings.DEFAULT_FROM_EMAIL)
         return TenantEmailSender(
             connection=None,
-            address=settings.DEFAULT_FROM_EMAIL,
-            display_name=display_name,
+            address=default_address or settings.DEFAULT_FROM_EMAIL,
+            display_name=display_name or default_name,
         )
 
     connection = get_connection(
