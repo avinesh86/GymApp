@@ -63,11 +63,25 @@ services:
     image: redis:7-alpine
     restart: always
 
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_STRIPE_PUBLISHABLE_KEY: ${VITE_STRIPE_PUBLISHABLE_KEY}
+    # No published port: nginx is the only way in. docker-compose.yml exposes
+    # 3000 for local dev, which is also how this host was reachable before TLS.
+    expose:
+      - "3000"
+    depends_on:
+      - web
+    restart: always
+
   nginx:
     # Pinned: nginx.prod.conf uses the "http2 on;" directive, which needs 1.25.1+.
     image: nginx:1.27-alpine
     volumes:
       - ./nginx/nginx.prod.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx/proxy_headers.inc:/etc/nginx/conf.d/proxy_headers.inc:ro
       - static_files:/app/staticfiles:ro
       - media_files:/app/media:ro
       - certbot_conf:/etc/letsencrypt:ro
@@ -77,6 +91,7 @@ services:
       - "443:443"
     depends_on:
       - web
+      - frontend
     restart: always
     # Certbot renews in place; nginx only picks up the new certificate on a
     # reload, so reload periodically rather than waiting for a restart.

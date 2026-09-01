@@ -26,6 +26,21 @@ path on that site.
   origin-scoped browser storage. A separate subdomain is a separate origin, so
   an XSS on the marketing site cannot read staff tokens.
 
+## What serves what
+
+nginx terminates TLS and splits traffic two ways:
+
+| Path | Container | Why |
+|---|---|---|
+| `/api/`, `/platform-admin/` | `web` (Django) | the API and the admin |
+| `/static/`, `/media/` | volumes | Django's collected static and uploads |
+| everything else | `frontend` | the React build |
+
+The React app is **not** served by Django here. `SPAView` exists for the
+PythonAnywhere deployment, where one process serves both — but the `web`
+Docker image never runs `npm run build`, so it has no `index.html` to return
+and answers 404. The `frontend` image builds the bundle and serves it.
+
 ## Before you start: check the nameservers
 
 In the DiscountDomains control panel, check the **nameservers** for
