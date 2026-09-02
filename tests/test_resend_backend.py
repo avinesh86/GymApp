@@ -159,3 +159,40 @@ def test_payload_is_json_serialisable(posted):
     payload = posted[0]["payload"]
     assert json.dumps(payload)
     assert payload["headers"] == {"X-Entity-Ref-ID": "abc123"}
+
+
+@pytest.mark.parametrize(
+    "settings_module", ["fitops.settings.prod", "fitops.settings.pythonanywhere"]
+)
+def test_deployment_settings_honour_the_email_backend_env_var(settings_module, tmp_path):
+    """A hardcoded EMAIL_BACKEND silently overrides .env.
+
+    prod.py did exactly that, so setting the Resend backend in the environment
+    had no effect and mail kept going to SMTP.
+    """
+    import os
+    import subprocess
+    import sys
+
+    env = {
+        **os.environ,
+        "DJANGO_SETTINGS_MODULE": settings_module,
+        "EMAIL_BACKEND": "apps.core.email_backends.ResendEmailBackend",
+        "ALLOWED_HOSTS": "example.test",
+        "MYSQL_PASSWORD": "unused-by-this-check",
+        "PA_USERNAME": "unused",
+    }
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import django; django.setup();"
+            "from django.conf import settings; print(settings.EMAIL_BACKEND)",
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "apps.core.email_backends.ResendEmailBackend" in result.stdout

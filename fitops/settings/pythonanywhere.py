@@ -85,7 +85,13 @@ CORS_ALLOWED_ORIGINS = config(
 CORS_ALLOW_CREDENTIALS = True
 
 # ─── Email ───────────────────────────────────────────────────────────────────
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+# PythonAnywhere's paid plans allow outbound SMTP, so that stays the default —
+# but read the environment rather than hardcoding, so the transport can be
+# switched without a code change.
+EMAIL_BACKEND = config(
+    "EMAIL_BACKEND",
+    default="django.core.mail.backends.smtp.EmailBackend",
+)
 
 # ─── Celery disabled on PythonAnywhere ───────────────────────────────────────
 # Tasks call .delay() / .apply_async() — make them run synchronously.
