@@ -27,7 +27,7 @@ export function CoverBoardPage() {
   const [showCancelForm, setShowCancelForm] = useState(false)
   const [cancellationReason, setCancellationReason] = useState('')
 
-  const { data: allRequests = [], isLoading } = useQuery({
+  const { data: allRequests = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['cover-requests', { status: statusFilter, urgency: urgencyFilter }],
     queryFn: () => listCoverRequests({ status: statusFilter || undefined, urgency: urgencyFilter || undefined }),
   })
@@ -79,6 +79,21 @@ export function CoverBoardPage() {
   const resolvedRequests = allRequests.filter((r) => ['accepted', 'cancelled', 'expired', 'denied'].includes(r.status))
 
   if (isLoading) return <PageSpinner />
+
+  // Without this, a failed request falls through to the empty state below and
+  // the page cheerfully reports that every class is covered.
+  if (isError) {
+    return (
+      <div className="p-6">
+        <EmptyState
+          icon={<RefreshCcw className="h-10 w-10" />}
+          title="Couldn't load cover requests"
+          description="Something went wrong on our end, so this list may be incomplete. Try again, and tell us if it keeps happening."
+          action={{ label: 'Try again', onClick: () => refetch() }}
+        />
+      </div>
+    )
+  }
 
   return (
     <div>
