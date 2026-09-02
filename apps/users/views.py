@@ -22,11 +22,15 @@ class UserViewSet(ModelViewSet):
     def get_queryset(self):
         # List users by membership in the active gym, not by User.tenant — a
         # user's default tenant may differ from the gym they're a member of.
+        #
+        # Deliberately not filtered by User.is_active: a deactivated user still
+        # belongs to the gym, and hiding them left no way to reactivate anyone
+        # from the UI. Removal from a gym is the membership flag below, set by
+        # destroy().
         return (
             User.objects.filter(
                 memberships__tenant=self.request.tenant,
                 memberships__is_active=True,
-                is_active=True,
             )
             .distinct()
             .order_by("email")
