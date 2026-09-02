@@ -21,9 +21,21 @@ def log_audit(user, action, obj, before_data=None, after_data=None, request=None
 
     content_type = ContentType.objects.get_for_model(obj)
 
+    # Some actions are genuinely unauthenticated — a staff member accepting
+    # cover from an emailed link authenticates with the accept_code, not a
+    # session. Fall back to the object's own tenant so those still audit.
+    tenant = user.tenant if user is not None else getattr(obj, "tenant", None)
+    if tenant is None:
+        logger.warning(
+            "Skipping audit log for action=%s object=%s — no tenant to attribute it to",
+            action,
+            obj,
+        )
+        return
+
     try:
         AuditLog.objects.create(
-            tenant=user.tenant,
+            tenant=tenant,
             user=user,
             action=action,
             object_type=content_type.model,

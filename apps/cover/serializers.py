@@ -47,8 +47,10 @@ class CoverRequestSerializer(serializers.ModelSerializer):
     accepted_by_name = serializers.CharField(source="accepted_by.name", read_only=True)
 
     def get_cancelled_by_name(self, obj):
+        # users.User has a full_name property; it has neither Django's
+        # get_full_name() nor a username field, since email is USERNAME_FIELD.
         if obj.cancelled_by:
-            return obj.cancelled_by.get_full_name() or obj.cancelled_by.username
+            return obj.cancelled_by.full_name or obj.cancelled_by.email
         return None
 
     class Meta:
