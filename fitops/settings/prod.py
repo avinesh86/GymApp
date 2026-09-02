@@ -35,8 +35,15 @@ SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SECURE = True
 X_FRAME_OPTIONS = "DENY"
 
-# SMTP in production
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+# SMTP by default, but honour EMAIL_BACKEND from the environment — a
+# hardcoded value here silently overrides base.py, and any host that cannot
+# reach an SMTP server needs a different transport. DigitalOcean blocks
+# outbound SMTP entirely, so production runs
+# apps.core.email_backends.ResendEmailBackend.
+EMAIL_BACKEND = config(
+    "EMAIL_BACKEND",
+    default="django.core.mail.backends.smtp.EmailBackend",
+)
 
 # Static / Media via S3 in production (optional — configure if AWS vars are set)
 AWS_ACCESS_KEY_ID = config("AWS_ACCESS_KEY_ID", default="")
