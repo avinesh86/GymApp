@@ -89,6 +89,16 @@ export async function deactivateUser(id: number): Promise<void> {
   await apiClient.patch(`users/${id}/`, { is_active: false })
 }
 
+/** Restores a deactivated user's login. */
+export async function reactivateUser(id: number): Promise<void> {
+  await apiClient.patch(`users/${id}/`, { is_active: true })
+}
+
+/** Removes a user from the current gym, leaving any other gym untouched. */
+export async function removeUserFromGym(id: number): Promise<void> {
+  await apiClient.delete(`users/${id}/`)
+}
+
 /** Owner/admin emails a password-reset link to a user in their gym. */
 export async function sendUserPasswordReset(id: number): Promise<void> {
   await apiClient.post(`users/${id}/send-password-reset/`)
