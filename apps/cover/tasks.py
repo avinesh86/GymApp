@@ -29,7 +29,7 @@ def _send_cover_request_email(offer: CoverOffer) -> None:
         cover_request.tenant,
         default_display_name=cover_request.tenant.name,
     )
-    reply_to = getattr(django_settings, "EMAIL_REPLY_TO", "") or sender.address
+    reply_to = sender.reply_to or sender.address
 
     accept_url = (
         f"{getattr(django_settings, 'FRONTEND_URL', 'http://localhost:3000')}"

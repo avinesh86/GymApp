@@ -182,6 +182,11 @@ EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
 DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="noreply@fitops.io")
 EMAIL_REPLY_TO = config("EMAIL_REPLY_TO", default="")
 
+# Resend (HTTPS email API). Set alongside
+# EMAIL_BACKEND=apps.core.email_backends.ResendEmailBackend on any host where
+# outbound SMTP is blocked — which is every DigitalOcean droplet.
+RESEND_API_KEY = config("RESEND_API_KEY", default="")
+
 # Base URL of the React frontend, used to build links in transactional emails
 # (e.g. the staff invite / set-password link).
 FRONTEND_URL = config("FRONTEND_URL", default="http://localhost:3000")

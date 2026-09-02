@@ -28,6 +28,7 @@ class TenantEmailSender:
     connection: object | None
     address: str
     display_name: str = ""
+    reply_to: str = ""
 
     @property
     def from_email(self) -> str:
@@ -54,18 +55,17 @@ def get_tenant_email_sender(tenant, default_display_name: str = "") -> TenantEma
         (getattr(tenant_settings, "notification_from_name", "") or "").strip()
         or default_display_name
     )
+
+    if getattr(settings, "RESEND_API_KEY", ""):
+        # Resend only accepts a from-address on a domain verified with it, so
+        # the tenant's own mailbox cannot be the sender. It becomes the
+        # reply-to instead: mail shows the gym's name, replies reach the gym.
+        return _shared_sender(display_name, reply_to=address)
+
     app_password = _read_app_password(tenant_settings)
 
     if not address or not app_password:
-        # DEFAULT_FROM_EMAIL is allowed to carry a display name of its own
-        # ("FitOps <noreply@fitops.io>"). Split it, or wrapping a name around
-        # it again produces "Gym <FitOps <noreply@fitops.io>>".
-        default_name, default_address = parseaddr(settings.DEFAULT_FROM_EMAIL)
-        return TenantEmailSender(
-            connection=None,
-            address=default_address or settings.DEFAULT_FROM_EMAIL,
-            display_name=display_name or default_name,
-        )
+        return _shared_sender(display_name)
 
     connection = get_connection(
         backend="django.core.mail.backends.smtp.EmailBackend",
@@ -80,6 +80,25 @@ def get_tenant_email_sender(tenant, default_display_name: str = "") -> TenantEma
         connection=connection,
         address=address,
         display_name=display_name,
+        reply_to=getattr(settings, "EMAIL_REPLY_TO", "") or address,
+    )
+
+
+def _shared_sender(display_name: str, reply_to: str = "") -> TenantEmailSender:
+    """Sender built from the global settings, for every tenant to share.
+
+    ``connection=None`` leaves Django to use the configured EMAIL_BACKEND —
+    Resend in production.
+    """
+    # DEFAULT_FROM_EMAIL is allowed to carry a display name of its own
+    # ("FitOps <noreply@fitops.io>"). Split it, or wrapping a name around it
+    # again produces "Gym <FitOps <noreply@fitops.io>>".
+    default_name, default_address = parseaddr(settings.DEFAULT_FROM_EMAIL)
+    return TenantEmailSender(
+        connection=None,
+        address=default_address or settings.DEFAULT_FROM_EMAIL,
+        display_name=display_name or default_name,
+        reply_to=reply_to or getattr(settings, "EMAIL_REPLY_TO", ""),
     )
 
 

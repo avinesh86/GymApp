@@ -97,3 +97,53 @@ def test_unreadable_password_falls_back_instead_of_raising(gym, encryption_key):
 
     assert sender.connection is None
     assert sender.address == "noreply@fitops.io"
+
+
+@override_settings(
+    RESEND_API_KEY="re_test",
+    DEFAULT_FROM_EMAIL="FitOps <noreply@fitops.northernarena.nz>",
+)
+def test_resend_sends_from_the_verified_domain_and_replies_to_the_gym(
+    gym, encryption_key
+):
+    """Resend rejects a from-address it hasn't verified, so the gym's own
+    mailbox becomes the reply-to rather than the sender."""
+    settings_row = TenantSettingsFactory(
+        tenant=gym, notification_from_email="gym@northernarena.co.nz"
+    )
+    settings_row.notification_email_password = "hzrhspuriuxsvnpl"
+    settings_row.save()
+
+    sender = get_tenant_email_sender(gym, default_display_name=gym.name)
+
+    assert sender.connection is None, "must use the configured EMAIL_BACKEND"
+    assert sender.from_email == "Northern Arena <noreply@fitops.northernarena.nz>"
+    assert sender.reply_to == "gym@northernarena.co.nz"
+
+
+@override_settings(
+    RESEND_API_KEY="re_test",
+    DEFAULT_FROM_EMAIL="FitOps <noreply@fitops.northernarena.nz>",
+)
+def test_resend_falls_back_to_the_default_name_when_the_tenant_has_none(gym):
+    TenantSettingsFactory(tenant=gym)
+
+    sender = get_tenant_email_sender(gym)
+
+    assert sender.from_email == "FitOps <noreply@fitops.northernarena.nz>"
+    assert sender.reply_to == ""
+
+
+@override_settings(RESEND_API_KEY="", DEFAULT_FROM_EMAIL="noreply@fitops.io")
+def test_without_resend_the_tenant_smtp_path_still_applies(gym, encryption_key):
+    """Removing the key must not silently strand hosts that can still use SMTP."""
+    settings_row = TenantSettingsFactory(
+        tenant=gym, notification_from_email="gym@gmail.com"
+    )
+    settings_row.notification_email_password = "hzrhspuriuxsvnpl"
+    settings_row.save()
+
+    sender = get_tenant_email_sender(gym, default_display_name=gym.name)
+
+    assert sender.connection is not None
+    assert sender.connection.username == "gym@gmail.com"
