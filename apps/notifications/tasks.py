@@ -80,6 +80,7 @@ def _send_email_notification(notification):
             body=notification.body,
             from_email=sender.from_email,
             to=[notification.recipient.email],
+            reply_to=[sender.reply_to] if sender.reply_to else None,
             connection=sender.connection,
         ).send()
     except Exception:

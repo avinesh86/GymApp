@@ -18,13 +18,14 @@ logger = logging.getLogger(__name__)
 
 
 def _send(user: User, subject: str, body: str, kind: str) -> bool:
-    sender = get_tenant_email_sender(user.tenant)
+    sender = get_tenant_email_sender(user.tenant, default_display_name=user.tenant.name)
     try:
         EmailMessage(
             subject=subject,
             body=body,
             from_email=sender.from_email,
             to=[user.email],
+            reply_to=[sender.reply_to] if sender.reply_to else None,
             connection=sender.connection,
         ).send()
         return True
