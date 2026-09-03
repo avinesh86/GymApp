@@ -48,6 +48,7 @@ def test_not_managed_when_mail_goes_over_smtp(settings_row):
     assert data["email_sending_managed"] is False
 
 
+@override_settings(FIELD_ENCRYPTION_KEY=TEST_KEY)
 def test_the_password_is_never_returned(settings_row):
     """It is write-only, and hiding the field must not change that."""
     settings_row.notification_email_password = "hzrhspuriuxsvnpl"
