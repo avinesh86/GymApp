@@ -1,5 +1,5 @@
 import React from 'react'
-import { Clock, MapPin, User, DollarSign, XCircle } from 'lucide-react'
+import { Clock, MapPin, User, DollarSign, XCircle, Trash2 } from 'lucide-react'
 import { format, isPast, parseISO } from 'date-fns'
 import type { CoverRequest } from '../../types'
 import { Badge } from '../../components/ui/Badge'
@@ -28,10 +28,12 @@ interface CoverRequestCardProps {
   onViewDetails: (request: CoverRequest) => void
   onApprove?: (request: CoverRequest) => void
   onDeny?: (request: CoverRequest) => void
+  /** Only passed for resolved requests — a live one must be cancelled first. */
+  onRemove?: (request: CoverRequest) => void
   muted?: boolean
 }
 
-export function CoverRequestCard({ request, onViewDetails, onApprove, onDeny, muted = false }: CoverRequestCardProps) {
+export function CoverRequestCard({ request, onViewDetails, onApprove, onDeny, onRemove, muted = false }: CoverRequestCardProps) {
   const urgency = URGENCY_CONFIG[request.urgency]
   const status = STATUS_CONFIG[request.status] ?? { label: request.status, variant: 'grey' as const }
   const event = request.event_detail
@@ -115,14 +117,26 @@ export function CoverRequestCard({ request, onViewDetails, onApprove, onDeny, mu
         </div>
       )}
 
-      <Button
-        variant="secondary"
-        size="sm"
-        className="w-full"
-        onClick={() => onViewDetails(request)}
-      >
-        View Details
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          className="flex-1"
+          onClick={() => onViewDetails(request)}
+        >
+          View Details
+        </Button>
+        {onRemove && (
+          <button
+            onClick={() => onRemove(request)}
+            title="Remove from the board"
+            aria-label="Remove from the board"
+            className="p-2 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        )}
+      </div>
     </div>
   )
 }
