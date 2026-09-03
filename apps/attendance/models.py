@@ -57,4 +57,25 @@ class QRAttendanceToken(models.Model):
         return f"QR token for event {self.timetable_event_id}"
 
     def is_valid(self):
-        return not self.is_used and self.expires_at > timezone.now()
+        """A code works until the class has actually been counted.
+
+        It used to expire two hours after it was *generated*, which meant
+        printing codes in the morning for an evening class produced a sheet of
+        dead QR codes. What should close a code is the thing it exists to
+        collect: once attendance is recorded — by this code, by another, or by
+        hand in Bulk Attendance — it stops working.
+
+        expires_at remains as a long backstop so a code that never gets used
+        does not stay live forever.
+        """
+        if self.is_used or self.expires_at <= timezone.now():
+            return False
+        return not self.attendance_already_recorded()
+
+    def attendance_already_recorded(self) -> bool:
+        """Whether this class has a count against it by any route."""
+        from .models import AttendanceRecord  # noqa: PLC0415 — self-import for clarity
+
+        return AttendanceRecord.objects.filter(
+            timetable_event_id=self.timetable_event_id, is_deleted=False
+        ).exists()
