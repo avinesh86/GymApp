@@ -35,9 +35,14 @@ import { SetPasswordPage } from './pages/auth/SetPasswordPage'
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 5 * 60 * 1000,
+      // Was 5 minutes with no refetch on focus, which meant a change made on
+      // one page could stay invisible on another for that long — the timetable
+      // still showing "Scheduled" after a cover request was raised, say.
+      // Explicit cross-invalidation handles the known relationships; these two
+      // are the safety net for the ones we miss.
+      staleTime: 30 * 1000,
       retry: 0,
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: true,
     },
   },
 })
