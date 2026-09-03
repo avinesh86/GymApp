@@ -11,6 +11,7 @@ import { PageHeader } from '../../components/shared/PageHeader'
 import { PageSpinner } from '../../components/ui/Spinner'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { Button } from '../../components/ui/Button'
+import { Pagination } from '../../components/ui/Pagination'
 import { Modal } from '../../components/ui/Modal'
 import { usePermission } from '../../hooks/usePermission'
 import { useAuth } from '../../hooks/useAuth'
@@ -183,19 +184,13 @@ export function InvoicesPage() {
               ))}
             </div>
 
-            {totalPages > 1 && (
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-gray-500">Page {page} of {totalPages}</p>
-                <div className="flex gap-2">
-                  <Button variant="secondary" size="sm" onClick={() => setPage(page - 1)} disabled={page <= 1}>
-                    Previous
-                  </Button>
-                  <Button variant="secondary" size="sm" onClick={() => setPage(page + 1)} disabled={page >= totalPages}>
-                    Next
-                  </Button>
-                </div>
-              </div>
-            )}
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              onChange={setPage}
+              totalCount={invoicesPage?.count}
+              noun="invoice"
+            />
           </>
         )}
       </section>

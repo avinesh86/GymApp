@@ -69,6 +69,16 @@ export async function listUsers(): Promise<User[]> {
   return unwrapList(response.data)
 }
 
+/** Paged variant — keeps `count` so the caller can render page controls. */
+export async function listUsersPage(
+  params: { page?: number; page_size?: number } = {}
+): Promise<PaginatedResponse<User>> {
+  const response = await apiClient.get<User[] | PaginatedResponse<User>>('users/', { params })
+  return Array.isArray(response.data)
+    ? { count: response.data.length, next: null, previous: null, results: response.data }
+    : response.data
+}
+
 export async function inviteUser(data: {
   email: string
   first_name: string

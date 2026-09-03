@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { Plus, Edit2, KeyRound, RotateCcw, Trash2 } from 'lucide-react'
 import {
-  listUsers,
+  listUsersPage,
   inviteUser,
   updateUser,
   deactivateUser,
@@ -17,6 +17,7 @@ import { Badge } from '../../../components/ui/Badge'
 import { Modal } from '../../../components/ui/Modal'
 import { Input } from '../../../components/ui/Input'
 import { Select } from '../../../components/ui/Select'
+import { Pagination } from '../../../components/ui/Pagination'
 import { Table } from '../../../components/ui/Table'
 import { PageSpinner } from '../../../components/ui/Spinner'
 
@@ -47,10 +48,15 @@ export function AccessTab() {
   const [invitePassword, setInvitePassword] = useState('')
   const [editRole, setEditRole] = useState('instructor')
 
-  const { data: users = [], isLoading } = useQuery({
-    queryKey: ['users'],
-    queryFn: listUsers,
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 20
+
+  const { data: usersPage, isLoading } = useQuery({
+    queryKey: ['users', { page }],
+    queryFn: () => listUsersPage({ page, page_size: PAGE_SIZE }),
   })
+  const users = usersPage?.results ?? []
+  const totalPages = Math.ceil((usersPage?.count ?? 0) / PAGE_SIZE)
 
   const { mutate: invite, isPending: isInviting } = useMutation({
     mutationFn: () =>
@@ -213,7 +219,16 @@ export function AccessTab() {
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-        <Table columns={columns} data={users} keyExtractor={(u) => u.id} emptyMessage="No users found" />
+        <>
+          <Table columns={columns} data={users} keyExtractor={(u) => u.id} emptyMessage="No users found" />
+          <Pagination
+            page={page}
+            totalPages={totalPages}
+            onChange={setPage}
+            totalCount={usersPage?.count}
+            noun="user"
+          />
+        </>
       </div>
 
       {/* Invite modal */}
