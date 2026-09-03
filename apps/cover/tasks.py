@@ -7,6 +7,7 @@ from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.utils import timezone
 
+from apps.core.timezones import format_for_tenant
 from apps.tenants.email import get_tenant_email_sender
 
 from .models import CoverOffer, CoverRequest
@@ -25,10 +26,8 @@ def _send_cover_request_email(offer: CoverOffer) -> None:
         logger.warning("No email for staff %s — skipping cover email", staff.pk)
         return
 
-    sender = get_tenant_email_sender(
-        cover_request.tenant,
-        default_display_name=cover_request.tenant.name,
-    )
+    tenant = cover_request.tenant
+    sender = get_tenant_email_sender(tenant, default_display_name=tenant.name)
     reply_to = sender.reply_to or sender.address
 
     accept_url = (
@@ -39,8 +38,10 @@ def _send_cover_request_email(offer: CoverOffer) -> None:
     context = {
         "staff_name": staff.name,
         "class_name": event.class_type.name,
-        "event_date": event.start_datetime.strftime("%A, %d %B %Y"),
-        "event_time": event.start_datetime.strftime("%H:%M"),
+        # Local to the gym: start_datetime is UTC, so a 9pm Auckland class
+        # would otherwise be announced as 09:00 — and a 9am one on the wrong day.
+        "event_date": format_for_tenant(event.start_datetime, tenant, "%A, %d %B %Y"),
+        "event_time": format_for_tenant(event.start_datetime, tenant, "%H:%M"),
         "location": event.site.name if event.site else "",
         "urgency": cover_request.urgency,
         "bonus_amount": cover_request.bonus_amount if cover_request.bonus_amount else None,
@@ -87,7 +88,8 @@ def _create_cover_in_app_notification(offer: CoverOffer) -> None:
         notification_type=Notification.NotificationType.COVER_REQUEST,
         title=f"Cover needed: {event.class_type.name}",
         body=(
-            f"{event.class_type.name} on {event.start_datetime.strftime('%d %b %Y at %H:%M')} "
+            f"{event.class_type.name} on "
+            f"{format_for_tenant(event.start_datetime, cover_request.tenant, '%d %b %Y at %H:%M')} "
             f"needs a cover instructor. Be the first to accept!"
         ),
         related_object_type="cover_offer",

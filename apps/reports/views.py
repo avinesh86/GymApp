@@ -6,6 +6,7 @@ from django.db.models.functions import Coalesce
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.core.timezones import format_for_tenant
 from apps.attendance.models import AttendanceRecord
 from apps.core.permissions import IsGymManager, IsPayroll
 from apps.cover.models import CoverRequest
@@ -114,7 +115,7 @@ class AttendanceReportView(APIView):
             daily_map[event.start_datetime.date().isoformat()].append({
                 "event_id": event.id,
                 "class_name": event.class_type.name,
-                "time": event.start_datetime.strftime("%H:%M"),
+                "time": format_for_tenant(event.start_datetime, event.tenant, "%H:%M"),
                 "instructor_name": event.instructor.name if event.instructor else None,
                 "site_name": event.site.name if event.site else None,
                 "attendance_count": event_counts.get(event.pk),
@@ -207,8 +208,8 @@ class AttendanceReportView(APIView):
                 "class_name": event.class_type.name,
                 "instructor_name": event.instructor.name if event.instructor else None,
                 "site_name": event.site.name if event.site else None,
-                "date": event.start_datetime.strftime("%a %-d %b"),
-                "time": event.start_datetime.strftime("%H:%M"),
+                "date": format_for_tenant(event.start_datetime, event.tenant, "%a %-d %b"),
+                "time": format_for_tenant(event.start_datetime, event.tenant, "%H:%M"),
                 "attendance_count": event_counts[event.pk],
                 "color": get_class_color(event.class_type),
             }

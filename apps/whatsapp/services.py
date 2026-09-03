@@ -3,6 +3,7 @@ import hmac
 import logging
 
 import requests
+from apps.core.timezones import format_for_tenant
 from django.conf import settings
 from django.utils import timezone
 
@@ -48,8 +49,8 @@ def send_cover_request_message(cover_offer) -> WhatsAppMessage | None:
                     "parameters": [
                         {"type": "text", "text": staff.name},
                         {"type": "text", "text": event.class_type.name},
-                        {"type": "text", "text": event.start_datetime.strftime("%A %d %b %Y")},
-                        {"type": "text", "text": event.start_datetime.strftime("%H:%M")},
+                        {"type": "text", "text": format_for_tenant(event.start_datetime, event.tenant, "%A %d %b %Y")},
+                        {"type": "text", "text": format_for_tenant(event.start_datetime, event.tenant, "%H:%M")},
                         {"type": "text", "text": cover_offer.accept_code},
                     ],
                 }
