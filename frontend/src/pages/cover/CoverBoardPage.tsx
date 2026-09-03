@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { Plus, CheckCircle, X, XCircle, AlertTriangle } from 'lucide-react'
+import { Plus, CheckCircle, X, XCircle, AlertTriangle, Send, Users } from 'lucide-react'
 import {
   listCoverRequests,
   acceptCoverOffer,
@@ -9,8 +9,10 @@ import {
   approveCoverRequest,
   denyCoverRequest,
   deleteCoverRequest,
+  getCoverCandidates,
+  dispatchCoverOffers,
 } from '../../api/cover'
-import type { CoverRequest, CoverOffer } from '../../types'
+import type { CoverRequest, CoverOffer, CoverCandidate } from '../../types'
 import { CoverRequestCard } from './CoverRequestCard'
 import { CreateCoverRequestModal } from './CreateCoverRequestModal'
 import { PageHeader } from '../../components/shared/PageHeader'
@@ -22,6 +24,117 @@ import { RoleGuard } from '../../components/shared/RoleGuard'
 import { SetupGuard } from '../../components/shared/SetupGuard'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { RefreshCcw } from 'lucide-react'
+
+const TIER_LABELS: Record<string, string> = {
+  '1': 'First choice',
+  '2': 'Second choice',
+  '3': 'Wider pool',
+}
+
+/**
+ * Choose who to offer a cover request to.
+ *
+ * The backend has ranked eligible instructors by tier since cover was built,
+ * but nothing surfaced it — requests could only auto-dispatch by tier, so a
+ * manager who knew who to ask had no way to say so.
+ */
+function ManualDispatchPanel({ request }: { request: CoverRequest }) {
+  const queryClient = useQueryClient()
+  const [selected, setSelected] = useState<number[]>([])
+
+  const { data: tiers, isLoading, isError } = useQuery({
+    queryKey: ['cover-candidates', request.id],
+    queryFn: () => getCoverCandidates(request.id),
+  })
+
+  const { mutate: dispatch, isPending } = useMutation({
+    mutationFn: () => dispatchCoverOffers(request.id, { staff_ids: selected }),
+    onSuccess: ({ offers_sent }) => {
+      queryClient.invalidateQueries({ queryKey: ['cover-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['cover-candidates', request.id] })
+      queryClient.invalidateQueries({ queryKey: ['timetable-events'] })
+      setSelected([])
+      toast.success(
+        offers_sent === 1 ? 'Offer sent' : `${offers_sent} offers sent`
+      )
+    },
+    onError: () => toast.error('Failed to send offers'),
+  })
+
+  function toggle(staffId: number) {
+    setSelected((current) =>
+      current.includes(staffId)
+        ? current.filter((id) => id !== staffId)
+        : [...current, staffId]
+    )
+  }
+
+  if (isLoading) return <p className="text-sm text-gray-400">Finding instructors…</p>
+  if (isError) return <p className="text-sm text-red-500">Couldn't load instructors.</p>
+
+  const groups = Object.entries(tiers ?? {})
+    .filter(([, list]) => list.length > 0)
+    .sort(([a], [b]) => Number(a) - Number(b))
+
+  if (groups.length === 0) {
+    return (
+      <p className="text-sm text-gray-500">
+        No eligible instructors. Cover is only offered to active instructors
+        qualified to teach this class type — check their Classes tab under Staff.
+      </p>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      {groups.map(([tier, candidates]) => (
+        <div key={tier}>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1.5">
+            {TIER_LABELS[tier] ?? `Tier ${tier}`}
+          </p>
+          <ul className="space-y-1">
+            {(candidates as CoverCandidate[]).map((candidate) => (
+              <li key={candidate.staff_id}>
+                <label
+                  className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm ${
+                    candidate.already_offered
+                      ? 'text-gray-400'
+                      : 'text-gray-800 hover:bg-gray-50 cursor-pointer'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    disabled={candidate.already_offered}
+                    checked={selected.includes(candidate.staff_id)}
+                    onChange={() => toggle(candidate.staff_id)}
+                    className="h-4 w-4 rounded border-gray-300 text-cyan-600 focus:ring-cyan-500 disabled:opacity-50"
+                  />
+                  <span>{candidate.name}</span>
+                  {candidate.already_offered && (
+                    <span className="text-xs text-gray-400">already offered</span>
+                  )}
+                </label>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+
+      <Button
+        size="sm"
+        leftIcon={<Send className="h-3.5 w-3.5" />}
+        disabled={selected.length === 0}
+        isLoading={isPending}
+        onClick={() => dispatch()}
+      >
+        {selected.length === 0
+          ? 'Select instructors'
+          : `Send ${selected.length} offer${selected.length === 1 ? '' : 's'}`}
+      </Button>
+    </div>
+  )
+}
+
 
 export function CoverBoardPage() {
   const queryClient = useQueryClient()
@@ -339,6 +452,19 @@ export function CoverBoardPage() {
                 </ul>
               )}
             </div>
+
+            {/* Choose who to offer it to — only while the slot is unfilled */}
+            {['open', 'offered', 'critical'].includes(selectedRequest.status) && (
+              <div className="border-t border-gray-100 pt-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Users className="h-4 w-4 text-gray-400" />
+                  <p className="text-sm font-medium text-gray-500">
+                    Offer to specific instructors
+                  </p>
+                </div>
+                <ManualDispatchPanel request={selectedRequest} />
+              </div>
+            )}
 
             {/* Absence notes */}
             {selectedRequest.notes && (
