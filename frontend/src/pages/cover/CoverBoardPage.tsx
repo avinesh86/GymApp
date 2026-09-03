@@ -44,6 +44,7 @@ export function CoverBoardPage() {
       acceptCoverOffer(requestId, offerId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cover-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['timetable-events'] })
       toast.success('Offer accepted')
       setSelectedRequest(null)
     },
@@ -55,6 +56,7 @@ export function CoverBoardPage() {
       cancelCoverRequest(requestId, reason),
     onSuccess: (updated) => {
       queryClient.invalidateQueries({ queryKey: ['cover-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['timetable-events'] })
       toast.success('Cover request cancelled')
       setSelectedRequest(updated)
       setShowCancelForm(false)
@@ -67,6 +69,7 @@ export function CoverBoardPage() {
     mutationFn: (requestId: number) => deleteCoverRequest(requestId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cover-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['timetable-events'] })
       toast.success('Removed from the board')
     },
     onError: () => toast.error('Failed to remove cover request'),
@@ -76,6 +79,7 @@ export function CoverBoardPage() {
     mutationFn: (requestId: number) => approveCoverRequest(requestId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cover-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['timetable-events'] })
       toast.success('Cover request approved — offers sent')
     },
     onError: () => toast.error('Failed to approve cover request'),
@@ -85,6 +89,7 @@ export function CoverBoardPage() {
     mutationFn: (requestId: number) => denyCoverRequest(requestId, ''),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cover-requests'] })
+      queryClient.invalidateQueries({ queryKey: ['timetable-events'] })
       toast.success('Cover request denied')
     },
     onError: () => toast.error('Failed to deny cover request'),

@@ -68,6 +68,8 @@ export function CreateCoverRequestModal({ isOpen, onClose }: CreateCoverRequestM
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['cover-requests'] })
+      // The event's status becomes needs_cover, so the timetable is stale too.
+      queryClient.invalidateQueries({ queryKey: ['timetable-events'] })
       toast.success('Cover request created')
       onClose()
       resetForm()
@@ -86,6 +88,8 @@ export function CreateCoverRequestModal({ isOpen, onClose }: CreateCoverRequestM
     },
     onSuccess: ({ total, failed }) => {
       queryClient.invalidateQueries({ queryKey: ['cover-requests'] })
+      // The event's status becomes needs_cover, so the timetable is stale too.
+      queryClient.invalidateQueries({ queryKey: ['timetable-events'] })
       if (failed > 0) {
         toast(`${total - failed}/${total} cover requests created`, { icon: '⚠️' })
       } else {
