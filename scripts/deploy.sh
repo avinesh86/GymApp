@@ -22,6 +22,8 @@
 #                    the first entry in ALLOWED_HOSTS in .env.
 #   BACKUP_DIR       where dumps are written   (default: <project>/backups)
 #   SKIP_BACKUP=1    skip the dump (fast redeploys of frontend-only changes)
+#   COMPOSE_FILE     compose file to use. Defaults to docker-compose.prod.yml
+#                    when present, otherwise docker-compose.yml.
 #
 # Exit codes: 0 deployed, 1 deploy failed and code was rolled back,
 #             2 deploy failed and rollback also failed (needs a human).
@@ -49,10 +51,24 @@ fi
 
 # docker-compose (v1) and docker compose (v2) are both in the wild.
 if docker compose version >/dev/null 2>&1; then
-    COMPOSE="docker compose"
+    COMPOSE_BIN="docker compose"
 else
-    COMPOSE="docker-compose"
+    COMPOSE_BIN="docker-compose"
 fi
+
+# The stack on a server is docker-compose.prod.yml: two web replicas, nginx
+# with TLS, certbot, and a frontend with no published port. Without -f, compose
+# reads docker-compose.yml — the dev file — and every deploy quietly reshapes
+# production into the dev topology, republishing :3000 to the internet.
+COMPOSE_FILE="${COMPOSE_FILE:-}"
+if [ -z "$COMPOSE_FILE" ]; then
+    if [ -f "${PROJECT_DIR}/docker-compose.prod.yml" ]; then
+        COMPOSE_FILE="docker-compose.prod.yml"
+    else
+        COMPOSE_FILE="docker-compose.yml"
+    fi
+fi
+COMPOSE="$COMPOSE_BIN -f $COMPOSE_FILE"
 
 cd "$PROJECT_DIR"
 
@@ -82,7 +98,7 @@ rollback() {
     fi
 
     git reset --hard "$PREVIOUS_COMMIT"
-    $COMPOSE build web frontend
+    $COMPOSE build web worker beat frontend
     $COMPOSE up -d --force-recreate web worker beat frontend
 
     echo ""
@@ -141,6 +157,7 @@ banner "FitOps Docker Deploy — branch ${DEPLOY_BRANCH}"
 # ─── 1. Record the current release ───────────────────────────────────────────
 PREVIOUS_COMMIT="$(git rev-parse HEAD)"
 echo ""
+echo "▸ Compose file:    ${COMPOSE_FILE}"
 echo "▸ Current release: $(git log --oneline -1)"
 
 # ─── 2. Pull latest code ─────────────────────────────────────────────────────
@@ -170,11 +187,15 @@ else
     echo "  Wrote $(du -h "$BACKUP_FILE" | cut -f1) to ${BACKUP_FILE}"
 fi
 
-# ─── 4. Rebuild the backend image ────────────────────────────────────────────
-# web, worker and beat share one image, so a single build covers all three.
+# ─── 4. Rebuild the backend images ───────────────────────────────────────────
+# web, worker and beat are three services each with "build: .", so compose
+# produces three separate images from the same source. Building only "web" —
+# which this did — leaves the worker and beat on whatever they were last built
+# from. Production ran a worker months behind, silently failing every cover
+# email, because of exactly that.
 echo ""
-echo "▸ Rebuilding backend image..."
-$COMPOSE build web
+echo "▸ Rebuilding backend images (web, worker, beat)..."
+$COMPOSE build web worker beat
 
 # ─── 5. Check migrations before applying them ────────────────────────────────
 # The old containers are still serving while this runs, so a bad migration set
