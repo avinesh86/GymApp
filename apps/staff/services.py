@@ -1,10 +1,16 @@
 """Staff-related domain services."""
 
 import logging
+from typing import TYPE_CHECKING
 
 from apps.users.constants import UserRole
 from apps.users.emails import send_invite_email
 from apps.users.models import Membership, User
+
+if TYPE_CHECKING:
+    # Imported lazily inside the functions at runtime — apps.staff.models
+    # imports from users, so a module-level import would be circular.
+    from apps.staff.models import StaffProfile
 
 logger = logging.getLogger(__name__)
 
