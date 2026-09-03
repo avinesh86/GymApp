@@ -44,6 +44,13 @@ class UserViewSet(ModelViewSet):
             defaults={"role": user.role, "is_active": True},
         )
 
+        # An instructor needs a StaffProfile as well as a login — that is what
+        # the roster, class assignment and cover offers all work from. Creating
+        # the account alone left them invisible to every one of those.
+        from apps.staff.services import provision_staff_for_user
+
+        provision_staff_for_user(user, self.request.tenant)
+
     def destroy(self, request, *args, **kwargs):
         # Removing a user is per-gym: deactivate their membership in THIS gym.
         # Only disable the login entirely if they have no other active gym.

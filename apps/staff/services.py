@@ -95,3 +95,37 @@ def provision_user_for_staff(staff, *, send_invite: bool = False) -> tuple[User,
     staff.user = user
     staff.save(update_fields=["user", "updated_at"])
     return user, created
+
+
+def provision_staff_for_user(user, tenant) -> tuple["StaffProfile | None", bool]:
+    """Ensure an instructor-level user has a StaffProfile in `tenant`.
+
+    The Access screen creates a login; scheduling, class assignment and the
+    whole cover system work on StaffProfile. Without this, someone added there
+    as an Instructor has an account but is invisible to the roster and can
+    never be offered cover.
+
+    Only instructor-level roles get a profile — an owner or payroll user is not
+    someone you put on the timetable. Returns (profile, created); profile is
+    None when the role does not warrant one.
+    """
+    from apps.staff.models import StaffProfile
+
+    if user.role not in UserRole.STAFF_ROLES:
+        return None, False
+
+    existing = StaffProfile.objects.filter(
+        tenant=tenant, user=user, is_deleted=False
+    ).first()
+    if existing:
+        return existing, False
+
+    profile = StaffProfile.objects.create(
+        tenant=tenant,
+        user=user,
+        name=user.full_name or user.email,
+        email=user.email,
+        role=user.role,
+        status=StaffProfile.Status.ACTIVE,
+    )
+    return profile, True
