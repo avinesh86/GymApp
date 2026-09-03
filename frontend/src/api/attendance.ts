@@ -22,6 +22,19 @@ export async function listAttendance(filters: AttendanceFilters = {}): Promise<A
   return unwrapList(response.data)
 }
 
+/** Paged variant — keeps `count` so the caller can render page controls. */
+export async function listAttendancePage(
+  filters: AttendanceFilters & { page?: number; page_size?: number } = {}
+): Promise<PaginatedResponse<AttendanceRecord>> {
+  const response = await apiClient.get<AttendanceRecord[] | PaginatedResponse<AttendanceRecord>>(
+    'attendance/records/',
+    { params: filters }
+  )
+  return Array.isArray(response.data)
+    ? { count: response.data.length, next: null, previous: null, results: response.data }
+    : response.data
+}
+
 export async function countAwaitingAttendance(
   filters: { from_datetime?: string; to_datetime?: string } = {}
 ): Promise<number> {
