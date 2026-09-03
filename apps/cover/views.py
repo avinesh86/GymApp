@@ -207,6 +207,48 @@ class CoverRequestViewSet(TenantScopedMixin, ModelViewSet):
         logger.info("Cover request %s cancelled by %s: %s", cover_request.pk, request.user.pk, reason)
         return Response(CoverRequestSerializer(cover_request).data)
 
+    @action(detail=True, methods=["post"], url_path="accept", permission_classes=[IsTeamLeader])
+    def accept(self, request, pk=None):
+        """Accept one of this request's offers on the instructor's behalf.
+
+        The board needs this because a manager often hears back by text or in
+        person rather than through the emailed link, and had no way to record
+        it — the only accept paths were the instructor's own button and the
+        accept code.
+        """
+        cover_request = self.get_object()
+
+        offer_id = request.data.get("offer_id")
+        if not offer_id:
+            return Response(
+                {"detail": "offer_id is required."}, status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Scoped to this request, so an offer id from another one cannot be
+        # accepted by passing it here.
+        offer = CoverOffer.objects.filter(
+            pk=offer_id, cover_request=cover_request, is_deleted=False
+        ).first()
+        if offer is None:
+            return Response(
+                {"detail": "That offer does not belong to this cover request."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            accept_cover_offer(
+                offer,
+                accepted_by=request.user,
+                ip_address=request.META.get("REMOTE_ADDR"),
+            )
+        except ValueError as exc:
+            # Raised when the offer is no longer pending — usually because
+            # someone else accepted first.
+            return Response({"detail": str(exc)}, status=status.HTTP_409_CONFLICT)
+
+        cover_request.refresh_from_db()
+        return Response(CoverRequestSerializer(cover_request).data)
+
     @action(detail=True, methods=["post"], url_path="send-offers", permission_classes=[IsTeamLeader])
     def send_offers(self, request, pk=None):
         """Manual dispatch: optionally to a chosen set of staff (manual select)."""
