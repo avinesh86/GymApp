@@ -18,6 +18,11 @@ export async function listCoverRequests(filters: CoverFilters = {}): Promise<Cov
   return unwrapList(response.data)
 }
 
+/** Removes a resolved request from the board. Soft delete — history is kept. */
+export async function deleteCoverRequest(id: number): Promise<void> {
+  await apiClient.delete(`cover/requests/${id}/`)
+}
+
 export async function getCoverRequest(id: number): Promise<CoverRequest> {
   const response = await apiClient.get<CoverRequest>(`cover/requests/${id}/`)
   return response.data

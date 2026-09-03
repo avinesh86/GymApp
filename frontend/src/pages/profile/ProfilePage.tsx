@@ -493,6 +493,40 @@ function PaymentTab({ staffId }: PaymentTabProps) {
 
 // ─── Profile Page ─────────────────────────────────────────────────────────────
 
+function AccountSummary() {
+  const { user } = useAuth()
+  if (!user) return null
+
+  const displayName = [user.first_name, user.last_name].filter(Boolean).join(' ')
+
+  return (
+    <Card className="mb-6">
+      <div className="flex items-start gap-4">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-cyan-50 text-cyan-600">
+          <User className="h-6 w-6" />
+        </div>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <h3 className="text-base font-semibold text-gray-900">
+              {displayName || user.email}
+            </h3>
+            <Badge variant="blue">{ROLE_LABELS[user.role] ?? user.role}</Badge>
+          </div>
+          <p className="mt-1 flex items-center gap-1.5 text-sm text-gray-500">
+            <Mail className="h-4 w-4" />
+            {user.email}
+          </p>
+          <p className="mt-3 text-sm text-gray-500">
+            You have no staff profile, so you do not appear on the timetable or
+            receive cover offers. That is expected for this role.
+          </p>
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+
 export function ProfilePage() {
   const { user } = useAuth()
   const [activeTab, setActiveTab] = useState<ProfileTab>('info')
@@ -506,14 +540,14 @@ export function ProfilePage() {
   if (isLoading) return <PageSpinner />
 
   if (!staffProfile) {
-    // Accounts without a staff profile (e.g. owner/admin) still manage their
-    // own password here.
+    // Owners, admins and payroll have no staff profile — they are not on the
+    // timetable. They still need to see who they are signed in as, which gym,
+    // and with what role, so show their account details rather than dropping
+    // them straight onto a password form.
     return (
       <div className="max-w-3xl mx-auto">
         <PageHeader title="My Profile" />
-        <p className="text-sm text-gray-500 mb-6">
-          No staff profile is linked to your account, but you can still manage your password.
-        </p>
+        <AccountSummary />
         <SecurityTab />
       </div>
     )

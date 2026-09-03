@@ -2,7 +2,14 @@ import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { Plus, CheckCircle, X, XCircle, AlertTriangle } from 'lucide-react'
-import { listCoverRequests, acceptCoverOffer, cancelCoverRequest, approveCoverRequest, denyCoverRequest } from '../../api/cover'
+import {
+  listCoverRequests,
+  acceptCoverOffer,
+  cancelCoverRequest,
+  approveCoverRequest,
+  denyCoverRequest,
+  deleteCoverRequest,
+} from '../../api/cover'
 import type { CoverRequest, CoverOffer } from '../../types'
 import { CoverRequestCard } from './CoverRequestCard'
 import { CreateCoverRequestModal } from './CreateCoverRequestModal'
@@ -54,6 +61,15 @@ export function CoverBoardPage() {
       setCancellationReason('')
     },
     onError: () => toast.error('Failed to cancel cover request'),
+  })
+
+  const { mutate: removeRequest } = useMutation({
+    mutationFn: (requestId: number) => deleteCoverRequest(requestId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cover-requests'] })
+      toast.success('Removed from the board')
+    },
+    onError: () => toast.error('Failed to remove cover request'),
   })
 
   const { mutate: approve } = useMutation({
@@ -191,6 +207,11 @@ export function CoverBoardPage() {
                 key={request.id}
                 request={request}
                 onViewDetails={setSelectedRequest}
+                onRemove={(r) => {
+                  if (confirm('Remove this request from the board? The record is kept for reporting.')) {
+                    removeRequest(r.id)
+                  }
+                }}
                 muted
               />
             ))}

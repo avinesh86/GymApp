@@ -62,6 +62,31 @@ class CoverRequestViewSet(TenantScopedMixin, ModelViewSet):
             .order_by("-created_at")
         )
 
+    def get_permissions(self):
+        # Raising a request is open to instructors; clearing one off the board
+        # is not — that is a manager's call.
+        if getattr(self, "action", None) == "destroy":
+            return [IsGymManager()]
+        return super().get_permissions()
+
+    def destroy(self, request, *args, **kwargs):
+        """Remove a resolved request from the board. Soft delete, so the
+        history behind reliability scores and invoicing is preserved."""
+        from .state import ACTIVE_STATUSES
+
+        instance = self.get_object()
+        if instance.status in ACTIVE_STATUSES:
+            return Response(
+                {
+                    "detail": (
+                        "This request is still live. Cancel it first, "
+                        "then it can be removed from the board."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return super().destroy(request, *args, **kwargs)
+
     def _user_is_manager(self) -> bool:
         return self.request.user.role in MANAGER_ROLES
 
