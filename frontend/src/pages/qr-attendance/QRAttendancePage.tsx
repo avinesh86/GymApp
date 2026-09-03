@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { QRCodeSVG } from 'qrcode.react'
-import { format } from 'date-fns'
+import { addDays, format, isToday, parseISO, subDays } from 'date-fns'
 import { Info, QrCode } from 'lucide-react'
 import { listQRTokens, createQRToken } from '../../api/attendance'
 import { listEvents } from '../../api/timetable'
@@ -16,18 +16,24 @@ import { Card } from '../../components/ui/Card'
 
 export function QRAttendancePage() {
   const queryClient = useQueryClient()
-  const today = format(new Date(), 'yyyy-MM-dd')
+
+  // A week either side of today. Showing only today meant a class that ran
+  // yesterday and was never counted had no way to get a code, and codes could
+  // not be printed in advance.
+  const from = format(subDays(new Date(), 7), 'yyyy-MM-dd')
+  const to = format(addDays(new Date(), 7), 'yyyy-MM-dd')
+
   const [selectedToken, setSelectedToken] = useState<QRToken | null>(null)
   const [generatingFor, setGeneratingFor] = useState<number | null>(null)
 
-  const { data: todaysEvents = [], isLoading: eventsLoading } = useQuery({
-    queryKey: ['timetable-events', 'today', today],
-    queryFn: () => listEvents({ from: today, to: today }),
+  const { data: events = [], isLoading: eventsLoading } = useQuery({
+    queryKey: ['timetable-events', 'qr-window', from, to],
+    queryFn: () => listEvents({ from, to }),
   })
 
   const { data: qrTokens = [], isLoading: tokensLoading } = useQuery({
-    queryKey: ['qr-tokens', today],
-    queryFn: () => listQRTokens(today),
+    queryKey: ['qr-tokens', from, to],
+    queryFn: () => listQRTokens({ from, to }),
   })
 
   const { mutate: generateToken, isPending: isGenerating } = useMutation({
@@ -60,7 +66,7 @@ export function QRAttendancePage() {
     <div className="max-w-2xl mx-auto">
       <PageHeader
         title="QR Attendance"
-        subtitle={`${format(new Date(), 'EEEE, d MMMM')} · ${todaysEvents.length} class${todaysEvents.length !== 1 ? 'es' : ''} today`}
+        subtitle={`${events.length} class${events.length !== 1 ? 'es' : ''} in the last and next 7 days`}
       />
 
       {/* How it works */}
@@ -69,23 +75,24 @@ export function QRAttendancePage() {
         <div>
           <p className="text-sm font-medium text-blue-800">How it works</p>
           <p className="text-sm text-blue-600 mt-0.5">
-            Generate a QR code for each class. Instructors scan the code to record attendance
-            — no login required. QR codes expire after use.
+            Generate a QR code for each class. Instructors scan it to record attendance —
+            no login required. A code keeps working until the class is counted, so you can
+            print them ahead of time.
           </p>
         </div>
       </div>
 
       {isLoading ? (
         <PageSpinner />
-      ) : todaysEvents.length === 0 ? (
+      ) : events.length === 0 ? (
         <EmptyState
           icon={<QrCode className="h-12 w-12" />}
-          title="No classes scheduled for today"
-          description="QR codes will appear here for today's scheduled classes"
+          title="No classes in this period"
+          description="QR codes appear here for classes within a week either side of today"
         />
       ) : (
         <div className="flex flex-col gap-3">
-          {todaysEvents.map((event) => {
+          {events.map((event) => {
             const existingToken = getTokenForEvent(event.id)
             const isThisGenerating = isGenerating && generatingFor === event.id
 
@@ -94,6 +101,10 @@ export function QRAttendancePage() {
                 <div>
                   <p className="font-semibold text-gray-900">{event.class_type_name}</p>
                   <p className="text-sm text-gray-500 mt-0.5">
+                    {isToday(parseISO(event.date))
+                      ? 'Today'
+                      : format(parseISO(event.date), 'EEE d MMM')}
+                    {' · '}
                     {event.start_time} – {event.end_time} · {event.site_name}
                   </p>
                   {existingToken && (

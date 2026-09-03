@@ -46,9 +46,11 @@ export async function updateAttendance(id: number, count: number): Promise<Atten
 
 // ─── QR Tokens ────────────────────────────────────────────────────────────────
 
-export async function listQRTokens(date?: string): Promise<QRToken[]> {
+export async function listQRTokens(
+  range?: { from: string; to: string }
+): Promise<QRToken[]> {
   const response = await apiClient.get<QRToken[] | PaginatedResponse<QRToken>>('attendance/qr-tokens/', {
-    params: date ? { date } : {},
+    params: range ?? {},
   })
   return unwrapList(response.data)
 }

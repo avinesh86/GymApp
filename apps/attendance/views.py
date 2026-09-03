@@ -155,14 +155,36 @@ class QRAttendanceTokenViewSet(TenantScopedMixin, ModelViewSet):
         return super().get_permissions()
 
     def get_queryset(self):
-        return QRAttendanceToken.objects.filter(
+        """Tokens for this gym, optionally narrowed to a window of classes.
+
+        `from` and `to` are dates against the class, not the token, so the QR
+        page can ask "which of these classes already has a code?" for whatever
+        range it is showing.
+        """
+        qs = QRAttendanceToken.objects.filter(
             timetable_event__tenant=self.request.tenant
         )
+        params = self.request.query_params
+        date_from = params.get("from")
+        date_to = params.get("to")
+        if date_from:
+            qs = qs.filter(timetable_event__start_datetime__date__gte=date_from)
+        if date_to:
+            qs = qs.filter(timetable_event__start_datetime__date__lte=date_to)
+        # Ordered so pagination is stable — an unordered queryset can repeat or
+        # skip rows between pages.
+        return qs.order_by("-timetable_event__start_datetime", "-created_at")
+
+    # A backstop only — is_valid() closes a code as soon as the class is
+    # counted. Measured from the class, not from generation, so codes can be
+    # printed in advance.
+    TOKEN_LIFETIME_AFTER_CLASS = timedelta(days=7)
 
     def perform_create(self, serializer):
         event_id = self.request.data.get("timetable_event")
         event = TimetableEvent.objects.get(pk=event_id, tenant=self.request.tenant)
-        expires_at = timezone.now() + timedelta(hours=2)
+        ends_at = event.end_datetime or event.start_datetime
+        expires_at = ends_at + self.TOKEN_LIFETIME_AFTER_CLASS
         serializer.save(timetable_event=event, expires_at=expires_at)
 
     @action(detail=False, methods=["get"], url_path="info", permission_classes=[])
@@ -211,10 +233,15 @@ class QRAttendanceTokenViewSet(TenantScopedMixin, ModelViewSet):
             return Response({"detail": "Invalid token."}, status=status.HTTP_404_NOT_FOUND)
 
         if not qr_token.is_valid():
-            return Response(
-                {"detail": "Token is expired or already used."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            # Say which, so the person holding the phone knows whether to find
+            # a manager or simply stop.
+            if qr_token.attendance_already_recorded():
+                detail = "Attendance for this class has already been recorded."
+            elif qr_token.is_used:
+                detail = "This code has already been used."
+            else:
+                detail = "This code has expired. Ask a manager for a new one."
+            return Response({"detail": detail}, status=status.HTTP_400_BAD_REQUEST)
 
         record, created = AttendanceRecord.objects.update_or_create(
             timetable_event=qr_token.timetable_event,
