@@ -61,6 +61,8 @@ export interface TenantSettings {
   notification_email_password?: string
   // true when a password is already stored server-side
   notification_email_password_set: boolean
+  /** True when the server sends mail itself — no mail account for the gym to configure. */
+  email_sending_managed: boolean
   // frontend-only prefs (not persisted server-side yet)
   week_start_day?: number
   default_timetable_view?: 'week' | 'list'

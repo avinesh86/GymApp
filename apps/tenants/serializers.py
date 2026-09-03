@@ -35,6 +35,8 @@ class TenantSettingsSerializer(serializers.ModelSerializer):
     )
     # True when a password has already been saved (lets the frontend show a placeholder)
     notification_email_password_set = serializers.SerializerMethodField(read_only=True)
+    # True when the server sends mail itself and the gym has nothing to configure.
+    email_sending_managed = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = TenantSettings
@@ -55,11 +57,25 @@ class TenantSettingsSerializer(serializers.ModelSerializer):
             "notification_from_name",
             "notification_email_password",
             "notification_email_password_set",
+            "email_sending_managed",
         ]
-        read_only_fields = ["id", "notification_email_password_set"]
+        read_only_fields = ["id", "notification_email_password_set", "email_sending_managed"]
 
     def get_notification_email_password_set(self, obj: TenantSettings) -> bool:
         return bool(obj._notification_email_password)
+
+    def get_email_sending_managed(self, obj: TenantSettings) -> bool:
+        """Whether the server sends mail on the gym's behalf.
+
+        With Resend configured the gym supplies no mail account at all — the
+        from-address belongs to the verified domain and their own address
+        becomes the reply-to, so the app password is never read. Without it,
+        mail goes over SMTP using that password and the field is still needed.
+        Deployments differ, so this is reported rather than assumed.
+        """
+        from django.conf import settings
+
+        return bool(getattr(settings, "RESEND_API_KEY", ""))
 
     def update(self, instance: TenantSettings, validated_data: dict) -> TenantSettings:
         raw_password = validated_data.pop("notification_email_password", None)
