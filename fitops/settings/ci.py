@@ -33,7 +33,11 @@ CELERY_RESULT_BACKEND = "django-db"
 EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
 
 # ─── Encryption key (test-only) ─────────────────────────────────────────────
-FIELD_ENCRYPTION_KEY = "RFhRaklBYlZJVWRfZm50RmhzUWVLYkhKdGxfX0Y1RGM9"
+# Must be a real Fernet key: 32 bytes, url-safe base64. The previous value was
+# base64-encoded twice, so it decoded to 33 bytes and Fernet rejected it —
+# every test that stored an encrypted field failed with "Fernet key must be 32
+# url-safe base64-encoded bytes", and no test could exercise encryption at all.
+FIELD_ENCRYPTION_KEY = "Zml0b3BzLWNpLXRlc3Qta2V5LTMyLWJ5dGVzLWxvbmc="
 
 # ─── Stripe (test mode — no real calls) ─────────────────────────────────────
 STRIPE_SECRET_KEY = ""

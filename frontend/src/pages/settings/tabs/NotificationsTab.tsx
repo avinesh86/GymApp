@@ -84,6 +84,10 @@ export function NotificationsTab() {
     }
   }, [settings])
 
+  // Reported by the server: with Resend configured there is no mail account
+  // for the gym to connect, so the password field would do nothing.
+  const emailSendingManaged = settings?.email_sending_managed ?? false
+
   useEffect(() => {
     if (waAccount) {
       setWaBusinessNumber(waAccount.business_phone_number ?? '')
@@ -182,34 +186,55 @@ export function NotificationsTab() {
       {/* ── Outgoing email ───────────────────────────────────────────────── */}
       <Card>
         <h3 className="text-sm font-semibold text-gray-900 mb-1">Outgoing Email</h3>
-        <p className="text-xs text-gray-400 mb-4">
-          Emails will be sent from this address. Use a Gmail App Password — not your regular Gmail password.{' '}
-          <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="text-cyan-600 hover:underline">
-            Generate one here →
-          </a>
-        </p>
+        {/*
+          With sending managed by the server there is no mail account to
+          connect: the from-address belongs to a verified domain and the gym's
+          address is used as the reply-to. Showing a Gmail App Password field
+          there invites people to generate one that is never read.
+        */}
+        {emailSendingManaged ? (
+          <p className="text-xs text-gray-400 mb-4">
+            FitOps sends these emails for you — there is no mail account to connect.
+            Replies go to the address below.
+          </p>
+        ) : (
+          <p className="text-xs text-gray-400 mb-4">
+            Emails will be sent from this address. Use a Gmail App Password — not your regular Gmail password.{' '}
+            <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="text-cyan-600 hover:underline">
+              Generate one here →
+            </a>
+          </p>
+        )}
         <div className="space-y-3">
           <Input label="Sender Name" value={fromName} onChange={(e) => setFromName(e.target.value)} placeholder="FitOps" />
-          <Input label="Sender Email" type="email" value={fromEmail} onChange={(e) => setFromEmail(e.target.value)} placeholder="you@gmail.com" />
-          <div className="flex flex-col gap-1">
-            <label className="text-sm font-medium text-gray-700">
-              Gmail App Password
-              {passwordSet && !emailPassword && <span className="ml-2 text-xs font-normal text-green-600">✓ saved</span>}
-            </label>
-            <div className="relative">
-              <input
-                type={showEmailPassword ? 'text' : 'password'}
-                value={emailPassword}
-                onChange={(e) => setEmailPassword(e.target.value)}
-                placeholder={passwordSet ? '••••••••••••••••' : 'Enter app password'}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 pr-16 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
-              />
-              <button type="button" onClick={() => setShowEmailPassword((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-600">
-                {showEmailPassword ? 'Hide' : 'Show'}
-              </button>
+          <Input
+            label={emailSendingManaged ? 'Reply-to Address' : 'Sender Email'}
+            type="email"
+            value={fromEmail}
+            onChange={(e) => setFromEmail(e.target.value)}
+            placeholder={emailSendingManaged ? 'replies@yourgym.co.nz' : 'you@gmail.com'}
+          />
+          {!emailSendingManaged && (
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-gray-700">
+                Gmail App Password
+                {passwordSet && !emailPassword && <span className="ml-2 text-xs font-normal text-green-600">✓ saved</span>}
+              </label>
+              <div className="relative">
+                <input
+                  type={showEmailPassword ? 'text' : 'password'}
+                  value={emailPassword}
+                  onChange={(e) => setEmailPassword(e.target.value)}
+                  placeholder={passwordSet ? '••••••••••••••••' : 'Enter app password'}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 pr-16 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                />
+                <button type="button" onClick={() => setShowEmailPassword((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-600">
+                  {showEmailPassword ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              <p className="text-xs text-gray-400">Leave blank to keep the existing password.</p>
             </div>
-            <p className="text-xs text-gray-400">Leave blank to keep the existing password.</p>
-          </div>
+          )}
         </div>
         <div className="mt-5">
           <Button onClick={() => saveEmail()} isLoading={savingEmail}>Save Email Settings</Button>
