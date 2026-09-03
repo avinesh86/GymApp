@@ -1,23 +1,16 @@
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-
 from django.utils import timezone as djtz
 from rest_framework import serializers
+
+from apps.core.timezones import tenant_timezone
 
 from .models import ClassBonus, ClassType, RecurringTimetableRule, TimetableEvent
 
 
 def _tenant_timezone(event):
-    """Return the tenant's configured timezone, falling back to the project
-    default.  Times are stored as UTC; the timetable must display them in the
-    gym's local time, otherwise a 9am NZ class renders as a 9pm UTC class."""
-    settings = getattr(event.tenant, "settings", None)
-    tz_name = getattr(settings, "timezone", None)
-    if tz_name:
-        try:
-            return ZoneInfo(tz_name)
-        except (ZoneInfoNotFoundError, ValueError):
-            pass
-    return djtz.get_current_timezone()
+    """The tenant's timezone for an event. Times are stored as UTC; the
+    timetable must show the gym's local time, or a 9am NZ class renders as
+    9pm the day before."""
+    return tenant_timezone(event.tenant)
 
 
 class ClassBonusSerializer(serializers.ModelSerializer):

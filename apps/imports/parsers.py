@@ -6,7 +6,9 @@ Each parser returns (rows_ok, rows_failed, error_log).
 import csv
 import io
 import logging
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from zoneinfo import ZoneInfo
+
+from apps.core.timezones import tenant_timezone
 
 from django.conf import settings
 
@@ -60,19 +62,7 @@ def _tenant_timezone(tenant) -> ZoneInfo:
     Gyms write local wall-clock times in their spreadsheets, so a bare
     "2026-06-08T06:00:00" means 6am at the gym, not 6am UTC.
     """
-    # Reverse one-to-one raises AttributeError when settings were never
-    # created, so getattr's default covers it.
-    name = getattr(getattr(tenant, "settings", None), "timezone", "") or settings.TIME_ZONE
-    try:
-        return ZoneInfo(name)
-    except (ZoneInfoNotFoundError, ValueError):
-        logger.warning(
-            "Tenant %s has unknown timezone %r — falling back to %s",
-            tenant.pk,
-            name,
-            settings.TIME_ZONE,
-        )
-        return ZoneInfo(settings.TIME_ZONE)
+    return tenant_timezone(tenant)
 
 
 def _read_csv(file_content: bytes) -> list[dict]:
