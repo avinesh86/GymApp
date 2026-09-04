@@ -216,19 +216,25 @@ export function NotificationsTab() {
           />
           {!emailSendingManaged && (
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium text-gray-700">
+              <label htmlFor="gmail-app-password" className="text-sm font-medium text-gray-700">
                 Gmail App Password
                 {passwordSet && !emailPassword && <span className="ml-2 text-xs font-normal text-green-600">✓ saved</span>}
               </label>
               <div className="relative">
                 <input
+                  id="gmail-app-password"
                   type={showEmailPassword ? 'text' : 'password'}
                   value={emailPassword}
                   onChange={(e) => setEmailPassword(e.target.value)}
                   placeholder={passwordSet ? '••••••••••••••••' : 'Enter app password'}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 pr-16 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                 />
-                <button type="button" onClick={() => setShowEmailPassword((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-600">
+                <button
+                  type="button"
+                  onClick={() => setShowEmailPassword((v) => !v)}
+                  aria-label={showEmailPassword ? 'Hide password' : 'Show password'}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 hover:text-gray-600"
+                >
                   {showEmailPassword ? 'Hide' : 'Show'}
                 </button>
               </div>
