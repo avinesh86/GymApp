@@ -49,10 +49,7 @@ test.describe.serial('setting up a gym', () => {
     await openSettingsTab(page, 'Notifications')
 
     const managed = await page.getByLabel(/Reply-to Address/i).isVisible().catch(() => false)
-    // Located by text, not by label: the password input has no associated
-    // <label>, so getByLabel cannot see it. Worth fixing in the app — a screen
-    // reader cannot announce it either.
-    const passwordField = page.getByText(/Gmail App Password/i).first()
+    const passwordField = page.getByLabel(/Gmail App Password/i)
 
     if (managed) {
       await expect(passwordField).toBeHidden()

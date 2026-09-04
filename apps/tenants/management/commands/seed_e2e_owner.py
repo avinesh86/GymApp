@@ -35,6 +35,12 @@ class Command(BaseCommand):
         parser.add_argument("--email", default=DEFAULT_EMAIL)
         parser.add_argument("--password", default=DEFAULT_PASSWORD)
         parser.add_argument(
+            "--create-missing",
+            action="store_true",
+            help="Create the gym and its host if they do not exist. For a fresh "
+            "database, such as CI's.",
+        )
+        parser.add_argument(
             "--reset",
             action="store_true",
             help="Also delete records left behind by previous runs. Only touches "
@@ -47,11 +53,26 @@ class Command(BaseCommand):
         tenant_domain = (
             TenantDomain.objects.select_related("tenant").filter(domain=domain).first()
         )
+        if tenant_domain is None and options["create_missing"]:
+            from apps.tenants.models import Tenant, TenantSettings
+
+            tenant, _ = Tenant.objects.get_or_create(
+                slug="e2e-gym",
+                defaults={"name": "E2E Gym", "is_active": True},
+            )
+            TenantSettings.objects.get_or_create(
+                tenant=tenant, defaults={"timezone": "Pacific/Auckland"}
+            )
+            tenant_domain = TenantDomain.objects.create(
+                tenant=tenant, domain=domain, is_primary=True
+            )
+            self.stdout.write(f"  Created gym '{tenant.slug}' for host {domain}")
+
         if tenant_domain is None:
             known = ", ".join(TenantDomain.objects.values_list("domain", flat=True)) or "none"
             raise CommandError(
                 f"No gym is registered against '{domain}'. Known hosts: {known}. "
-                f"Add one with add_tenant_domain first."
+                f"Add one with add_tenant_domain, or pass --create-missing."
             )
 
         tenant = tenant_domain.tenant

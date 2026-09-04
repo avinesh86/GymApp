@@ -63,12 +63,16 @@ time. Worth adding once those exist.
 `tests/test_e2e_attendance_and_invoicing.py`; the click-through versions are
 still to write.
 
-## Accessibility gaps found while writing these
+## In CI
 
-Three form controls have no accessible name, so `getByLabel` cannot find them
-and a screen reader would not announce them either. Each is worked around with
-a comment in the spec:
+The `UI Tests` job runs the whole suite on every pull request. It has no nginx,
+so Vite proxies straight to Django via `VITE_API_PROXY_TARGET`, and the gym is
+registered against `127.0.0.1` because `changeOrigin` makes that the Host the
+backend sees.
 
-- the Gmail App Password field in Settings → Notifications
-- the Assign Instructor select in the class Manage tab (its "label" is a `<p>`)
-- the class detail modal has no `role="dialog"`
+It also needs a file-backed database rather than the in-memory one the Python
+tests use: `migrate` and `runserver` are separate processes, and an in-memory
+SQLite dies with the one that made it. Hence `CI_SQLITE_PATH`.
+
+On failure the HTML report is uploaded as an artifact, with traces, videos and
+screenshots of the failing step.

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, useId } from 'react'
 import { X } from 'lucide-react'
 
 interface ModalProps {
@@ -36,6 +36,10 @@ export function Modal({
     }
   }, [isOpen])
 
+  // Ties aria-labelledby to the heading. useId keeps it unique when more
+  // than one modal is mounted.
+  const titleId = `modal-title-${useId()}`
+
   if (!isOpen) return null
 
   return (
@@ -48,6 +52,12 @@ export function Modal({
 
       {/* Modal panel */}
       <div
+        // Announced as a dialog and named by its own heading. Without this a
+        // screen reader gives no indication a dialog opened, and nothing tells
+        // it the page behind is inert.
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         className={[
           'relative w-full bg-white rounded-xl shadow-xl',
           sizeClasses[size],
@@ -56,9 +66,10 @@ export function Modal({
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+          <h2 id={titleId} className="text-lg font-semibold text-gray-900">{title}</h2>
           <button
             onClick={onClose}
+            aria-label="Close"
             className="rounded-lg p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
           >
             <X className="h-5 w-5" />

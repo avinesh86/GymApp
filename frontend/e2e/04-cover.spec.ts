@@ -22,14 +22,7 @@ test.describe.serial('cover', () => {
     await openFirstClass(page)
     await page.getByRole('button', { name: 'Manage', exact: true }).click()
 
-    // Identified by its "Unassigned" option, which no other select has.
-    // "Assign Instructor" is a <p> rather than a <label>, so the select has no
-    // accessible name, and the timetable's own filter dropdowns sit behind the
-    // modal and still count as visible.
-    const instructorSelect = page
-      .locator('select')
-      .filter({ has: page.getByRole('option', { name: 'Unassigned' }) })
-    await instructorSelect.selectOption({ index: 1 })
+    await page.getByLabel('Assign Instructor').selectOption({ index: 1 })
 
     // The button reads "Unassign Instructor" until someone is chosen, so its
     // label is itself the confirmation that the selection took.

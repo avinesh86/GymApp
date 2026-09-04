@@ -4,6 +4,8 @@ CI-specific Django settings.
 Uses SQLite for fast, zero-dependency test runs in GitHub Actions.
 No Redis, no Celery broker, no external services required.
 """
+from decouple import config
+
 from .base import *  # noqa: F401, F403
 
 DEBUG = False
@@ -13,10 +15,13 @@ SECRET_KEY = "ci-test-secret-key-not-for-production"
 ALLOWED_HOSTS = ["*"]
 
 # ─── SQLite for CI (no MySQL service needed) ─────────────────────────────────
+# In-memory by default, which is right for the test runner. The UI tests need
+# a file instead: they migrate in one process and serve from another, and an
+# in-memory database dies with the process that made it.
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": ":memory:",
+        "NAME": config("CI_SQLITE_PATH", default=":memory:"),
         "TEST": {
             "NAME": ":memory:",
         },

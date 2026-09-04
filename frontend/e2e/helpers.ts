@@ -56,6 +56,9 @@ export async function goToSection(page: Page, label: string, heading = label) {
   ).toBeVisible()
 }
 
+/** The open modal, now that it announces itself as one. */
+export const dialog = (page: Page) => page.getByRole('dialog')
+
 /** Opens one of the tabs inside Settings. */
 export async function openSettingsTab(page: Page, tab: string) {
   await goToSection(page, 'Settings')
