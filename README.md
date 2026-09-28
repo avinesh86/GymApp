@@ -2,6 +2,10 @@
 
 Production-ready Django 5 SaaS application for gym operations management.
 
+> **New here?** Start with [`docs/START_HERE.md`](docs/START_HERE.md) (no coding
+> experience needed), then [`docs/RUNBOOK.md`](docs/RUNBOOK.md) for releases,
+> rollbacks and day-to-day operations.
+
 ## Features
 
 - Multi-tenant architecture (subdomain + custom domain routing)
