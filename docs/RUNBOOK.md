@@ -71,7 +71,7 @@ Rules:
 3. Claude makes a branch from `test`, changes the code, runs the tests and
    opens a pull request into `test`.
 4. On the pull request, wait for **CI** to go green (Python tests, lint,
-   frontend build). If it's red, ask Claude: "CI failed on the PR, fix it."
+   frontend build, UI tests). If it's red, ask Claude: "CI failed on the PR, fix it."
 5. Read the pull request description and, for anything user-facing, try it
    locally. Ask Claude to explain anything you don't follow.
 6. Merge the pull request into `test` (**Squash and merge** is fine here).
@@ -179,7 +179,7 @@ These settings stop mistakes such as pushing straight to production.
    `test`:
    - Require a pull request before merging.
    - Require status checks to pass: **Python Tests**, **Lint & Format Check**,
-     **Frontend Build Check**.
+     **Frontend Build Check**, **UI Tests**.
 2. **Default branch** (Settings → General): set to `test`, so new pull
    requests target `test` by default.
 3. **Deploy secrets** (Settings → Secrets and variables → Actions):
