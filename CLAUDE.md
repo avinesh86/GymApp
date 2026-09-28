@@ -64,6 +64,13 @@ docker-compose exec web python manage.py makemigrations <app>
 docker-compose exec web python manage.py migrate
 ```
 
+## Branches & Releases
+- `main` = production (merging deploys automatically). `test` = next release.
+- New work: branch off `test`, open the PR into `test`. Never commit or push to `main` or `test` directly.
+- Release: PR from `test` → `main`, merged with a **merge commit** (not squash) so the branches stay in step.
+- Hotfix: branch off `main`, PR into `main`, then PR `main` → `test` so the next release keeps the fix.
+- Always add tests with bug fixes. Full procedure: `docs/RUNBOOK.md`.
+
 ## Key Models
 
 ### TimetableEvent
