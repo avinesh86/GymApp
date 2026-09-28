@@ -536,9 +536,12 @@ function ManageTab({ event, onClose }: { event: TimetableEvent; onClose: () => v
       <div className="flex flex-col gap-3">
         {/* Assign instructor */}
         <div>
-          <p className="text-xs text-gray-500 mb-1.5">Assign Instructor</p>
+          <label htmlFor="assign-instructor" className="block text-xs text-gray-500 mb-1.5">
+            Assign Instructor
+          </label>
           <div className="flex gap-2">
             <select
+              id="assign-instructor"
               value={selectedInstructor}
               onChange={(e) => setSelectedInstructor(e.target.value)}
               className={`${inputClass} flex-1`}
