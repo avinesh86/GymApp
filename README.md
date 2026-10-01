@@ -151,7 +151,7 @@ better results:
 - "How does saving an attendance count work, from the button to the database?"
 - "Which roles can cancel a cover request, and where is that checked?"
 
-**Fixing a bug**
+**Fixing a bug** (full walkthrough: `docs/RUNBOOK.md` → "Fixing a bug with Claude")
 - "Changing a class's start and end time doesn't save. Steps: edit a class,
   set new times, save, reopen it, the old times are back. Find the cause, fix
   it, and add a test that would have caught it. Branch off `test` and open a

@@ -107,7 +107,8 @@ Pick something small and low-risk, such as a wording change on a page:
 
 Then follow **Making a change with Claude** in `docs/RUNBOOK.md`.
 
-For more ready-to-use prompts, see **Working with Claude** in `README.md`.
+To fix a bug, follow **Fixing a bug with Claude: a full example** in
+`docs/RUNBOOK.md` section 3. For more ready-to-use prompts, see **Working with Claude** in `README.md`.
 The shortest one is: "Follow the runbook and fix this: <what's wrong>."
 
 ---
