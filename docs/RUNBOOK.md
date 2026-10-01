@@ -62,6 +62,8 @@ Rules:
 
 1. Open Claude Code on the `avinesh86/GymApp` repo.
 2. Describe what you want in plain words. Include steps to reproduce for bugs.
+   The shortest form is "Follow the runbook and fix this: <problem>". More
+   examples are under **Working with Claude** in `README.md`.
    Examples:
    - "Changing a class's start and end time doesn't save. Find the cause, fix
      it, and add tests. Branch off `test` and open a pull request into `test`."
