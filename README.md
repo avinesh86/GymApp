@@ -32,26 +32,41 @@ Production-ready Django 5 SaaS application for gym operations management.
 
 ## Local Development with Docker
 
+You only need [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+(or Docker Engine with Compose v2) installed and running. Python and Node run
+inside the containers.
+
 ### 1. Clone and configure environment
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/avinesh86/GymApp.git
 cd GymApp
 cp .env.example .env
 ```
 
-Edit `.env` and set at minimum:
+Open `.env` in a text editor and replace these two placeholder values. Docker
+can generate them for you, so nothing else needs installing:
 
+```bash
+# DJANGO_SECRET_KEY
+docker run --rm python:3.12-slim python -c "import secrets; print(secrets.token_urlsafe(50))"
+
+# FIELD_ENCRYPTION_KEY
+docker run --rm python:3.12-slim python -c "import base64, secrets; print(base64.urlsafe_b64encode(secrets.token_bytes(32)).decode())"
 ```
-DJANGO_SECRET_KEY=<generate a long random string>
-FIELD_ENCRYPTION_KEY=<generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())">
-```
+
+Everything else in `.env.example` already works for local development.
 
 ### 2. Start all services
 
 ```bash
 docker compose up --build
 ```
+
+The first build takes several minutes. Database migrations run automatically
+when the `web` container starts. Leave this terminal running and open a second
+one in the same folder for the next steps. Stop everything with **Ctrl+C**, or
+`docker compose down` from another terminal.
 
 ### 3. Seed sample data
 
@@ -66,7 +81,30 @@ This creates:
 - 3 class types (Yoga, Spin, HIIT)
 - 7 days of timetable events
 
-### 4. Get a JWT token
+### 4. Open the app
+
+Go to **http://localhost:3000** and log in with one of the seeded users:
+
+| Email | Role |
+|---|---|
+| `owner@demogym.com` | Owner (everything) |
+| `admin@demogym.com` | Admin |
+| `manager@demogym.com` | Gym manager |
+| `payroll@demogym.com` | Payroll |
+| `instructor1@demogym.com` | Instructor |
+
+Password for all: `FitOps2024!`. Log in as different roles to see what each
+can access.
+
+### 5. Run the tests
+
+```bash
+docker compose exec web pytest
+```
+
+More options, including frontend tests, are under [Running Tests](#running-tests).
+
+### Calling the API directly (optional)
 
 ```bash
 curl -X POST http://localhost/api/v1/auth/token/ \
@@ -74,7 +112,76 @@ curl -X POST http://localhost/api/v1/auth/token/ \
   -d '{"email": "admin@demogym.com", "password": "FitOps2024!"}'
 ```
 
-Use the `access` token as a Bearer token in subsequent requests.
+Use the `access` token as a Bearer token in subsequent requests. Interactive
+API docs are listed under [API Documentation](#api-documentation).
+
+### Troubleshooting setup
+
+| Problem | Fix |
+|---|---|
+| Port 80, 3000 or 3306 already in use | Stop whatever else is using it, or change the left-hand port in `docker-compose.yml` |
+| "Tenant not found" when logging in | Run step 3 (`seed_data`); it links `localhost` to the demo gym |
+| `web` keeps restarting | `docker compose logs web --tail=50`; usually a missing or placeholder key in `.env` |
+| Login page loads but login fails | Check `docker compose ps`: `web` and `mysql` must both be running |
+| Changes to frontend code don't show | Rebuild it: `docker compose build frontend && docker compose up -d frontend` |
+
+---
+
+## Working with Claude
+
+This project is set up for [Claude Code](https://claude.ai/code): `CLAUDE.md`
+tells Claude how the codebase works and the branch rules. Plain-language
+requests work best. Include what you see, what you expected, and that you
+want tests.
+
+**The short version.** `CLAUDE.md` points Claude at the runbook, so this is
+enough for most work:
+
+- "Follow the runbook and fix this: <what's wrong, and the steps to see it>."
+- "Follow the runbook and build this: <what you want>."
+- "Follow the runbook and create a release to `main`."
+
+Claude will branch off `test`, make the change with tests, and open a pull
+request into `test`, or follow the release steps. More specific prompts get
+better results:
+
+
+**Understanding the code (changes nothing)**
+- "Explain what this project does, in simple terms."
+- "How does saving an attendance count work, from the button to the database?"
+- "Which roles can cancel a cover request, and where is that checked?"
+
+**Fixing a bug** (full walkthrough: `docs/RUNBOOK.md` → "Fixing a bug with Claude")
+- "Changing a class's start and end time doesn't save. Steps: edit a class,
+  set new times, save, reopen it, the old times are back. Find the cause, fix
+  it, and add a test that would have caught it. Branch off `test` and open a
+  pull request into `test`."
+- "Times on the Notifications page are 13 hours off for a gym in New Zealand.
+  Find out why and fix it, with tests."
+
+**Adding a feature**
+- "In the staff CSV import, make only name and email compulsory. Other columns
+  should be optional. Update the template and add tests."
+- "When deleting a recurring class, ask 'This class only' or 'Whole series'.
+  Make sure a deleted single class isn't recreated by the schedule. Add tests."
+- "Add an 'Import CSV' button to the Timetable page that opens the CSV import
+  with Timetable selected."
+
+**Pull requests and releases**
+- "CI failed on my pull request. Find out why and fix it."
+- "Watch pull request #NN and fix anything that fails or any review comments."
+- "Follow the runbook and create a release to `main`." (release pull request,
+  then a tagged GitHub Release once it's live)
+
+**When something's wrong in production**
+- "The last deploy failed. Read the Deploy workflow log and tell me what
+  happened and whether the site is up."
+- "Hotfix: <problem>. Branch off `main`, fix it with a test, and open a pull
+  request into `main`."
+
+Tips: ask for one change per pull request, always ask for tests with a fix,
+and ask Claude to explain anything in a pull request you don't understand
+before merging. The full workflow is in [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 ---
 
@@ -124,6 +231,15 @@ docker compose exec web pytest tests/test_tenant_isolation.py -v
 # Outside Docker (requires local MySQL + .env)
 pip install -r requirements/dev.txt
 pytest
+```
+
+Frontend tests run outside Docker and need Node 20:
+
+```bash
+cd frontend
+npm ci
+npm test         # unit tests (Vitest)
+npm run e2e      # UI tests (Playwright) — see frontend/playwright.config.ts
 ```
 
 ### Test Coverage Areas

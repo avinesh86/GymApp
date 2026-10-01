@@ -60,8 +60,11 @@ Rules:
 
 ## 3. Making a change with Claude
 
-1. Open Claude Code on the `avinesh86/GymApp` repo.
+1. Open Claude Code on the `avinesh86/GymApp` repo (how: see "Fixing a bug
+   with Claude" below).
 2. Describe what you want in plain words. Include steps to reproduce for bugs.
+   The shortest form is "Follow the runbook and fix this: <problem>". More
+   examples are under **Working with Claude** in `README.md`.
    Examples:
    - "Changing a class's start and end time doesn't save. Find the cause, fix
      it, and add tests. Branch off `test` and open a pull request into `test`."
@@ -75,44 +78,131 @@ Rules:
 5. Read the pull request description and, for anything user-facing, try it
    locally. Ask Claude to explain anything you don't follow.
 6. Merge the pull request into `test` (**Squash and merge** is fine here).
+7. **Delete the branch.** After merging, click **Delete branch** on the pull
+   request page. The work is safe in `test`; old branches only clutter the
+   list. Never delete `main` or `test`.
 
 Tips:
 
-- Always ask for tests with a bug fix, so the bug can't quietly come back.
+- Every bug fix and every feature comes with tests. See section 8 for what
+  kind, and how to check they're real.
 - One change per pull request. Small pull requests are easier to check and
   easier to undo.
 - Ask Claude to "watch the PR" and it will respond to CI failures and review
   comments for you.
 
+### Fixing a bug with Claude: a full example
+
+The whole journey, from someone reporting a problem to the fix being live.
+
+**1. Write down the bug properly.** Before opening Claude, collect:
+
+| What | Example |
+|---|---|
+| Where it happens | Timetable page, editing a class |
+| Who saw it | Gym manager at Northern Arena |
+| Steps to make it happen | Open a class, change start to 6:00 pm and end to 7:00 pm, press **Save**, reopen it |
+| What should happen | It shows 6:00 to 7:00 pm |
+| What happens instead | It still shows the old times |
+| Evidence | A screenshot, or the exact error message (copy the text) |
+| Since when | Worked last month; broke recently |
+
+The more of this Claude gets, the faster and more accurate the fix. If you
+can't make it happen yourself, say so: that's useful too.
+
+**2. Start a Claude Code session.** Go to https://claude.ai/code (or the
+**Code** tab in the Claude desktop or mobile app), start a new session and
+choose the repository **avinesh86/GymApp**. Claude reads `CLAUDE.md`, which
+tells it the project's rules and points it at this runbook.
+
+**3. Paste the bug in.** For example:
+
+> Follow the runbook and fix this bug.
+>
+> Where: Timetable page, editing a class, as a gym manager.
+> Steps: open a class, change start to 6:00 pm and end to 7:00 pm, press
+> Save, reopen the class.
+> Expected: 6:00 to 7:00 pm. Actual: the old times are still there.
+> This worked last month. Screenshot attached.
+
+Attach screenshots with the paperclip button.
+
+**4. Let Claude investigate, then answer its questions.** It reads the code,
+finds the cause and explains it. If it asks something (e.g. "Does this
+happen for every class or only recurring ones?"), answer in plain words.
+You can ask "Explain the cause simply" at any point.
+
+**5. Claude fixes it with tests and opens a pull request into `test`.** Per
+section 8 it adds a test that fails without the fix, plus a UI test that
+clicks through the real screens. It replies with the pull request link.
+
+**6. Check the pull request.**
+- **CI is green** (all four checks). If not: "CI failed on the PR, fix it."
+- **The description makes sense:** what was wrong, what changed, which
+  tests prove it. If it doesn't: "Explain this pull request simply."
+- **It's only this fix:** one change per pull request.
+- Optional: try it yourself locally (`README.md` → Local Development), by
+  following your own steps from step 1.
+
+**7. Merge into `test` and delete the branch** (steps 6 and 7 above). Or tell
+Claude: "Merge it once CI passes."
+
+**8. Release it** when ready (section 4): "Follow the runbook and create a
+release to `main`." Then repeat your steps from step 1 on the live site to
+confirm it's fixed, and tell whoever reported it.
+
+**If it's urgent** (the live site is broken for everyone), use a hotfix
+instead (section 5): "Follow the runbook and hotfix this: …"
+
+**If Claude gets stuck or goes the wrong way**, say so directly: "That's
+not the problem, the times are right in the list but wrong after reopening."
+You can also stop and start a new session with a clearer description.
+
 ---
 
-## 4. Releasing `test` to `main` (going live)
+## 4. Creating a release to `main` (going live)
+
+A release has two parts: a **release pull request** from `test` into `main`,
+which puts the changes live, and a **GitHub Release**, a tagged, dated record
+of what went live. The GitHub Release is created automatically once the
+deploy succeeds.
 
 Do this when `test` has changes you want live, ideally at a quiet time for
-the gym.
+the gym. Or ask Claude: "Follow the runbook and create a release to `main`."
 
 1. **Check `test` is green.** On GitHub, open the `test` branch's latest
    commit and confirm CI passed.
 2. **Open the release pull request.** On GitHub: **Pull requests → New pull
-   request**, base `main`, compare `test`. Title it e.g.
-   `Release 2026-10-05`. The description should list what's in it: the
-   commits list on the pull request shows you, or ask Claude: "Open a release
-   pull request from `test` to `main` and summarise what's in it."
+   request**, base `main`, compare `test`. Title it `Release YYYY-MM-DD`
+   (today's date). The description lists what's in it, one line per pull
+   request merged into `test` since the last release. The description becomes
+   the release notes, so write it for someone who wasn't involved.
 3. **Look for risky changes.** Anything touching `migrations/` changes the
    database. That's normal, but release those when you have time to watch the
    deploy.
 4. **Wait for CI** on the release pull request to pass.
 5. **Merge with "Create a merge commit".** Not squash. A merge commit keeps
    `test` and `main` in step so the next release doesn't show old changes
-   again.
+   again. **Don't delete the `test` branch** afterwards, even though GitHub
+   offers to.
 6. **Watch the deploy.** GitHub → **Actions → Deploy**. It waits for CI on
    `main`, then backs up the database, applies migrations, rebuilds and
    health-checks the site. It takes a few minutes.
-7. **Check the live site.** Log in, open the pages that changed, and confirm
+7. **Check the GitHub Release.** When the deploy succeeds, its **Create
+   GitHub Release** job tags the deployed commit `vYYYY.MM.DD` (with `.2`,
+   `.3`… for further releases the same day) and publishes a release whose
+   notes are the release pull request's description. Find it under
+   **Releases** on the repo's front page. If the job failed, create it by
+   hand: **Releases → Draft a new release**, new tag `vYYYY.MM.DD` on `main`,
+   paste the release pull request's description, **Publish**.
+8. **Check the live site.** Log in, open the pages that changed, and confirm
    they work.
 
-If the deploy fails its health check, it rolls the code back by itself; see
-section 6.
+If the deploy fails its health check, it rolls the code back by itself and
+no GitHub Release is created; see section 6.
+
+The **Releases** page is the history of what went live and when. Use it to
+answer "when did X ship?" and to find the last good version when rolling back.
 
 ---
 
@@ -122,7 +212,9 @@ For when something live is broken and can't wait for the next release.
 
 1. Ask Claude: "Hotfix: <problem>. Branch off `main`, fix it with a test, and
    open a pull request into `main`."
-2. Wait for CI, merge (**Create a merge commit**). It deploys automatically.
+2. Wait for CI, merge (**Create a merge commit**). It deploys automatically,
+   and a GitHub Release is created for it like any other (section 4, step 7).
+   Delete the hotfix branch.
 3. **Bring the fix back into `test`**, or the next release will undo it: open
    a pull request with base `test`, compare `main`, and merge it.
 
@@ -180,9 +272,80 @@ These settings stop mistakes such as pushing straight to production.
    - Require a pull request before merging.
    - Require status checks to pass: **Python Tests**, **Lint & Format Check**,
      **Frontend Build Check**, **UI Tests**.
-2. **Default branch** (Settings → General): set to `test`, so new pull
+   - Leave **Allow deletions** off. A protected branch can't be deleted,
+     so `test` survives every release merge even if someone clicks
+     **Delete branch**.
+2. **Delete merged branches automatically** (Settings → General → Pull
+   Requests): tick **Automatically delete head branches**. Feature branches
+   then disappear on merge. Only turn this on **after** step 1: a protected
+   `test` can't be deleted, but an unprotected one would be removed the
+   moment a release pull request merges.
+3. **Default branch** (Settings → General): set to `test`, so new pull
    requests target `test` by default.
-3. **Deploy secrets** (Settings → Secrets and variables → Actions):
+4. **Deploy secrets** (Settings → Secrets and variables → Actions):
    `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_KEY`, `DEPLOY_PATH`, optional
    `DEPLOY_PORT`, and the `PRODUCTION_URL` variable. These already exist if
    deploys work today.
+
+---
+
+## 8. Tests: what every change needs
+
+Tests are what stop a fixed bug from coming back and a working feature from
+quietly breaking. CI runs them all on every pull request, so they only help
+if each change adds its own.
+
+### The rules
+
+1. **Every bug fix and every feature comes with tests.** A pull request
+   without them isn't finished, however small the change.
+2. **A bug fix's test must fail before the fix and pass after it.** Otherwise
+   it doesn't prove anything. Ask Claude to show you both results.
+3. **Never weaken, skip or delete an existing test to make CI pass.** If a
+   test fails, either the code is wrong or the test is out of date, and the
+   pull request should say which and why.
+4. **Anything a person clicks through needs a UI test** (see below).
+
+### Which kind of test
+
+| The change touches… | Add a… | Lives in | Run with |
+|---|---|---|---|
+| Rules, data, permissions, API (Django) | Backend test (pytest) | `tests/test_<area>.py` | `docker compose exec web pytest` |
+| One screen or component's behaviour | Frontend unit test (Vitest) | next to the component, `*.test.tsx` | `cd frontend && npm test` |
+| A journey through the app: menus, buttons, forms, saving | UI test (Playwright) | `frontend/e2e/*.spec.ts` | `cd frontend && npm run e2e` |
+
+Most features need more than one: a backend test for the rule, and a UI test
+that a person can actually reach and use it.
+
+### UI tests: click real buttons and links, never type a URL
+
+A UI test must reach every page **the way a person would**: sign in, then
+click the menu item, tab, button or link. It must not jump to a page by
+typing its address (for example `page.goto('/timetable')`), and must not call
+the API directly. The only address a test may visit is the app's front door.
+
+Why: a page can work perfectly while **the button or link that should lead to
+it is missing, hidden, or points to the wrong place**. A test that opens the
+page by URL passes anyway, and the broken navigation ships. This has happened
+here: the Cover Board's Accept button posted to a route that didn't exist for
+months, and only a click-through test would have caught it.
+
+So for every new page, button, tab or dialog, the UI test should:
+
+- Get there by clicking from the menu or another page, using the visible label
+  (helpers in `frontend/e2e/helpers.ts` such as `goToSection` and
+  `openSettingsTab` do this).
+- Do the real action: fill the form, press **Save**, confirm the result
+  appears on screen.
+- Check the success message appears and no error message does
+  (`expectToast`, `expectNoErrorToast`).
+
+How the suite is organised and run is in `frontend/e2e/README.md`.
+
+### Asking Claude for tests
+
+Add this to any request, or rely on "Follow the runbook…", which includes it:
+
+> "Add tests: a backend test for the logic, and a Playwright UI test that
+> reaches the feature by clicking through the menus and buttons, not by URL.
+> Show me the new test failing before the fix and passing after."

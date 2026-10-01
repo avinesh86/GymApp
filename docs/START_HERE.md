@@ -107,41 +107,22 @@ Pick something small and low-risk, such as a wording change on a page:
 
 Then follow **Making a change with Claude** in `docs/RUNBOOK.md`.
 
+To fix a bug, follow **Fixing a bug with Claude: a full example** in
+`docs/RUNBOOK.md` section 3. For more ready-to-use prompts, see **Working with Claude** in `README.md`.
+The shortest one is: "Follow the runbook and fix this: <what's wrong>."
+
 ---
 
 ## Running the app on your own computer (optional)
 
-Useful for trying a change before it goes live. You need
-[Docker Desktop](https://www.docker.com/products/docker-desktop/) installed
-and running.
+Useful for trying a change before it goes live. Install
+[Docker Desktop](https://www.docker.com/products/docker-desktop/), then follow
+**Local Development with Docker** in `README.md`, steps 1 to 4. At the end you
+open http://localhost:3000 and log in with `admin@demogym.com` /
+`FitOps2024!`.
 
-In a terminal:
-
-```bash
-git clone https://github.com/avinesh86/GymApp.git
-cd GymApp
-cp .env.example .env
-```
-
-Open `.env` in a text editor and fill in `DJANGO_SECRET_KEY` and
-`FIELD_ENCRYPTION_KEY` (see `README.md` → Local Development, or ask Claude to
-generate them for you). Then:
-
-```bash
-docker compose up --build
-```
-
-The first run takes several minutes. Leave that terminal running, open a
-second one in the same folder, and load sample data:
-
-```bash
-docker compose exec web python manage.py seed_data
-```
-
-Open http://localhost:3000 and log in with `admin@demogym.com` / `FitOps2024!`.
-To stop everything, press **Ctrl+C** in the first terminal.
-
-If something doesn't start, copy the error into Claude and ask what's wrong.
+If something doesn't start, check the **Troubleshooting setup** table in the
+README, or copy the error into Claude and ask what's wrong.
 
 ---
 
