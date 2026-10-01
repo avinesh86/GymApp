@@ -77,6 +77,9 @@ Rules:
 5. Read the pull request description and, for anything user-facing, try it
    locally. Ask Claude to explain anything you don't follow.
 6. Merge the pull request into `test` (**Squash and merge** is fine here).
+7. **Delete the branch.** After merging, click **Delete branch** on the pull
+   request page. The work is safe in `test`; old branches only clutter the
+   list. Never delete `main` or `test`.
 
 Tips:
 
@@ -89,33 +92,49 @@ Tips:
 
 ---
 
-## 4. Releasing `test` to `main` (going live)
+## 4. Creating a release to `main` (going live)
+
+A release has two parts: a **release pull request** from `test` into `main`,
+which puts the changes live, and a **GitHub Release**, a tagged, dated record
+of what went live. The GitHub Release is created automatically once the
+deploy succeeds.
 
 Do this when `test` has changes you want live, ideally at a quiet time for
-the gym.
+the gym. Or ask Claude: "Follow the runbook and create a release to `main`."
 
 1. **Check `test` is green.** On GitHub, open the `test` branch's latest
    commit and confirm CI passed.
 2. **Open the release pull request.** On GitHub: **Pull requests → New pull
-   request**, base `main`, compare `test`. Title it e.g.
-   `Release 2026-10-05`. The description should list what's in it: the
-   commits list on the pull request shows you, or ask Claude: "Open a release
-   pull request from `test` to `main` and summarise what's in it."
+   request**, base `main`, compare `test`. Title it `Release YYYY-MM-DD`
+   (today's date). The description lists what's in it, one line per pull
+   request merged into `test` since the last release. The description becomes
+   the release notes, so write it for someone who wasn't involved.
 3. **Look for risky changes.** Anything touching `migrations/` changes the
    database. That's normal, but release those when you have time to watch the
    deploy.
 4. **Wait for CI** on the release pull request to pass.
 5. **Merge with "Create a merge commit".** Not squash. A merge commit keeps
    `test` and `main` in step so the next release doesn't show old changes
-   again.
+   again. **Don't delete the `test` branch** afterwards, even though GitHub
+   offers to.
 6. **Watch the deploy.** GitHub → **Actions → Deploy**. It waits for CI on
    `main`, then backs up the database, applies migrations, rebuilds and
    health-checks the site. It takes a few minutes.
-7. **Check the live site.** Log in, open the pages that changed, and confirm
+7. **Check the GitHub Release.** When the deploy succeeds, its **Create
+   GitHub Release** job tags the deployed commit `vYYYY.MM.DD` (with `.2`,
+   `.3`… for further releases the same day) and publishes a release whose
+   notes are the release pull request's description. Find it under
+   **Releases** on the repo's front page. If the job failed, create it by
+   hand: **Releases → Draft a new release**, new tag `vYYYY.MM.DD` on `main`,
+   paste the release pull request's description, **Publish**.
+8. **Check the live site.** Log in, open the pages that changed, and confirm
    they work.
 
-If the deploy fails its health check, it rolls the code back by itself; see
-section 6.
+If the deploy fails its health check, it rolls the code back by itself and
+no GitHub Release is created; see section 6.
+
+The **Releases** page is the history of what went live and when. Use it to
+answer "when did X ship?" and to find the last good version when rolling back.
 
 ---
 
@@ -125,7 +144,9 @@ For when something live is broken and can't wait for the next release.
 
 1. Ask Claude: "Hotfix: <problem>. Branch off `main`, fix it with a test, and
    open a pull request into `main`."
-2. Wait for CI, merge (**Create a merge commit**). It deploys automatically.
+2. Wait for CI, merge (**Create a merge commit**). It deploys automatically,
+   and a GitHub Release is created for it like any other (section 4, step 7).
+   Delete the hotfix branch.
 3. **Bring the fix back into `test`**, or the next release will undo it: open
    a pull request with base `test`, compare `main`, and merge it.
 
@@ -183,9 +204,17 @@ These settings stop mistakes such as pushing straight to production.
    - Require a pull request before merging.
    - Require status checks to pass: **Python Tests**, **Lint & Format Check**,
      **Frontend Build Check**, **UI Tests**.
-2. **Default branch** (Settings → General): set to `test`, so new pull
+   - Leave **Allow deletions** off. A protected branch can't be deleted,
+     so `test` survives every release merge even if someone clicks
+     **Delete branch**.
+2. **Delete merged branches automatically** (Settings → General → Pull
+   Requests): tick **Automatically delete head branches**. Feature branches
+   then disappear on merge. Only turn this on **after** step 1: a protected
+   `test` can't be deleted, but an unprotected one would be removed the
+   moment a release pull request merges.
+3. **Default branch** (Settings → General): set to `test`, so new pull
    requests target `test` by default.
-3. **Deploy secrets** (Settings → Secrets and variables → Actions):
+4. **Deploy secrets** (Settings → Secrets and variables → Actions):
    `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_KEY`, `DEPLOY_PATH`, optional
    `DEPLOY_PORT`, and the `PRODUCTION_URL` variable. These already exist if
    deploys work today.

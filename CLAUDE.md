@@ -67,7 +67,8 @@ docker-compose exec web python manage.py migrate
 ## Branches & Releases
 - `main` = production (merging deploys automatically). `test` = next release.
 - New work: branch off `test`, open the PR into `test`. Never commit or push to `main` or `test` directly.
-- Release: PR from `test` → `main`, merged with a **merge commit** (not squash) so the branches stay in step.
+- Release: PR from `test` → `main` titled `Release YYYY-MM-DD`, its description listing every PR since the last release (it becomes the release notes). Merged with a **merge commit** (not squash) so the branches stay in step. After a successful deploy, `deploy.yml` tags the commit `vYYYY.MM.DD` and publishes a GitHub Release automatically.
+- After a PR merges, delete its branch. Never delete `main` or `test`.
 - Hotfix: branch off `main`, PR into `main`, then PR `main` → `test` so the next release keeps the fix.
 - Every bug fix and feature needs tests (rules in `docs/RUNBOOK.md` §8): pytest for backend logic, Vitest for components, Playwright (`frontend/e2e/`) for anything a user clicks through. A bug-fix test must fail before the fix. Never weaken, skip or delete a test to get CI green.
 - **UI tests navigate by clicking real menu items, buttons and links — never `page.goto()` to an inner URL, never direct API calls.** A page reached by URL can pass while the button that should lead to it is missing or broken.
