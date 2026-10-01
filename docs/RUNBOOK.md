@@ -78,7 +78,8 @@ Rules:
 
 Tips:
 
-- Always ask for tests with a bug fix, so the bug can't quietly come back.
+- Every bug fix and every feature comes with tests. See section 8 for what
+  kind, and how to check they're real.
 - One change per pull request. Small pull requests are easier to check and
   easier to undo.
 - Ask Claude to "watch the PR" and it will respond to CI failures and review
@@ -186,3 +187,66 @@ These settings stop mistakes such as pushing straight to production.
    `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_KEY`, `DEPLOY_PATH`, optional
    `DEPLOY_PORT`, and the `PRODUCTION_URL` variable. These already exist if
    deploys work today.
+
+---
+
+## 8. Tests: what every change needs
+
+Tests are what stop a fixed bug from coming back and a working feature from
+quietly breaking. CI runs them all on every pull request, so they only help
+if each change adds its own.
+
+### The rules
+
+1. **Every bug fix and every feature comes with tests.** A pull request
+   without them isn't finished, however small the change.
+2. **A bug fix's test must fail before the fix and pass after it.** Otherwise
+   it doesn't prove anything. Ask Claude to show you both results.
+3. **Never weaken, skip or delete an existing test to make CI pass.** If a
+   test fails, either the code is wrong or the test is out of date, and the
+   pull request should say which and why.
+4. **Anything a person clicks through needs a UI test** (see below).
+
+### Which kind of test
+
+| The change touches… | Add a… | Lives in | Run with |
+|---|---|---|---|
+| Rules, data, permissions, API (Django) | Backend test (pytest) | `tests/test_<area>.py` | `docker compose exec web pytest` |
+| One screen or component's behaviour | Frontend unit test (Vitest) | next to the component, `*.test.tsx` | `cd frontend && npm test` |
+| A journey through the app: menus, buttons, forms, saving | UI test (Playwright) | `frontend/e2e/*.spec.ts` | `cd frontend && npm run e2e` |
+
+Most features need more than one: a backend test for the rule, and a UI test
+that a person can actually reach and use it.
+
+### UI tests: click real buttons and links, never type a URL
+
+A UI test must reach every page **the way a person would**: sign in, then
+click the menu item, tab, button or link. It must not jump to a page by
+typing its address (for example `page.goto('/timetable')`), and must not call
+the API directly. The only address a test may visit is the app's front door.
+
+Why: a page can work perfectly while **the button or link that should lead to
+it is missing, hidden, or points to the wrong place**. A test that opens the
+page by URL passes anyway, and the broken navigation ships. This has happened
+here: the Cover Board's Accept button posted to a route that didn't exist for
+months, and only a click-through test would have caught it.
+
+So for every new page, button, tab or dialog, the UI test should:
+
+- Get there by clicking from the menu or another page, using the visible label
+  (helpers in `frontend/e2e/helpers.ts` such as `goToSection` and
+  `openSettingsTab` do this).
+- Do the real action: fill the form, press **Save**, confirm the result
+  appears on screen.
+- Check the success message appears and no error message does
+  (`expectToast`, `expectNoErrorToast`).
+
+How the suite is organised and run is in `frontend/e2e/README.md`.
+
+### Asking Claude for tests
+
+Add this to any request, or rely on "Follow the runbook…", which includes it:
+
+> "Add tests: a backend test for the logic, and a Playwright UI test that
+> reaches the feature by clicking through the menus and buttons, not by URL.
+> Show me the new test failing before the fix and passing after."
