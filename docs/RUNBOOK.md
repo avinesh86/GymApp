@@ -60,7 +60,8 @@ Rules:
 
 ## 3. Making a change with Claude
 
-1. Open Claude Code on the `avinesh86/GymApp` repo.
+1. Open Claude Code on the `avinesh86/GymApp` repo (how: see "Fixing a bug
+   with Claude" below).
 2. Describe what you want in plain words. Include steps to reproduce for bugs.
    The shortest form is "Follow the runbook and fix this: <problem>". More
    examples are under **Working with Claude** in `README.md`.
@@ -89,6 +90,73 @@ Tips:
   easier to undo.
 - Ask Claude to "watch the PR" and it will respond to CI failures and review
   comments for you.
+
+### Fixing a bug with Claude: a full example
+
+The whole journey, from someone reporting a problem to the fix being live.
+
+**1. Write down the bug properly.** Before opening Claude, collect:
+
+| What | Example |
+|---|---|
+| Where it happens | Timetable page, editing a class |
+| Who saw it | Gym manager at Northern Arena |
+| Steps to make it happen | Open a class, change start to 6:00 pm and end to 7:00 pm, press **Save**, reopen it |
+| What should happen | It shows 6:00 to 7:00 pm |
+| What happens instead | It still shows the old times |
+| Evidence | A screenshot, or the exact error message (copy the text) |
+| Since when | Worked last month; broke recently |
+
+The more of this Claude gets, the faster and more accurate the fix. If you
+can't make it happen yourself, say so: that's useful too.
+
+**2. Start a Claude Code session.** Go to https://claude.ai/code (or the
+**Code** tab in the Claude desktop or mobile app), start a new session and
+choose the repository **avinesh86/GymApp**. Claude reads `CLAUDE.md`, which
+tells it the project's rules and points it at this runbook.
+
+**3. Paste the bug in.** For example:
+
+> Follow the runbook and fix this bug.
+>
+> Where: Timetable page, editing a class, as a gym manager.
+> Steps: open a class, change start to 6:00 pm and end to 7:00 pm, press
+> Save, reopen the class.
+> Expected: 6:00 to 7:00 pm. Actual: the old times are still there.
+> This worked last month. Screenshot attached.
+
+Attach screenshots with the paperclip button.
+
+**4. Let Claude investigate, then answer its questions.** It reads the code,
+finds the cause and explains it. If it asks something (e.g. "Does this
+happen for every class or only recurring ones?"), answer in plain words.
+You can ask "Explain the cause simply" at any point.
+
+**5. Claude fixes it with tests and opens a pull request into `test`.** Per
+section 8 it adds a test that fails without the fix, plus a UI test that
+clicks through the real screens. It replies with the pull request link.
+
+**6. Check the pull request.**
+- **CI is green** (all four checks). If not: "CI failed on the PR, fix it."
+- **The description makes sense:** what was wrong, what changed, which
+  tests prove it. If it doesn't: "Explain this pull request simply."
+- **It's only this fix:** one change per pull request.
+- Optional: try it yourself locally (`README.md` → Local Development), by
+  following your own steps from step 1.
+
+**7. Merge into `test` and delete the branch** (steps 6 and 7 above). Or tell
+Claude: "Merge it once CI passes."
+
+**8. Release it** when ready (section 4): "Follow the runbook and create a
+release to `main`." Then repeat your steps from step 1 on the live site to
+confirm it's fixed, and tell whoever reported it.
+
+**If it's urgent** (the live site is broken for everyone), use a hotfix
+instead (section 5): "Follow the runbook and hotfix this: …"
+
+**If Claude gets stuck or goes the wrong way**, say so directly: "That's
+not the problem, the times are right in the list but wrong after reopening."
+You can also stop and start a new session with a clearer description.
 
 ---
 
