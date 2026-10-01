@@ -69,7 +69,9 @@ docker-compose exec web python manage.py migrate
 - New work: branch off `test`, open the PR into `test`. Never commit or push to `main` or `test` directly.
 - Release: PR from `test` → `main`, merged with a **merge commit** (not squash) so the branches stay in step.
 - Hotfix: branch off `main`, PR into `main`, then PR `main` → `test` so the next release keeps the fix.
-- Always add tests with bug fixes. Full procedure: `docs/RUNBOOK.md`.
+- Every bug fix and feature needs tests (rules in `docs/RUNBOOK.md` §8): pytest for backend logic, Vitest for components, Playwright (`frontend/e2e/`) for anything a user clicks through. A bug-fix test must fail before the fix. Never weaken, skip or delete a test to get CI green.
+- **UI tests navigate by clicking real menu items, buttons and links — never `page.goto()` to an inner URL, never direct API calls.** A page reached by URL can pass while the button that should lead to it is missing or broken.
+- Full procedure: `docs/RUNBOOK.md`.
 
 ## Key Models
 
