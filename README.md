@@ -139,7 +139,7 @@ enough for most work:
 
 - "Follow the runbook and fix this: <what's wrong, and the steps to see it>."
 - "Follow the runbook and build this: <what you want>."
-- "Follow the runbook and release `test` to `main`."
+- "Follow the runbook and create a release to `main`."
 
 Claude will branch off `test`, make the change with tests, and open a pull
 request into `test`, or follow the release steps. More specific prompts get
@@ -170,7 +170,8 @@ better results:
 **Pull requests and releases**
 - "CI failed on my pull request. Find out why and fix it."
 - "Watch pull request #NN and fix anything that fails or any review comments."
-- "Open a release pull request from `test` to `main` and summarise what's in it."
+- "Follow the runbook and create a release to `main`." (release pull request,
+  then a tagged GitHub Release once it's live)
 
 **When something's wrong in production**
 - "The last deploy failed. Read the Deploy workflow log and tell me what
