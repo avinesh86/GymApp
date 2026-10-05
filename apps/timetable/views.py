@@ -7,6 +7,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
 from apps.core.mixins import TenantScopedMixin
+from apps.core.timezones import local_day_bounds
 from apps.core.permissions import IsGymManager, IsInstructorOrAbove, IsTeamLeader
 from apps.staff.models import StaffProfile
 from apps.users.constants import UserRole
@@ -140,11 +141,14 @@ class TimetableEventViewSet(TenantScopedMixin, ModelViewSet):
         params = self.request.query_params
         from_str = params.get("from")
         to_str = params.get("to")
+        # from/to are calendar days in the gym's local time, not UTC.
         try:
             if from_str:
-                qs = qs.filter(start_datetime__date__gte=date.fromisoformat(from_str))
+                day = date.fromisoformat(from_str)
+                qs = qs.filter(start_datetime__gte=local_day_bounds(self.request.tenant, day, day)[0])
             if to_str:
-                qs = qs.filter(start_datetime__date__lte=date.fromisoformat(to_str))
+                day = date.fromisoformat(to_str)
+                qs = qs.filter(start_datetime__lt=local_day_bounds(self.request.tenant, day, day)[1])
         except ValueError:
             pass
         if params.get("awaiting") == "true":

@@ -7,6 +7,7 @@ is announced on the wrong day.
 """
 
 import logging
+from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.conf import settings
@@ -40,3 +41,16 @@ def to_tenant_local(value, tenant):
 def format_for_tenant(value, tenant, fmt: str) -> str:
     """``strftime`` in the gym's local time. Use this for anything a person reads."""
     return to_tenant_local(value, tenant).strftime(fmt)
+
+
+def local_day_bounds(tenant, from_date, to_date):
+    """UTC-aware ``[start, end)`` covering ``from_date``..``to_date`` (inclusive)
+    as calendar days in the gym's local time.
+
+    Filtering with ``start_datetime__date`` compares UTC dates, so a 5:15am
+    Auckland class (16:15 UTC the day before) falls outside its own day.
+    """
+    tz = tenant_timezone(tenant)
+    start = datetime.combine(from_date, time.min, tzinfo=tz)
+    end = datetime.combine(to_date + timedelta(days=1), time.min, tzinfo=tz)
+    return start, end

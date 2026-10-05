@@ -4,6 +4,7 @@ from datetime import date, timedelta
 from django.utils import timezone
 
 from apps.core.audit import log_audit
+from apps.core.timezones import local_day_bounds, tenant_timezone
 
 from .models import RecurringTimetableRule, TimetableEvent
 
@@ -29,23 +30,26 @@ def generate_recurring_events(rule: RecurringTimetableRule, from_date: date, to_
     if effective_from > effective_to:
         return []
 
-    existing_datetimes = set(
-        TimetableEvent.objects.filter(
+    # The rule's start_time is the gym's wall-clock time, so build and compare
+    # dates in the gym's timezone, not UTC.
+    tz = tenant_timezone(rule.tenant)
+    range_start, range_end = local_day_bounds(rule.tenant, effective_from, effective_to)
+    existing_dates = {
+        timezone.localtime(start, tz).date()
+        for start in TimetableEvent.objects.filter(
             tenant=rule.tenant,
             recurring_rule=rule,
-            start_datetime__date__gte=effective_from,
-            start_datetime__date__lte=effective_to,
-        ).values_list("start_datetime__date", flat=True)
-    )
+            start_datetime__gte=range_start,
+            start_datetime__lt=range_end,
+        ).values_list("start_datetime", flat=True)
+    }
 
     events_to_create = []
     current = effective_from
 
     while current <= effective_to:
-        if current.weekday() == rule.day_of_week and current not in existing_datetimes:
-            start_dt = timezone.datetime.combine(current, rule.start_time)
-            if timezone.is_naive(start_dt):
-                start_dt = timezone.make_aware(start_dt)
+        if current.weekday() == rule.day_of_week and current not in existing_dates:
+            start_dt = timezone.make_aware(timezone.datetime.combine(current, rule.start_time), tz)
             end_dt = start_dt + timedelta(minutes=rule.class_type.duration_minutes)
             events_to_create.append(
                 TimetableEvent(
@@ -72,13 +76,13 @@ def generate_recurring_events(rule: RecurringTimetableRule, from_date: date, to_
 
 def get_week_events(tenant, from_date: date) -> list:
     """Returns all non-deleted events for the week starting from_date."""
-    to_date = from_date + timedelta(days=6)
+    week_start, week_end = local_day_bounds(tenant, from_date, from_date + timedelta(days=6))
     return (
         TimetableEvent.objects.filter(
             tenant=tenant,
             is_deleted=False,
-            start_datetime__date__gte=from_date,
-            start_datetime__date__lte=to_date,
+            start_datetime__gte=week_start,
+            start_datetime__lt=week_end,
         )
         .select_related("class_type", "site", "instructor", "attendance_record")
         .order_by("start_datetime")
