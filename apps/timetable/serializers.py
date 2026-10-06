@@ -64,6 +64,24 @@ class TimetableEventSerializer(serializers.ModelSerializer):
         tz = _tenant_timezone(obj)
         return djtz.localtime(obj.end_datetime, tz).strftime("%H:%M")
 
+    def _input_tenant(self):
+        if self.instance is not None and not isinstance(self.instance, (list, tuple)):
+            return self.instance.tenant
+        request = self.context.get("request")
+        return getattr(request, "tenant", None)
+
+    def to_internal_value(self, data):
+        # The Add Class form sends wall-clock times with no offset
+        # ("2026-10-06T05:15:00"). DRF makes naive datetimes aware in the
+        # *current* timezone — UTC — so a 5:15am Auckland class was stored as
+        # 05:15 UTC and shown as 6:15pm. Read them as the gym's local time.
+        # Values with an explicit offset are unaffected.
+        tenant = self._input_tenant()
+        if tenant is None:
+            return super().to_internal_value(data)
+        with djtz.override(tenant_timezone(tenant)):
+            return super().to_internal_value(data)
+
     attendance_count = serializers.SerializerMethodField()
     viability_color = serializers.SerializerMethodField()
     original_instructor_name = serializers.CharField(source="original_instructor.name", read_only=True)

@@ -180,22 +180,31 @@ the gym. Or ask Claude: "Follow the runbook and create a release to `main`."
 3. **Look for risky changes.** Anything touching `migrations/` changes the
    database. That's normal, but release those when you have time to watch the
    deploy.
-4. **Wait for CI** on the release pull request to pass.
-5. **Merge with "Create a merge commit".** Not squash. A merge commit keeps
+4. **Update the branch.** GitHub will say *"This branch is out of date with
+   the base branch"*. That's expected on every release: the previous
+   release left a merge commit on `main` that `test` doesn't have yet. Click
+   **Update branch** at the bottom of the pull request. It brings `main`
+   into `test` without changing any files, and CI starts again.
+5. **Wait for CI** on the release pull request to pass (after the update).
+6. **Get an approval.** Someone other than the person who opened the pull
+   request clicks **Files changed → Review changes → Approve → Submit
+   review**. GitHub won't count an approval from the pull request's own
+   author.
+7. **Merge with "Create a merge commit".** Not squash. A merge commit keeps
    `test` and `main` in step so the next release doesn't show old changes
    again. **Don't delete the `test` branch** afterwards, even though GitHub
    offers to.
-6. **Watch the deploy.** GitHub → **Actions → Deploy**. It waits for CI on
+8. **Watch the deploy.** GitHub → **Actions → Deploy**. It waits for CI on
    `main`, then backs up the database, applies migrations, rebuilds and
    health-checks the site. It takes a few minutes.
-7. **Check the GitHub Release.** When the deploy succeeds, its **Create
+9. **Check the GitHub Release.** When the deploy succeeds, its **Create
    GitHub Release** job tags the deployed commit `vYYYY.MM.DD` (with `.2`,
    `.3`… for further releases the same day) and publishes a release whose
    notes are the release pull request's description. Find it under
    **Releases** on the repo's front page. If the job failed, create it by
    hand: **Releases → Draft a new release**, new tag `vYYYY.MM.DD` on `main`,
    paste the release pull request's description, **Publish**.
-8. **Check the live site.** Log in, open the pages that changed, and confirm
+10. **Check the live site.** Log in, open the pages that changed, and confirm
    they work.
 
 If the deploy fails its health check, it rolls the code back by itself and
@@ -213,7 +222,7 @@ For when something live is broken and can't wait for the next release.
 1. Ask Claude: "Hotfix: <problem>. Branch off `main`, fix it with a test, and
    open a pull request into `main`."
 2. Wait for CI, merge (**Create a merge commit**). It deploys automatically,
-   and a GitHub Release is created for it like any other (section 4, step 7).
+   and a GitHub Release is created for it like any other (section 4, step 9).
    Delete the hotfix branch.
 3. **Bring the fix back into `test`**, or the next release will undo it: open
    a pull request with base `test`, compare `main`, and merge it.
