@@ -11,6 +11,9 @@ import {
   createEvent,
   createRecurringRule,
   generateRuleEvents,
+  updateEventSeries,
+  deleteEventSeries,
+  type SeriesChanges,
 } from '../../api/timetable'
 import { submitAttendanceForEvent } from '../../api/attendance'
 import { createCoverRequest } from '../../api/cover'
@@ -20,6 +23,7 @@ import type { TimetableEvent, TimetableEventStatus } from '../../types'
 import { useAuth } from '../../hooks/useAuth'
 import { Badge } from '../../components/ui/Badge'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
+import { SeriesScopeDialog, type ChangeScope } from './SeriesScopeDialog'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -201,7 +205,15 @@ function toBackendDayOfWeek(frontendDay: number): number {
 
 // ─── Edit Tab ─────────────────────────────────────────────────────────────────
 
-function EditTab({ event, onSaved }: { event: TimetableEvent; onSaved: () => void }) {
+function EditTab({
+  event,
+  isRecurring,
+  onSaved,
+}: {
+  event: TimetableEvent
+  isRecurring: boolean
+  onSaved: () => void
+}) {
   const queryClient = useQueryClient()
   const { user } = useAuth()
   const isSuperAdmin = user?.role === 'owner' || user?.role === 'admin'
@@ -218,6 +230,7 @@ function EditTab({ event, onSaved }: { event: TimetableEvent; onSaved: () => voi
   const [recurringDays, setRecurringDays] = useState<number[]>([])
   const [recurringEndDate, setRecurringEndDate] = useState('')
   const [isCreatingRecurring, setIsCreatingRecurring] = useState(false)
+  const [showScopeDialog, setShowScopeDialog] = useState(false)
 
   const { data: sites = [] } = useQuery({ queryKey: ['sites'], queryFn: listSites })
 
@@ -238,6 +251,38 @@ function EditTab({ event, onSaved }: { event: TimetableEvent; onSaved: () => voi
     onError: () => toast.error('Failed to update class'),
   })
 
+  /** Only what was changed, so a series edit to the notes doesn't also reset
+   * the time of a class that was moved on its own. */
+  function seriesChanges(): SeriesChanges {
+    const changes: SeriesChanges = {}
+    if (startTime !== event.start_time) changes.start_time = startTime
+    if (endTime !== event.end_time) changes.end_time = endTime
+    if (siteId !== String(event.site)) changes.site = Number(siteId)
+    if (notes !== (event.notes ?? '')) changes.notes = notes
+    if (internalNotes !== (event.internal_notes ?? '')) changes.internal_notes = internalNotes
+    return changes
+  }
+
+  const { mutate: saveSeries, isPending: isSavingSeries } = useMutation({
+    mutationFn: (scope: Exclude<ChangeScope, 'this'>) =>
+      updateEventSeries(event.id, scope, seriesChanges()),
+    onSuccess: ({ updated }) => {
+      queryClient.invalidateQueries({ queryKey: ['timetable-events'] })
+      toast.success(`Updated ${updated} ${updated === 1 ? 'class' : 'classes'} in the series`)
+      setShowScopeDialog(false)
+      onSaved()
+    },
+    onError: () => toast.error('Failed to update the series'),
+  })
+
+  function handleScopeConfirm(scope: ChangeScope) {
+    if (scope === 'this') {
+      save()
+      return
+    }
+    saveSeries(scope)
+  }
+
   function toggleDay(frontendValue: number) {
     setRecurringDays((prev) =>
       prev.includes(frontendValue)
@@ -247,6 +292,10 @@ function EditTab({ event, onSaved }: { event: TimetableEvent; onSaved: () => voi
   }
 
   async function handleSave() {
+    if (isRecurring) {
+      setShowScopeDialog(true)
+      return
+    }
     if (!makeRecurring) {
       save()
       return
@@ -271,7 +320,9 @@ function EditTab({ event, onSaved }: { event: TimetableEvent; onSaved: () => voi
         internal_notes: internalNotes,
       })
 
-      // Then create a recurring rule per selected day and generate sessions
+      // Then create a recurring rule per selected day and generate sessions.
+      // The rules share one series so they edit and delete together.
+      let seriesId: string | undefined
       for (const frontendDay of recurringDays) {
         const rule = await createRecurringRule({
           class_type:  event.class_type as unknown as number,
@@ -279,9 +330,12 @@ function EditTab({ event, onSaved }: { event: TimetableEvent; onSaved: () => voi
           site:        Number(siteId),
           day_of_week: toBackendDayOfWeek(frontendDay),
           start_time:  `${startTime}:00`,
+          end_time:    `${endTime}:00`,
           valid_from:  date,
           valid_to:    recurringEndDate || null,
+          series_id:   seriesId,
         })
+        seriesId = rule.series_id
         const result = await generateRuleEvents(rule.id)
         totalCreated += result.created
       }
@@ -303,14 +357,15 @@ function EditTab({ event, onSaved }: { event: TimetableEvent; onSaved: () => voi
     }
   }
 
-  const isPending = isSaving || isCreatingRecurring
+  const isPending = isSaving || isCreatingRecurring || isSavingSeries
 
   return (
     <div className="flex flex-col gap-3">
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs text-gray-500 mb-1 block">Date</label>
+          <label htmlFor="edit-date" className="text-xs text-gray-500 mb-1 block">Date</label>
           <input
+            id="edit-date"
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
@@ -318,16 +373,17 @@ function EditTab({ event, onSaved }: { event: TimetableEvent; onSaved: () => voi
           />
         </div>
         <div>
-          <label className="text-xs text-gray-500 mb-1 block">Location</label>
-          <select value={siteId} onChange={(e) => setSiteId(e.target.value)} className={inputClass}>
+          <label htmlFor="edit-site" className="text-xs text-gray-500 mb-1 block">Location</label>
+          <select id="edit-site" value={siteId} onChange={(e) => setSiteId(e.target.value)} className={inputClass}>
             {sites.map((site) => (
               <option key={site.id} value={site.id}>{site.name}</option>
             ))}
           </select>
         </div>
         <div>
-          <label className="text-xs text-gray-500 mb-1 block">Start Time</label>
+          <label htmlFor="edit-start-time" className="text-xs text-gray-500 mb-1 block">Start Time</label>
           <input
+            id="edit-start-time"
             type="time"
             value={startTime}
             onChange={(e) => setStartTime(e.target.value)}
@@ -335,8 +391,9 @@ function EditTab({ event, onSaved }: { event: TimetableEvent; onSaved: () => voi
           />
         </div>
         <div>
-          <label className="text-xs text-gray-500 mb-1 block">End Time</label>
+          <label htmlFor="edit-end-time" className="text-xs text-gray-500 mb-1 block">End Time</label>
           <input
+            id="edit-end-time"
             type="time"
             value={endTime}
             onChange={(e) => setEndTime(e.target.value)}
@@ -368,7 +425,7 @@ function EditTab({ event, onSaved }: { event: TimetableEvent; onSaved: () => voi
       </div>
 
       {/* ── Recurring section — super admins only ────────────────────────── */}
-      {isSuperAdmin && <div className="border border-gray-100 rounded-xl p-3 bg-gray-50">
+      {isSuperAdmin && !isRecurring && <div className="border border-gray-100 rounded-xl p-3 bg-gray-50">
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <input
             type="checkbox"
@@ -433,13 +490,35 @@ function EditTab({ event, onSaved }: { event: TimetableEvent; onSaved: () => voi
           '💾 Save Changes'
         )}
       </button>
+
+      <SeriesScopeDialog
+        isOpen={showScopeDialog}
+        onClose={() => setShowScopeDialog(false)}
+        onConfirm={handleScopeConfirm}
+        title="Save Recurring Class"
+        confirmLabel="Save"
+        isLoading={isPending}
+        seriesDisabledReason={
+          date !== event.date
+            ? 'Moving a class to another date only applies to this class.'
+            : undefined
+        }
+      />
     </div>
   )
 }
 
 // ─── Manage Tab ───────────────────────────────────────────────────────────────
 
-function ManageTab({ event, onClose }: { event: TimetableEvent; onClose: () => void }) {
+function ManageTab({
+  event,
+  isRecurring,
+  onClose,
+}: {
+  event: TimetableEvent
+  isRecurring: boolean
+  onClose: () => void
+}) {
   const queryClient = useQueryClient()
   const [selectedInstructor, setSelectedInstructor] = useState(String(event.instructor ?? ''))
   const [showCancelConfirm, setShowCancelConfirm]   = useState(false)
@@ -531,6 +610,21 @@ function ManageTab({ event, onClose }: { event: TimetableEvent; onClose: () => v
     onError: () => toast.error('Failed to delete class'),
   })
 
+  const { mutate: doDeleteSeries, isPending: isDeletingSeries } = useMutation({
+    mutationFn: (scope: Exclude<ChangeScope, 'this'>) => deleteEventSeries(event.id, scope),
+    onSuccess: ({ deleted }) => {
+      queryClient.invalidateQueries({ queryKey: ['timetable-events'] })
+      toast.success(`Deleted ${deleted} ${deleted === 1 ? 'class' : 'classes'} from the series`)
+      onClose()
+    },
+    onError: () => toast.error('Failed to delete the series'),
+  })
+
+  function handleDeleteScope(scope: ChangeScope) {
+    if (scope === 'this') doDelete()
+    else doDeleteSeries(scope)
+  }
+
   return (
     <>
       <div className="flex flex-col gap-3">
@@ -619,16 +713,28 @@ function ManageTab({ event, onClose }: { event: TimetableEvent; onClose: () => v
         isLoading={isCancelling}
         variant="danger"
       />
-      <ConfirmDialog
-        isOpen={showDeleteConfirm}
-        onClose={() => setShowDeleteConfirm(false)}
-        onConfirm={() => doDelete()}
-        title="Delete Class Permanently"
-        message="This will permanently delete the class and cannot be undone."
-        confirmLabel="Delete"
-        isLoading={isDeleting}
-        variant="danger"
-      />
+      {isRecurring ? (
+        <SeriesScopeDialog
+          isOpen={showDeleteConfirm}
+          onClose={() => setShowDeleteConfirm(false)}
+          onConfirm={handleDeleteScope}
+          title="Delete Recurring Class"
+          confirmLabel="Delete"
+          isLoading={isDeleting || isDeletingSeries}
+          variant="danger"
+        />
+      ) : (
+        <ConfirmDialog
+          isOpen={showDeleteConfirm}
+          onClose={() => setShowDeleteConfirm(false)}
+          onConfirm={() => doDelete()}
+          title="Delete Class Permanently"
+          message="This will permanently delete the class and cannot be undone."
+          confirmLabel="Delete"
+          isLoading={isDeleting}
+          variant="danger"
+        />
+      )}
     </>
   )
 }
@@ -646,7 +752,7 @@ export function ClassDetailModal({ event, onClose }: ClassDetailModalProps) {
   if (!event) return null
 
   const statusConfig = STATUS_CONFIG[event.status] ?? { label: event.status, variant: 'grey' as const }
-  const isRecurring = !!(event.recurring_pattern_id || (event as unknown as { recurring_rule?: number }).recurring_rule)
+  const isRecurring = !!(event.recurring_pattern_id || event.recurring_rule)
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'details',    label: 'Details' },
@@ -716,8 +822,8 @@ export function ClassDetailModal({ event, onClose }: ClassDetailModalProps) {
         <div className="flex-1 overflow-y-auto px-5 py-4">
           {activeTab === 'details'    && <DetailsTab event={event} />}
           {activeTab === 'attendance' && <AttendanceTab event={event} onClose={onClose} />}
-          {activeTab === 'edit'       && <EditTab event={event} onSaved={() => { setActiveTab('details'); onClose() }} />}
-          {activeTab === 'manage'     && <ManageTab event={event} onClose={() => { setActiveTab('details'); onClose() }} />}
+          {activeTab === 'edit'       && <EditTab event={event} isRecurring={isRecurring} onSaved={() => { setActiveTab('details'); onClose() }} />}
+          {activeTab === 'manage'     && <ManageTab event={event} isRecurring={isRecurring} onClose={() => { setActiveTab('details'); onClose() }} />}
         </div>
       </div>
     </div>

@@ -74,6 +74,20 @@ class RecurringTimetableRule(TenantAwareModel):
     )
     day_of_week = models.IntegerField(choices=DayOfWeek.choices, db_index=True)
     start_time = models.TimeField()
+    end_time = models.TimeField(
+        null=True,
+        blank=True,
+        help_text="Null = start_time + the class type's duration.",
+    )
+    series_id = models.UUIDField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text=(
+            "Shared by every rule created together (e.g. a Mon + Wed class), "
+            "and stamped on their events as recurring_pattern_id."
+        ),
+    )
     instructor = models.ForeignKey(
         "staff.StaffProfile",
         on_delete=models.SET_NULL,
