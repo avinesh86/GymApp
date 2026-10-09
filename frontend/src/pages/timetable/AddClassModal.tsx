@@ -130,6 +130,9 @@ export function AddClassModal({ isOpen, onClose, defaultDate, onCreated }: AddCl
     setIsSubmitting(true)
     let totalCreated = 0
     let hadError = false
+    // One rule per day; they share the first rule's series so the class can
+    // later be edited or deleted as a whole.
+    let seriesId: string | undefined
 
     try {
       for (const frontendDay of recurringDays) {
@@ -139,9 +142,12 @@ export function AddClassModal({ isOpen, onClose, defaultDate, onCreated }: AddCl
           site: Number(siteId),
           day_of_week: toBackendDayOfWeek(frontendDay),
           start_time: `${startTime}:00`,
+          end_time: `${endTime}:00`,
           valid_from: date,
           valid_to: recurringEndDate || null,
+          series_id: seriesId,
         })
+        seriesId = rule.series_id
 
         const result = await generateRuleEvents(rule.id)
         totalCreated += result.created
