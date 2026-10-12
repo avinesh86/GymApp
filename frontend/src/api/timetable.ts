@@ -64,6 +64,41 @@ export async function deleteEvent(id: number): Promise<void> {
   await apiClient.delete(`timetable/events/${id}/`)
 }
 
+// ─── Recurring series ─────────────────────────────────────────────────────────
+
+/** Which classes in a recurring series a change applies to. Changing only the
+ * one class uses updateEvent / deleteEvent. */
+export type SeriesScope = 'following' | 'all'
+
+export interface SeriesChanges {
+  /** Gym wall-clock time, HH:MM */
+  start_time?: string
+  end_time?: string
+  site?: number | null
+  notes?: string
+  internal_notes?: string
+}
+
+export async function updateEventSeries(
+  eventId: number,
+  scope: SeriesScope,
+  changes: SeriesChanges,
+): Promise<{ updated: number }> {
+  const response = await apiClient.post<{ updated: number }>(
+    `timetable/events/${eventId}/update-series/`,
+    { scope, ...changes }
+  )
+  return response.data
+}
+
+export async function deleteEventSeries(eventId: number, scope: SeriesScope): Promise<{ deleted: number }> {
+  const response = await apiClient.post<{ deleted: number }>(
+    `timetable/events/${eventId}/delete-series/`,
+    { scope }
+  )
+  return response.data
+}
+
 export async function assignInstructor(
   eventId: number,
   instructorId: number | null,
@@ -92,12 +127,18 @@ export interface RecurringRulePayload {
   /** 0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun (Python weekday convention) */
   day_of_week: number
   start_time: string
+  end_time?: string | null
   valid_from: string
   valid_to?: string | null
+  /** Pass the first rule's series_id when creating the other days of the same
+   * class, so they edit and delete together. Omit to start a new series. */
+  series_id?: string
 }
 
-export async function createRecurringRule(data: RecurringRulePayload): Promise<{ id: number }> {
-  const response = await apiClient.post<{ id: number }>('timetable/recurring-rules/', data)
+export async function createRecurringRule(
+  data: RecurringRulePayload,
+): Promise<{ id: number; series_id: string }> {
+  const response = await apiClient.post<{ id: number; series_id: string }>('timetable/recurring-rules/', data)
   return response.data
 }
 

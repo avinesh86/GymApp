@@ -38,10 +38,11 @@ class RecurringTimetableRuleSerializer(serializers.ModelSerializer):
     class Meta:
         model = RecurringTimetableRule
         fields = [
-            "id", "class_type", "site", "day_of_week", "start_time",
-            "instructor", "valid_from", "valid_to", "is_active",
+            "id", "class_type", "site", "day_of_week", "start_time", "end_time",
+            "instructor", "valid_from", "valid_to", "is_active", "series_id",
         ]
         read_only_fields = ["id"]
+        extra_kwargs = {"series_id": {"required": False}}
 
 
 class TimetableEventSerializer(serializers.ModelSerializer):
@@ -168,6 +169,22 @@ class TimetableEventSerializer(serializers.ModelSerializer):
 class AssignInstructorSerializer(serializers.Serializer):
     # Null / omitted unassigns the instructor.
     instructor_id = serializers.IntegerField(required=False, allow_null=True)
+
+
+class SeriesScopeSerializer(serializers.Serializer):
+    scope = serializers.ChoiceField(choices=["following", "all"])
+
+
+class UpdateSeriesSerializer(SeriesScopeSerializer):
+    """Fields an edit can apply across a series. Only the fields sent are
+    changed, so editing the notes doesn't reset a class that was moved on its
+    own. Times are the gym's wall-clock times."""
+
+    start_time = serializers.TimeField(required=False)
+    end_time = serializers.TimeField(required=False)
+    site = serializers.IntegerField(required=False, allow_null=True)
+    notes = serializers.CharField(required=False, allow_blank=True)
+    internal_notes = serializers.CharField(required=False, allow_blank=True)
 
 
 class CancelEventSerializer(serializers.Serializer):

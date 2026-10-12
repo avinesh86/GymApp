@@ -1,3 +1,4 @@
+import uuid
 from datetime import date
 
 from django.utils import timezone
@@ -19,9 +20,18 @@ from .serializers import (
     ClassBonusSerializer,
     ClassTypeSerializer,
     RecurringTimetableRuleSerializer,
+    SeriesScopeSerializer,
     TimetableEventSerializer,
+    UpdateSeriesSerializer,
 )
-from .services import assign_instructor, cancel_event, get_week_events
+from .services import (
+    assign_instructor,
+    cancel_event,
+    delete_series,
+    get_week_events,
+    is_in_series,
+    update_series,
+)
 
 
 class ClassTypeViewSet(TenantScopedMixin, ModelViewSet):
@@ -67,6 +77,16 @@ class RecurringTimetableRuleViewSet(TenantScopedMixin, ModelViewSet):
         return RecurringTimetableRule.objects.filter(
             tenant=self.request.tenant, is_deleted=False
         ).select_related("class_type", "site", "instructor").order_by("day_of_week", "start_time")
+
+    def perform_create(self, serializer):
+        # Rules for the other days of the same class pass the first rule's
+        # series_id back, so the whole set edits and deletes as one series.
+        serializer.save(
+            tenant=self.request.tenant,
+            created_by=self.request.user,
+            updated_by=self.request.user,
+            series_id=serializer.validated_data.get("series_id") or uuid.uuid4(),
+        )
 
     @action(detail=True, methods=["post"], url_path="generate")
     def generate(self, request, pk=None):
@@ -210,3 +230,39 @@ class TimetableEventViewSet(TenantScopedMixin, ModelViewSet):
         serializer.is_valid(raise_exception=True)
         updated = cancel_event(event, request.user, serializer.validated_data.get("reason", ""))
         return Response(TimetableEventSerializer(updated).data)
+
+    @action(detail=True, methods=["post"], url_path="update-series")
+    def update_series_action(self, request, pk=None):
+        """Edit this class and the rest of its recurring series.
+
+        scope "following" = this class and later ones; "all" = the whole
+        series. Editing just this class is a normal PATCH.
+        """
+        event = self.get_object()
+        if not is_in_series(event):
+            return Response({"detail": "This class is not part of a recurring series."}, status=400)
+        serializer = UpdateSeriesSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        changes = dict(serializer.validated_data)
+        scope = changes.pop("scope")
+        if "site" in changes and changes["site"] is not None:
+            from apps.tenants.models import Site
+
+            site = Site.objects.filter(pk=changes["site"], tenant=request.tenant).first()
+            if site is None:
+                return Response({"detail": "Location not found."}, status=404)
+            changes["site"] = site
+        updated = update_series(event, scope, changes, request.user)
+        return Response({"updated": updated})
+
+    @action(detail=True, methods=["post"], url_path="delete-series")
+    def delete_series_action(self, request, pk=None):
+        """Delete this class and the rest of its recurring series, and stop
+        the series generating more. Deleting just this class is a DELETE."""
+        event = self.get_object()
+        if not is_in_series(event):
+            return Response({"detail": "This class is not part of a recurring series."}, status=400)
+        serializer = SeriesScopeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        deleted = delete_series(event, serializer.validated_data["scope"], request.user)
+        return Response({"deleted": deleted})

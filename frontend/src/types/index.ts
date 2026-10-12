@@ -199,6 +199,7 @@ export interface TimetableEvent {
   internal_notes?: string
   cancellation_reason?: string
   recurring_pattern_id?: string | null
+  recurring_rule?: number | null
   archive_status?: string
 }
 
