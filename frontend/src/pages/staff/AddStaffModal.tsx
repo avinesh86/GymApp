@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { createStaff, createPayRate, createCapability } from '../../api/staff'
 import { listClassTypes } from '../../api/timetable'
+import { useAuth } from '../../hooks/useAuth'
+import { extractApiError } from './StaffDetailModal'
 import { Modal } from '../../components/ui/Modal'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -24,6 +26,11 @@ interface AddStaffModalProps {
 
 export function AddStaffModal({ isOpen, onClose }: AddStaffModalProps) {
   const queryClient = useQueryClient()
+  const { user } = useAuth()
+  // Adding a staff member creates their login with this role. Owners, gym
+  // managers and admins can add any of these, admins included.
+  const canGrantAdmin = ['owner', 'gym_manager', 'admin'].includes(user?.role ?? '')
+  const roleOptions = ROLE_OPTIONS.filter((opt) => canGrantAdmin || opt.value !== 'admin')
 
   const [firstName, setFirstName] = useState('')
   const [lastName, setLastName]   = useState('')
@@ -79,7 +86,7 @@ export function AddStaffModal({ isOpen, onClose }: AddStaffModalProps) {
       onClose()
       resetForm()
     },
-    onError: () => toast.error('Failed to add staff member'),
+    onError: (error) => toast.error(extractApiError(error, 'Failed to add staff member')),
   })
 
   function resetForm() {
@@ -154,7 +161,7 @@ export function AddStaffModal({ isOpen, onClose }: AddStaffModalProps) {
           label="Role"
           value={role}
           onChange={(e) => setRole(e.target.value)}
-          options={ROLE_OPTIONS}
+          options={roleOptions}
           required
         />
 

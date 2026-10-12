@@ -3,6 +3,8 @@ from datetime import date, timedelta
 
 from celery import shared_task
 
+from apps.core.timezones import format_date_range
+
 logger = logging.getLogger(__name__)
 
 
@@ -111,7 +113,7 @@ def send_invoice_reminders():
             title="Reminder: submit your invoice",
             body=(
                 f"Your draft invoice {invoice.invoice_number} "
-                f"({invoice.period_start:%d %b} – {invoice.period_end:%d %b %Y}) "
+                f"({format_date_range(invoice.period_start, invoice.period_end)}) "
                 f"is still unsubmitted."
             ),
             related_object_type="invoice",

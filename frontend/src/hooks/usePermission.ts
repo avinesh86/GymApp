@@ -30,7 +30,7 @@ export const ALL_PERMISSIONS: Permission[] = [
 export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Permission[] | ['*']> = {
   owner:            ['*'],
   admin:            ['dashboard', 'timetable', 'staff', 'cover', 'invoices', 'attendance', 'qr_attendance', 'reports', 'imports', 'settings'],
-  gym_manager:      ['dashboard', 'timetable', 'staff', 'cover', 'attendance', 'qr_attendance', 'reports'],
+  gym_manager:      ['*'],
   payroll:          ['dashboard', 'invoices', 'reports'],
   team_leader:      ['dashboard', 'timetable', 'cover', 'attendance', 'qr_attendance'],
   instructor:       ['dashboard', 'timetable', 'attendance', 'invoices'],
@@ -59,8 +59,8 @@ function loadStoredMatrix(): StoredMatrix | null {
  * overrides first and falling back to the hardcoded defaults.
  */
 function resolvePermission(role: UserRole, permission: Permission): boolean {
-  // owner always has wildcard access — not overridable
-  if (role === 'owner') return true
+  // Owners and gym managers always have full access — not overridable.
+  if (role === 'owner' || role === 'gym_manager') return true
 
   const matrix = loadStoredMatrix()
 

@@ -4,7 +4,7 @@ import toast from 'react-hot-toast'
 import { User, Mail, Phone } from 'lucide-react'
 import {
   getMyStaffProfile,
-  updateStaff,
+  updateMyStaffProfile,
   listAvailability,
   createAvailability,
   deleteAvailability,
@@ -13,7 +13,7 @@ import {
   deleteCapability,
   getPaymentDetails,
   createOrUpdatePaymentDetails,
-  type PaymentDetails,
+  type PaymentDetailsInput,
 } from '../../api/staff'
 import { listClassTypes } from '../../api/timetable'
 import { changePassword } from '../../api/auth'
@@ -25,6 +25,7 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Input } from '../../components/ui/Input'
+import { AVAILABILITY_BANDS, bandForStartTime } from '../staff/availabilityBands'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,16 +47,13 @@ const ROLE_LABELS: Record<string, string> = {
   instructor: 'Instructor', class_count_admin: 'Class Count Admin',
 }
 
-// Day of week: 0=Mon … 6=Sun (matches the Availability.day_of_week field,
-// assuming the API uses 0=Monday like date-fns weekStartsOn:1).
+// Day of week: 0=Mon … 6=Sun, as the API stores it.
 const DAYS_OF_WEEK = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
 
-const TIME_BANDS: { label: string; startHour: number; endHour: number }[] = [
-  { label: 'Morning',   startHour: 5,  endHour: 12 },
-  { label: 'Lunch',     startHour: 12, endHour: 14 },
-  { label: 'Afternoon', startHour: 14, endHour: 18 },
-  { label: 'Evening',   startHour: 18, endHour: 24 },
-]
+// Shared with the staff popup so a slot saved here shows there too. This page
+// used to end Evening at "24:00:00", which is not a valid time: the save was
+// refused after the existing slots had already been deleted.
+const TIME_BANDS = AVAILABILITY_BANDS
 
 type AvailabilityGrid = boolean[][]  // [dayIndex][bandIndex]
 
@@ -65,23 +63,14 @@ function buildGridFromSlots(slots: Availability[]): AvailabilityGrid {
   )
 
   for (const slot of slots) {
-    const startHour = parseInt(slot.start_time.split(':')[0], 10)
     const dayIndex = slot.day_of_week
-
-    TIME_BANDS.forEach((band, bandIndex) => {
-      if (startHour >= band.startHour && startHour < band.endHour) {
-        if (dayIndex >= 0 && dayIndex < 7) {
-          grid[dayIndex][bandIndex] = true
-        }
-      }
-    })
+    const bandIndex = TIME_BANDS.findIndex((band) => band.key === bandForStartTime(slot.start_time))
+    if (dayIndex >= 0 && dayIndex < 7 && bandIndex >= 0) {
+      grid[dayIndex][bandIndex] = true
+    }
   }
 
   return grid
-}
-
-function zeroPad(n: number): string {
-  return String(n).padStart(2, '0')
 }
 
 // ─── Info Tab ─────────────────────────────────────────────────────────────────
@@ -105,7 +94,7 @@ function InfoTab({ staffId }: InfoTabProps) {
   }, [staff])
 
   const { mutate: savePhone, isPending } = useMutation({
-    mutationFn: () => updateStaff(staffId, { phone }),
+    mutationFn: () => updateMyStaffProfile({ phone }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staff', staffId] })
       queryClient.invalidateQueries({ queryKey: ['staff', 'me'] })
@@ -215,8 +204,8 @@ function AvailabilityTab({ staffId }: AvailabilityTabProps) {
             creates.push(
               createAvailability(staffId, {
                 day_of_week: dayIndex,
-                start_time: `${zeroPad(band.startHour)}:00:00`,
-                end_time: `${zeroPad(band.endHour)}:00:00`,
+                start_time: band.start,
+                end_time: band.end,
               })
             )
           }
@@ -250,7 +239,7 @@ function AvailabilityTab({ staffId }: AvailabilityTabProps) {
                 <th key={band.label} className="px-3 py-2 text-xs font-medium text-gray-500 uppercase tracking-wide text-center whitespace-nowrap">
                   {band.label}
                   <span className="block font-normal text-gray-400 normal-case tracking-normal">
-                    {zeroPad(band.startHour)}–{zeroPad(band.endHour)}
+                    {band.start.slice(0, 5)}–{band.end.slice(0, 5)}
                   </span>
                 </th>
               ))}
@@ -361,6 +350,7 @@ function ClassesTab({ staffId }: ClassesTabProps) {
               <button
                 key={classType.id}
                 onClick={() => toggleCapability(classType.id)}
+                aria-pressed={isActive}
                 className={[
                   'inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-medium border-2 transition-colors',
                   isActive
@@ -384,7 +374,7 @@ interface PaymentTabProps {
   staffId: number
 }
 
-const EMPTY_PAYMENT: PaymentDetails = {
+const EMPTY_PAYMENT: PaymentDetailsInput = {
   business_name: '',
   bank_name: '',
   account_name: '',
@@ -396,7 +386,7 @@ const EMPTY_PAYMENT: PaymentDetails = {
 
 function PaymentTab({ staffId }: PaymentTabProps) {
   const queryClient = useQueryClient()
-  const [form, setForm] = useState<PaymentDetails>(EMPTY_PAYMENT)
+  const [form, setForm] = useState<PaymentDetailsInput>(EMPTY_PAYMENT)
 
   const { data: paymentData, isLoading } = useQuery({
     queryKey: ['staff', staffId, 'payment-details'],
@@ -405,7 +395,18 @@ function PaymentTab({ staffId }: PaymentTabProps) {
   })
 
   useEffect(() => {
-    if (paymentData) setForm(paymentData)
+    if (!paymentData) return
+    // Only the fields this form edits. Echoing the whole record back sent the
+    // saved logo's URL where the API expects a file, and the save was refused.
+    setForm({
+      business_name: paymentData.business_name ?? '',
+      bank_name: paymentData.bank_name ?? '',
+      account_name: paymentData.account_name ?? '',
+      account_number: paymentData.account_number ?? '',
+      sort_code: paymentData.sort_code ?? '',
+      payment_reference: paymentData.payment_reference ?? '',
+      additional_notes: paymentData.additional_notes ?? '',
+    })
   }, [paymentData])
 
   const { mutate: save, isPending } = useMutation({
@@ -417,7 +418,7 @@ function PaymentTab({ staffId }: PaymentTabProps) {
     onError: () => toast.error('Failed to save payment details'),
   })
 
-  function setField(field: keyof PaymentDetails, value: string) {
+  function setField(field: keyof PaymentDetailsInput, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }))
   }
 

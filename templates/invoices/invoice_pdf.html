@@ -98,7 +98,7 @@
             <div class="invoice-number">{{ invoice.invoice_number }}</div>
             <div><span class="status-badge">{{ invoice.get_status_display }}</span></div>
             <div style="margin-top: 8px; color: #6b7280;">
-                Period: {{ invoice.period_start|date:"d M Y" }} — {{ invoice.period_end|date:"d M Y" }}
+                Period: {{ period }}
             </div>
         </div>
     </div>
@@ -112,9 +112,9 @@
         </div>
         <div class="section" style="text-align: right;">
             <div class="section-title">Invoice Details</div>
-            <div>Generated: {{ invoice.created_at|date:"d M Y" }}</div>
-            {% if invoice.submitted_at %}
-            <div>Submitted: {{ invoice.submitted_at|date:"d M Y" }}</div>
+            <div>Generated: {{ generated_on }}</div>
+            {% if submitted_on %}
+            <div>Submitted: {{ submitted_on }}</div>
             {% endif %}
         </div>
     </div>

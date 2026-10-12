@@ -1,10 +1,12 @@
 from rest_framework import status
 from rest_framework.decorators import action
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
 from apps.core.mixins import TenantScopedMixin
 from apps.core.permissions import IsAdmin, IsGymManager
+from apps.users.constants import UserRole
 
 from .models import (
     PaymentDetails,
@@ -15,7 +17,8 @@ from .models import (
     StaffProfile,
     StaffQualification,
 )
-from .services import provision_user
+from .permissions import IsGymManagerOrSelf
+from .services import provision_user, sync_membership_role
 from .serializers import (
     PaymentDetailsSerializer,
     StaffAvailabilitySerializer,
@@ -25,6 +28,7 @@ from .serializers import (
     StaffProfileListSerializer,
     StaffProfileSerializer,
     StaffQualificationSerializer,
+    StaffSelfSerializer,
 )
 
 
@@ -80,8 +84,20 @@ class StaffProfileViewSet(TenantScopedMixin, ModelViewSet):
             ordering = "name"
         return qs.order_by(ordering)
 
+    def _check_may_grant(self, role):
+        """Nobody hands out more access than they hold themselves.
+
+        Adding a staff member creates their login with this role. Owners and
+        gym managers have full access and can add anyone, admins included; an
+        admin can add anyone except an owner.
+        """
+        granted = UserRole.from_staff_role(role)
+        if granted == UserRole.OWNER and self.request.user.role not in UserRole.FULL_ACCESS_ROLES:
+            raise PermissionDenied("Only an owner or gym manager can give someone the owner role.")
+
     def perform_create(self, serializer):
         data = serializer.validated_data
+        self._check_may_grant(data.get("role", ""))
         # StaffProfile.user is required and managed here (the field is read-only
         # on the serializer): provision/reuse the global login from the email,
         # ensure a membership in this gym, then save the profile linked to it.
@@ -100,6 +116,30 @@ class StaffProfileViewSet(TenantScopedMixin, ModelViewSet):
             updated_by=self.request.user,
         )
 
+    def perform_update(self, serializer):
+        was_active = serializer.instance.status == StaffProfile.Status.ACTIVE
+        old_role = serializer.instance.role
+        new_role = serializer.validated_data.get("role", old_role)
+        if new_role != old_role:
+            # The role decides what the person can do in this gym. Owners,
+            # gym managers and admins can change it; ownership is only handed
+            # out or taken away by someone with full access.
+            actor_role = self.request.user.role
+            if UserRole.OWNER in (old_role, new_role) and actor_role not in UserRole.FULL_ACCESS_ROLES:
+                raise PermissionDenied("Only an owner or gym manager can change the owner role.")
+
+        staff = serializer.save(updated_by=self.request.user)
+        if staff.role != old_role:
+            # Permissions read the gym membership, not the profile. Without
+            # this the new role showed on the staff card but changed nothing.
+            sync_membership_role(staff.user, staff.tenant, staff.role)
+        if was_active and staff.status != StaffProfile.Status.ACTIVE:
+            # Inactive staff get no cover notices — including for offers that
+            # were already out when they were made inactive.
+            from apps.cover.services import withdraw_pending_offers
+
+            withdraw_pending_offers(staff, self.request.user)
+
     @action(detail=False, methods=["get", "patch"], url_path="me", permission_classes=[])
     def me(self, request):
         """Returns the StaffProfile for the currently authenticated user."""
@@ -115,14 +155,21 @@ class StaffProfileViewSet(TenantScopedMixin, ModelViewSet):
             return Response({"detail": "Staff profile not found."}, status=404)
 
         if request.method == "PATCH":
-            serializer = StaffProfileSerializer(staff, data=request.data, partial=True)
+            # Self-service: contact details only. The full serializer would let
+            # anyone change their own role, status or priority tier.
+            serializer = StaffSelfSerializer(staff, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
             serializer.save(updated_by=request.user)
             return Response(serializer.data)
 
         return Response(StaffProfileSerializer(staff).data)
 
-    @action(detail=True, methods=["get", "put", "patch"], url_path="payment-details")
+    @action(
+        detail=True,
+        methods=["get", "put", "patch"],
+        url_path="payment-details",
+        permission_classes=[IsGymManagerOrSelf],
+    )
     def payment_details(self, request, pk=None):
         staff = self.get_object()
         details, _ = PaymentDetails.objects.get_or_create(
@@ -162,7 +209,9 @@ class StaffQualificationViewSet(TenantScopedMixin, ModelViewSet):
 
 class StaffCapabilityViewSet(TenantScopedMixin, ModelViewSet):
     serializer_class = StaffClassTypeCapabilitySerializer
-    permission_classes = [IsGymManager]
+    # Instructors tick the class types they teach on My Profile; managers can
+    # do it for anyone.
+    permission_classes = [IsGymManagerOrSelf]
 
     def get_queryset(self):
         return StaffClassTypeCapability.objects.filter(
@@ -209,7 +258,7 @@ class StaffCapabilityViewSet(TenantScopedMixin, ModelViewSet):
 
 class StaffAvailabilityViewSet(TenantScopedMixin, ModelViewSet):
     serializer_class = StaffAvailabilitySerializer
-    permission_classes = [IsGymManager]
+    permission_classes = [IsGymManagerOrSelf]
 
     def get_queryset(self):
         return StaffAvailability.objects.filter(

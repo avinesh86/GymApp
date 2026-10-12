@@ -128,6 +128,8 @@ export interface RecurringRulePayload {
   day_of_week: number
   start_time: string
   end_time?: string | null
+  /** Given to every class the rule generates. */
+  capacity?: number
   valid_from: string
   valid_to?: string | null
   /** Pass the first rule's series_id when creating the other days of the same

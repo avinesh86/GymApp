@@ -261,7 +261,7 @@ export function InvoiceDetailPage() {
                     <p className="text-xs text-gray-500 mt-0.5">{event.notes}</p>
                   )}
                   <p className="text-xs text-gray-400 mt-0.5">
-                    {format(new Date(event.timestamp), 'd MMM yyyy, h:mma')}
+                    {event.timestamp_display || format(new Date(event.timestamp), 'd MMM yyyy, h:mma')}
                   </p>
                 </div>
               </li>

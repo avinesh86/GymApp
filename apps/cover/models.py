@@ -63,6 +63,8 @@ class CoverRequest(TenantAwareModel):
     )
     urgency = models.CharField(max_length=20, choices=Urgency.choices, default=Urgency.HIGH)
     bonus_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    # Why cover is needed, as typed on the request form.
+    notes = models.TextField(blank=True, default="")
 
     # Who raised the request (the instructor for self-service, or a manager).
     requested_by = models.ForeignKey(

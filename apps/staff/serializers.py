@@ -106,6 +106,15 @@ class StaffProfileSerializer(NameMixin, serializers.ModelSerializer):
         ]
 
 
+class StaffSelfSerializer(StaffProfileSerializer):
+    """What a staff member may change about themselves from My Profile."""
+
+    class Meta(StaffProfileSerializer.Meta):
+        read_only_fields = [
+            f for f in StaffProfileSerializer.Meta.fields if f not in ("phone", "bio", "avatar")
+        ]
+
+
 class StaffProfileListSerializer(NameMixin, serializers.ModelSerializer):
     first_name = serializers.SerializerMethodField()
     last_name = serializers.SerializerMethodField()

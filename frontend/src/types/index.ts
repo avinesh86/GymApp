@@ -63,7 +63,7 @@ export interface TenantSettings {
   notification_email_password_set: boolean
   /** True when the server sends mail itself — no mail account for the gym to configure. */
   email_sending_managed: boolean
-  // frontend-only prefs (not persisted server-side yet)
+  /** 0 = Sunday, 1 = Monday, 6 = Saturday */
   week_start_day?: number
   default_timetable_view?: 'week' | 'list'
 }
@@ -125,16 +125,19 @@ export interface StaffMember {
   phone: string
   role: UserRole
   status: 'active' | 'inactive' | 'suspended'
-  is_active?: boolean
+  /** Cover dispatch priority, 1 (offered first) to 3. Detail responses only. */
+  priority_tier?: number
   reliability_score: number | null
   avatar: string | null
   capabilities?: Capability[]
+  updated_at?: string
 }
 
 export interface PayRate {
   id: number
   rate_type: string
   amount: string
+  per_head_rate?: string
   rate_per_hour: string
   effective_from: string
   effective_to: string | null
@@ -341,6 +344,8 @@ export interface ApprovalEvent {
   notes: string
   approved_at: string
   timestamp: string
+  /** `timestamp` written out in the gym's timezone. */
+  timestamp_display?: string
 }
 
 // ─── Reports ─────────────────────────────────────────────────────────────────

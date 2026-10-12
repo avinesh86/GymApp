@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { goToSection, named, signIn } from './helpers'
+import { expectToast, goToSection, named, signIn } from './helpers'
 
 /**
  * Adding an instructor, qualifying them, and putting a class on the timetable.
@@ -55,6 +55,40 @@ test.describe.serial('staff and the timetable', () => {
       page.getByRole('checkbox', { checked: true }).first(),
       'the class type ticked when adding them should still be ticked',
     ).toBeVisible()
+  })
+
+  test('edits in the staff popup are still there after saving', async ({ page }) => {
+    await signIn(page)
+    await goToSection(page, 'Staff')
+
+    // "Staff member updated" used to appear while the priority tier and the
+    // status were thrown away, so the toast alone proves nothing. Save, close,
+    // come back, and look.
+    await page.getByText(FULL_NAME).first().click()
+    await page.getByLabel('Priority Tier').selectOption({ label: 'Tier 3' })
+    await page.getByLabel('Status', { exact: true }).selectOption({ label: 'Inactive' })
+    await page.getByRole('button', { name: 'Save Changes' }).click()
+    await expectToast(page, 'Staff member updated')
+
+    // An inactive member leaves the default (active) list — itself a sign the
+    // status was stored.
+    await page.getByLabel('Filter by status').selectOption({ label: 'Inactive' })
+    await page.getByText(FULL_NAME).first().click()
+    await expect(
+      page.getByLabel('Priority Tier'),
+      'the priority tier chosen before saving should still be selected',
+    ).toHaveValue('3')
+    await expect(
+      page.getByLabel('Status', { exact: true }),
+      'the status chosen before saving should still be selected',
+    ).toHaveValue('inactive')
+
+    // Back to active: cover is only offered to active instructors, and the
+    // tests after this one need this instructor to receive an offer.
+    await page.getByLabel('Status', { exact: true }).selectOption({ label: 'Active' })
+    await page.getByRole('button', { name: 'Save Changes' }).click()
+    await page.getByLabel('Filter by status').selectOption({ label: 'Active' })
+    await expect(page.getByText(FULL_NAME).first()).toBeVisible()
   })
 
   test('a class can be added to the timetable', async ({ page }) => {

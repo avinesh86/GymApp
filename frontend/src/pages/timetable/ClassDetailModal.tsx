@@ -216,7 +216,8 @@ function EditTab({
 }) {
   const queryClient = useQueryClient()
   const { user } = useAuth()
-  const isSuperAdmin = user?.role === 'owner' || user?.role === 'admin'
+  // Whoever can add a recurring class from the timetable can make one here.
+  const isSuperAdmin = ['owner', 'admin', 'gym_manager'].includes(user?.role ?? '')
 
   const [date, setDate]             = useState(event.date)
   const [startTime, setStartTime]   = useState(event.start_time)
@@ -331,6 +332,7 @@ function EditTab({
           day_of_week: toBackendDayOfWeek(frontendDay),
           start_time:  `${startTime}:00`,
           end_time:    `${endTime}:00`,
+          capacity:    event.capacity,
           valid_from:  date,
           valid_to:    recurringEndDate || null,
           series_id:   seriesId,
@@ -424,7 +426,7 @@ function EditTab({
         />
       </div>
 
-      {/* ── Recurring section — super admins only ────────────────────────── */}
+      {/* ── Recurring section — owners, admins and gym managers ───────────── */}
       {isSuperAdmin && !isRecurring && <div className="border border-gray-100 rounded-xl p-3 bg-gray-50">
         <label className="flex items-center gap-2 cursor-pointer select-none">
           <input
