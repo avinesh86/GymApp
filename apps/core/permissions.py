@@ -42,14 +42,16 @@ def has_role(*roles):
 
 
 class IsOwner(TenantPermission):
+    """The owner — and a gym manager, who has the same access."""
+
     def has_permission(self, request, view):
-        return super().has_permission(request, view) and request.user.role == UserRole.OWNER
+        return super().has_permission(request, view) and request.user.role in UserRole.FULL_ACCESS_ROLES
 
 
 class IsAdmin(TenantPermission):
     def has_permission(self, request, view):
         return super().has_permission(request, view) and request.user.role in (
-            UserRole.OWNER,
+            *UserRole.FULL_ACCESS_ROLES,
             UserRole.ADMIN,
         )
 
@@ -66,7 +68,7 @@ class IsGymManager(TenantPermission):
 class IsPayroll(TenantPermission):
     def has_permission(self, request, view):
         return super().has_permission(request, view) and request.user.role in (
-            UserRole.OWNER,
+            *UserRole.FULL_ACCESS_ROLES,
             UserRole.ADMIN,
             UserRole.PAYROLL,
         )

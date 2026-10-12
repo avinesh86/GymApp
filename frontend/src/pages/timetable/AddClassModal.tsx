@@ -143,6 +143,7 @@ export function AddClassModal({ isOpen, onClose, defaultDate, onCreated }: AddCl
           day_of_week: toBackendDayOfWeek(frontendDay),
           start_time: `${startTime}:00`,
           end_time: `${endTime}:00`,
+          capacity: Number(capacity),
           valid_from: date,
           valid_to: recurringEndDate || null,
           series_id: seriesId,
@@ -260,16 +261,26 @@ export function AddClassModal({ isOpen, onClose, defaultDate, onCreated }: AddCl
           required
         />
 
-        <div className="flex flex-col gap-1">
-          <label className="text-sm font-medium text-gray-700">Notes (optional)</label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            rows={2}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-cyan-400"
-            placeholder="Any additional notes..."
-          />
-        </div>
+        {/* Notes belong to one class, not a series — a recurring class gets
+            its notes on each class afterwards, so the field is not offered
+            here where it would be typed and then not kept. */}
+        {isRecurring ? (
+          <p className="text-xs text-gray-400">
+            Notes are kept per class. Add them to each class from the timetable once the series is created.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-1">
+            <label htmlFor="add-class-notes" className="text-sm font-medium text-gray-700">Notes (optional)</label>
+            <textarea
+              id="add-class-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-cyan-400"
+              placeholder="Any additional notes..."
+            />
+          </div>
+        )}
 
         {/* Recurring toggle */}
         <div className="border border-gray-100 rounded-lg p-3 bg-gray-50">

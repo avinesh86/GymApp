@@ -42,10 +42,22 @@ class PermissionTest(TestCase):
         perm = IsAdmin()
         self.assertTrue(perm.has_permission(self._make_request("admin"), None))
 
-    def test_is_admin_denies_gym_manager(self):
+    def test_is_admin_allows_gym_manager(self):
+        # A gym manager has the same access as the owner.
         from apps.core.permissions import IsAdmin
         perm = IsAdmin()
-        self.assertFalse(perm.has_permission(self._make_request("gym_manager"), None))
+        self.assertTrue(perm.has_permission(self._make_request("gym_manager"), None))
+
+    def test_gym_manager_has_everything_the_owner_has(self):
+        from apps.core import permissions
+
+        owner, manager = self._make_request("owner"), self._make_request("gym_manager")
+        for name in ("IsOwner", "IsAdmin", "IsGymManager", "IsPayroll", "IsTeamLeader",
+                     "IsInvoiceParticipant", "IsInstructorOrAbove", "IsClassCountAdmin"):
+            perm = getattr(permissions, name)()
+            self.assertEqual(
+                perm.has_permission(manager, None), perm.has_permission(owner, None), name
+            )
 
     def test_is_admin_denies_instructor(self):
         from apps.core.permissions import IsAdmin

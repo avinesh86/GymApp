@@ -53,6 +53,8 @@ class TenantSettingsSerializer(serializers.ModelSerializer):
             "currency_symbol",
             "cover_offer_expiry_hours",
             "auto_generate_invoices",
+            "week_start_day",
+            "default_timetable_view",
             "notification_from_email",
             "notification_from_name",
             "notification_email_password",

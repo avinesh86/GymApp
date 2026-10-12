@@ -48,7 +48,9 @@ function AttendanceCard({ record }: AttendanceCardProps) {
           <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-500">
             <span className="flex items-center gap-1">
               <Clock className="h-3.5 w-3.5 text-gray-400" />
-              {format(parseISO(event.start_datetime ?? event.date), 'EEE, MMM d')} · {event.start_time} – {event.end_time}
+              {/* event.date is the gym's own day; start_datetime would be read in
+                  the browser's timezone and can land on the day either side. */}
+              {format(parseISO(event.date), 'EEE, MMM d')} · {event.start_time} – {event.end_time}
             </span>
             <span className="flex items-center gap-1">
               <MapPin className="h-3.5 w-3.5 text-gray-400" />

@@ -73,6 +73,7 @@ def generate_recurring_events(rule: RecurringTimetableRule, from_date: date, to_
                     class_type=rule.class_type,
                     site=rule.site,
                     instructor=rule.instructor,
+                    capacity=rule.capacity,
                     start_datetime=start_dt,
                     end_datetime=end_dt,
                     status=(

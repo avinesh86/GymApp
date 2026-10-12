@@ -51,6 +51,19 @@ class UserViewSet(ModelViewSet):
 
         provision_staff_for_user(user, self.request.tenant)
 
+    def perform_update(self, serializer):
+        user = serializer.save()
+        if "role" in serializer.validated_data:
+            # Access is checked against the membership for the active gym, and
+            # the roster reads the staff profile. Saving User.role alone showed
+            # the new role in this list while the person kept their old access.
+            from apps.staff.models import StaffProfile
+
+            Membership.objects.filter(user=user, tenant=self.request.tenant).update(role=user.role)
+            StaffProfile.objects.filter(
+                user=user, tenant=self.request.tenant, is_deleted=False
+            ).update(role=user.role)
+
     def destroy(self, request, *args, **kwargs):
         # Removing a user is per-gym: deactivate their membership in THIS gym.
         # Only disable the login entirely if they have no other active gym.

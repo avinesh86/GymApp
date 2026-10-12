@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from apps.attendance.models import AttendanceRecord
 from apps.core.audit import log_audit
+from apps.core.timezones import format_date, format_date_range, format_datetime, local_today
 from apps.staff.models import StaffPayRate, StaffPayRateOverride, StaffProfile
 from apps.timetable.models import TimetableEvent
 
@@ -64,7 +65,7 @@ def generate_invoice_for_instructor(
         attendance_count = _get_attendance_count(event)
         rate, rate_type, amount = _resolve_pay_rate(instructor, event, period_start, attendance_count)
         description = (
-            f"{event.class_type.name} — {event.start_datetime:%d %b %Y %H:%M}"
+            f"{event.class_type.name} — {format_datetime(event.start_datetime, event.tenant)}"
         )
         InvoiceLineItem.objects.create(
             tenant=instructor.tenant,
@@ -180,7 +181,9 @@ def _apply_bonus_rules(invoice: Invoice, event: TimetableEvent, attendance_count
 
     for bonus in bonuses:
         label = bonus.name or bonus.get_bonus_type_display()
-        description = f"{label} — {event.class_type.name} {event.start_datetime:%d %b}"
+        description = (
+            f"{label} — {event.class_type.name} {format_date(event.start_datetime, event.tenant)}"
+        )
 
         if bonus.bonus_type == ClassBonus.BonusType.FLAT_BONUS:
             bonus_amount = bonus.bonus_amount
@@ -301,7 +304,7 @@ def mark_invoice_paid(invoice: Invoice, paid_by, payment_date=None, payment_refe
         extra_fields={
             "payroll_approver": invoice.payroll_approver or paid_by,
             "payroll_approved_at": invoice.payroll_approved_at or timezone.now(),
-            "payment_date": payment_date or timezone.now().date(),
+            "payment_date": payment_date or local_today(invoice.tenant),
             "payment_reference": payment_reference or "",
         },
     )
@@ -320,6 +323,13 @@ def generate_invoice_pdf(invoice: Invoice) -> Invoice:
         "invoice": invoice,
         "line_items": invoice.line_items.filter(is_deleted=False).order_by("created_at"),
         "branding": getattr(invoice.tenant, "branding", None),
+        # Written out here rather than with the template's |date filter, which
+        # works in UTC and so dates an evening submission a day late.
+        "period": format_date_range(invoice.period_start, invoice.period_end),
+        "generated_on": format_date(invoice.created_at, invoice.tenant),
+        "submitted_on": (
+            format_date(invoice.submitted_at, invoice.tenant) if invoice.submitted_at else ""
+        ),
     }
 
     html_string = render_to_string("invoices/invoice_pdf.html", context)

@@ -53,7 +53,14 @@ export function EditStaffModal({ staff, onClose }: EditStaffModalProps) {
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
-    editStaff({ first_name: firstName, last_name: lastName, email, phone, role: role as never })
+    // The API stores one `name`; first_name / last_name are read-only pieces
+    // of it, so sent on their own a renamed staff member kept their old name.
+    editStaff({
+      name: [firstName, lastName].filter(Boolean).join(' '),
+      email,
+      phone,
+      role: role as never,
+    })
   }
 
   return (

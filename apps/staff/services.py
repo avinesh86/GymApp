@@ -34,6 +34,20 @@ def _ensure_membership(user: User, tenant, role: str) -> None:
         membership.save(update_fields=["is_active"])
 
 
+def sync_membership_role(user: User, tenant, role: str) -> None:
+    """Carry a staff profile's role through to the person's access in this gym.
+
+    Permissions are checked against the Membership for the active gym (copied
+    onto the user per request), so that is what has to change. User.role is the
+    person's default and only follows when this gym is their home gym.
+    """
+    mapped_role = UserRole.from_staff_role(role)
+    Membership.objects.filter(user=user, tenant=tenant).update(role=mapped_role)
+    if user.tenant_id == tenant.id and user.role != mapped_role:
+        user.role = mapped_role
+        user.save(update_fields=["role"])
+
+
 def provision_user(*, email, name, tenant, role, send_invite=False) -> tuple[User, bool]:
     """Find-or-create the global login User for a staff member and gym membership.
 

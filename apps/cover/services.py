@@ -3,6 +3,7 @@ import logging
 from django.utils import timezone
 
 from apps.core.audit import log_audit
+from apps.core.timezones import to_tenant_local
 from apps.staff.models import StaffAvailability, StaffClassTypeCapability, StaffProfile
 from apps.timetable.models import TimetableEvent
 
@@ -46,6 +47,7 @@ def create_cover_request(
     bonus_amount=0,
     requested_by=None,
     initial_status: str = S.OPEN,
+    notes: str = "",
 ) -> CoverRequest:
     """Creates a cover request for an event and flags the event as needing cover.
 
@@ -67,6 +69,7 @@ def create_cover_request(
         status=initial_status,
         urgency=urgency,
         bonus_amount=bonus_amount or 0,
+        notes=(notes or "").strip(),
         requested_by=requested_by or created_by,
         created_by=created_by,
         updated_by=created_by,
@@ -166,8 +169,12 @@ def score_instructor_for_cover(instructor: StaffProfile, event: TimetableEvent, 
     if absent_staff_id and instructor.pk == absent_staff_id:
         return None
 
-    event_day = event.start_datetime.weekday()
-    event_time = event.start_datetime.time()
+    # Availability is entered as the gym's own days and times, so the class
+    # has to be read the same way — in UTC a 9am Monday class in Auckland is
+    # 8pm Sunday and matched nobody's Monday morning.
+    local_start = to_tenant_local(event.start_datetime, event.tenant)
+    event_day = local_start.weekday()
+    event_time = local_start.time()
 
     score = 0
 
@@ -317,6 +324,23 @@ def dispatch_cover_offers(cover_request: CoverRequest, created_by, staff_ids: li
         ]
         return _create_offers(cover_request, chosen, created_by)
     return send_cover_offers(cover_request, created_by, tier=tier)
+
+
+def withdraw_pending_offers(staff: StaffProfile, actor) -> int:
+    """Close every offer still waiting on a staff member who is no longer active.
+
+    Without this an instructor made inactive kept a live offer — still listed
+    on the request, still reminded hourly, and still able to accept the class.
+    Returns how many offers were withdrawn.
+    """
+    pending = CoverOffer.objects.filter(
+        staff=staff, status=CoverOffer.Status.PENDING, is_deleted=False
+    )
+    return pending.update(
+        status=CoverOffer.Status.EXPIRED,
+        responded_at=timezone.now(),
+        updated_by=actor,
+    )
 
 
 def escalate_cover_request(cover_request_id: int, next_tier: int):

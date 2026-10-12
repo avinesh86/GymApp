@@ -8,7 +8,7 @@ from rest_framework.viewsets import ModelViewSet
 
 from apps.core.mixins import TenantScopedMixin
 from apps.core.permissions import IsClassCountAdmin, IsGymManager
-from apps.core.timezones import format_for_tenant, to_tenant_local
+from apps.core.timezones import format_time, local_date
 from apps.timetable.models import TimetableEvent
 from apps.timetable.serializers import TimetableEventSerializer
 
@@ -209,8 +209,8 @@ class QRAttendanceTokenViewSet(TenantScopedMixin, ModelViewSet):
                 "class_type_name": event.class_type.name,
                 # Whoever scans the code is standing at the gym, so show
                 # them the gym's clock rather than UTC.
-                "date": to_tenant_local(event.start_datetime, event.tenant).date().isoformat(),
-                "start_time": format_for_tenant(event.start_datetime, event.tenant, "%H:%M"),
+                "date": local_date(event.start_datetime, event.tenant).isoformat(),
+                "start_time": format_time(event.start_datetime, event.tenant),
                 "site_name": event.site.name if event.site else None,
                 "instructor_name": event.instructor.name if event.instructor else None,
             }
