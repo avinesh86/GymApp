@@ -157,6 +157,7 @@ export function StaffPage() {
           value={statusFilter}
           onChange={(e) => { setStatusFilter(e.target.value); setPage(1) }}
           className={selectClass}
+          aria-label="Filter by status"
         >
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>

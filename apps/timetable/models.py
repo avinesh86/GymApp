@@ -95,6 +95,10 @@ class RecurringTimetableRule(TenantAwareModel):
         blank=True,
         related_name="recurring_rules",
     )
+    capacity = models.PositiveIntegerField(
+        default=0,
+        help_text="Capacity given to every class this rule generates.",
+    )
     valid_from = models.DateField()
     valid_to = models.DateField(null=True, blank=True)
     is_active = models.BooleanField(default=True, db_index=True)

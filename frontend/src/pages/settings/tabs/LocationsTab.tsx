@@ -128,7 +128,11 @@ export function LocationsTab() {
         )}
       </div>
 
+      {/* key remounts the form per target so it starts from the row being
+          edited — it otherwise stays mounted with the first, empty values, and
+          editing a location opened a blank form. */}
       <SiteFormModal
+        key={editTarget?.id ?? 'new'}
         isOpen={showForm}
         onClose={() => { setShowForm(false); setEditTarget(undefined) }}
         initial={editTarget}

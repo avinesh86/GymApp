@@ -27,10 +27,18 @@ import {
   createOrUpdatePaymentDetails,
 } from '../../api/staff'
 import { listClassTypes } from '../../api/timetable'
+import { useAuth } from '../../hooks/useAuth'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import type { StaffMember, UserRole } from '../../types'
+import {
+  AVAILABILITY_BANDS,
+  AVAILABILITY_DAYS,
+  availabilityCellKey,
+  bandForStartTime,
+  type AvailabilityBand,
+} from './availabilityBands'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -47,7 +55,6 @@ const PRIORITY_TIER_OPTIONS = [
   { value: '1', label: 'Tier 1 (Highest Priority)' },
   { value: '2', label: 'Tier 2 (Second Priority)' },
   { value: '3', label: 'Tier 3' },
-  { value: '',  label: 'No Preference' },
 ]
 
 const ROLE_LABELS: Record<string, string> = {
@@ -70,17 +77,6 @@ const ROLE_BADGE_VARIANT: Record<string, 'blue' | 'purple' | 'green' | 'orange' 
   class_count_admin:'grey',
 }
 
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-
-const TIME_SLOTS = [
-  { key: 'morning',   label: 'Morning',   start: '06:00:00', end: '12:00:00' },
-  { key: 'lunch',     label: 'Lunch',     start: '12:00:00', end: '14:00:00' },
-  { key: 'afternoon', label: 'Afternoon', start: '14:00:00', end: '17:00:00' },
-  { key: 'evening',   label: 'Evening',   start: '17:00:00', end: '22:00:00' },
-] as const
-
-const WEEK_DAYS_ORDERED = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-
 const RATE_TYPE_OPTIONS = [
   { value: 'per_class', label: 'Per Class' },
   { value: 'per_head',  label: 'Per Head' },
@@ -99,13 +95,15 @@ type TabId = 'info' | 'availability' | 'classes' | 'pay-rates' | 'business'
 
 interface FieldProps {
   label: string
+  /** id of the control, so the label is tied to it. */
+  htmlFor?: string
   children: React.ReactNode
 }
 
-function FieldGroup({ label, children }: FieldProps) {
+function FieldGroup({ label, htmlFor, children }: FieldProps) {
   return (
     <div className="flex flex-col gap-1">
-      <label className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</label>
+      <label htmlFor={htmlFor} className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</label>
       {children}
     </div>
   )
@@ -124,28 +122,38 @@ interface InfoTabProps {
 
 function InfoTab({ staff, onSaved, onDeleted }: InfoTabProps) {
   const queryClient = useQueryClient()
+  const { user } = useAuth()
+  // A role decides what someone can do in the gym, so only an owner or admin
+  // changes it — the API refuses it from anyone else.
+  const canChangeRole = user?.role === 'owner' || user?.role === 'admin'
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const [email, setEmail] = useState(staff.email)
   const [phone, setPhone] = useState(staff.phone ?? '')
   const [role, setRole] = useState<UserRole>(staff.role)
-  const [isActive, setIsActive] = useState(staff.status === 'active')
-  const [priorityTier, setPriorityTier] = useState('')
+  const [status, setStatus] = useState<StaffMember['status']>(staff.status)
+  const [priorityTier, setPriorityTier] = useState(String(staff.priority_tier ?? 1))
 
   const { mutate: save, isPending: isSaving } = useMutation({
     mutationFn: () =>
       updateStaff(staff.id, {
         email,
-        phone: phone || undefined,
-        role,
-        is_active: isActive,
+        phone,
+        // Unchanged for anyone who can't edit it, so the save isn't refused.
+        ...(canChangeRole ? { role } : {}),
+        status,
+        priority_tier: Number(priorityTier),
       }),
-    onSuccess: () => {
+    onSuccess: (updated) => {
+      // Put the saved record in the cache before the popup closes. Reopening
+      // it otherwise starts from the copy fetched before the save, and the
+      // form shows the old values even though they were stored.
+      queryClient.setQueryData(['staff', staff.id], updated)
       queryClient.invalidateQueries({ queryKey: ['staff'] })
       toast.success('Staff member updated')
       onSaved()
     },
-    onError: () => toast.error('Failed to update staff member'),
+    onError: (error) => toast.error(extractApiError(error, 'Failed to update staff member')),
   })
 
   const { mutate: remove, isPending: isDeleting } = useMutation({
@@ -180,8 +188,10 @@ function InfoTab({ staff, onSaved, onDeleted }: InfoTabProps) {
     mutationFn: () =>
       createQualification(staff.id, {
         name: qualName,
-        issued_date: issuedDate,
-        expiry_date: expiryDate || null,
+        // issued_date / expiry_date are read-only aliases on the API; sent
+        // under those names the dates were silently dropped.
+        issued_at: issuedDate,
+        expires_at: expiryDate || null,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staff', staff.id, 'qualifications'] })
@@ -193,12 +203,6 @@ function InfoTab({ staff, onSaved, onDeleted }: InfoTabProps) {
     },
     onError: () => toast.error('Failed to add qualification'),
   })
-
-  const statusValue = isActive ? 'active' : 'inactive'
-
-  function handleStatusChange(value: string) {
-    setIsActive(value === 'active')
-  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -229,33 +233,43 @@ function InfoTab({ staff, onSaved, onDeleted }: InfoTabProps) {
           </div>
         </FieldGroup>
 
-        <FieldGroup label="Role">
+        <FieldGroup label="Role" htmlFor="staff-role">
           <select
+            id="staff-role"
             value={role}
             onChange={(e) => setRole(e.target.value as UserRole)}
-            className={inputClass}
+            disabled={!canChangeRole}
+            title={canChangeRole ? undefined : 'Only an owner or admin can change a role'}
+            className={`${inputClass} disabled:bg-gray-50 disabled:text-gray-500`}
           >
+            {/* An owner isn't offered below; keep theirs showing as what it is. */}
+            {!ROLE_OPTIONS.some((opt) => opt.value === role) && (
+              <option value={role}>{ROLE_LABELS[role] ?? role}</option>
+            )}
             {ROLE_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
         </FieldGroup>
 
-        <FieldGroup label="Status">
+        <FieldGroup label="Status" htmlFor="staff-status">
           <select
-            value={statusValue}
-            onChange={(e) => handleStatusChange(e.target.value)}
+            id="staff-status"
+            value={status}
+            onChange={(e) => setStatus(e.target.value as StaffMember['status'])}
             className={inputClass}
           >
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
+            {status === 'suspended' && <option value="suspended">Suspended</option>}
           </select>
         </FieldGroup>
       </div>
 
       {/* Priority Tier — full width */}
-      <FieldGroup label="Priority Tier">
+      <FieldGroup label="Priority Tier" htmlFor="staff-priority-tier">
         <select
+          id="staff-priority-tier"
           value={priorityTier}
           onChange={(e) => setPriorityTier(e.target.value)}
           className={inputClass}
@@ -398,18 +412,11 @@ function AvailabilityTab({ staffId }: { staffId: number }) {
 
   const slotMap = new Map<string, number>()
   for (const slot of availability) {
-    const matched = TIME_SLOTS.find(
-      (s) =>
-        slot.start_time === s.start ||
-        slot.start_time.startsWith(s.start.substring(0, 5))
-    )
-    if (matched) {
-      slotMap.set(`${slot.day_of_week}-${matched.key}`, slot.id)
-    }
+    slotMap.set(availabilityCellKey(slot.day_of_week, bandForStartTime(slot.start_time)), slot.id)
   }
 
-  async function toggleSlot(dayIndex: number, slotDef: typeof TIME_SLOTS[number]) {
-    const cellKey = `${dayIndex}-${slotDef.key}`
+  async function toggleSlot(dayIndex: number, slotDef: AvailabilityBand) {
+    const cellKey = availabilityCellKey(dayIndex, slotDef.key)
     const existingId = slotMap.get(cellKey)
     setPending((prev) => new Set([...prev, cellKey]))
     try {
@@ -446,7 +453,7 @@ function AvailabilityTab({ staffId }: { staffId: number }) {
           <thead>
             <tr>
               <th className="w-28 pb-3" />
-              {TIME_SLOTS.map((slot) => (
+              {AVAILABILITY_BANDS.map((slot) => (
                 <th key={slot.key} className="pb-3 text-center text-xs font-semibold text-gray-600">
                   {slot.label}
                 </th>
@@ -454,11 +461,11 @@ function AvailabilityTab({ staffId }: { staffId: number }) {
             </tr>
           </thead>
           <tbody>
-            {WEEK_DAYS_ORDERED.map((dayName, dayIndex) => (
+            {AVAILABILITY_DAYS.map((dayName, dayIndex) => (
               <tr key={dayName} className="border-t border-gray-50">
                 <td className="py-3 text-sm text-gray-700 font-medium">{dayName}</td>
-                {TIME_SLOTS.map((slotDef) => {
-                  const cellKey = `${dayIndex}-${slotDef.key}`
+                {AVAILABILITY_BANDS.map((slotDef) => {
+                  const cellKey = availabilityCellKey(dayIndex, slotDef.key)
                   const isChecked = slotMap.has(cellKey)
                   const isPendingCell = pending.has(cellKey)
                   return (
@@ -471,6 +478,7 @@ function AvailabilityTab({ staffId }: { staffId: number }) {
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => toggleSlot(dayIndex, slotDef)}
+                            aria-label={`${dayName} ${slotDef.label}`}
                             className="h-4 w-4 rounded border-gray-300 text-cyan-500 focus:ring-cyan-400 cursor-pointer"
                           />
                         )}
@@ -620,7 +628,7 @@ function PayRatesTab({ staffId }: { staffId: number }) {
       setEditingRateId(latest.id)
       setRateType((latest.rate_type as RateType) ?? 'per_class')
       setAmount(String(latest.amount ?? ''))
-      setPerHeadRate('')
+      setPerHeadRate(Number(latest.per_head_rate ?? 0) > 0 ? String(latest.per_head_rate) : '')
       setEffectiveFrom(latest.effective_from ?? '')
       setEffectiveTo(latest.effective_to ?? '')
     }
@@ -631,7 +639,7 @@ function PayRatesTab({ staffId }: { staffId: number }) {
       const payload = {
         rate_type: rateType,
         amount,
-        per_head_rate: ['per_head', 'blended'].includes(rateType) ? perHeadRate : '0',
+        per_head_rate: ['per_head', 'blended'].includes(rateType) ? perHeadRate || '0' : '0',
         effective_from: effectiveFrom,
         effective_to: effectiveTo || null,
       }
@@ -931,17 +939,22 @@ function BusinessTab({ staffId }: { staffId: number }) {
 
   const { mutate: save, isPending: isSaving } = useMutation({
     mutationFn: () =>
-      createOrUpdatePaymentDetails(staffId, {
-        business_name: businessName,
-        bank_name: bankName,
-        account_name: accountName,
-        account_number: accountNumber,
-        sort_code: sortCode,
-        payment_reference: paymentReference,
-        additional_notes: additionalNotes,
-      }),
+      createOrUpdatePaymentDetails(
+        staffId,
+        {
+          business_name: businessName,
+          bank_name: bankName,
+          account_name: accountName,
+          account_number: accountNumber,
+          sort_code: sortCode,
+          payment_reference: paymentReference,
+          additional_notes: additionalNotes,
+        },
+        logoFile,
+      ),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'payment-details'] })
+      setLogoFile(null)
       toast.success('Payment details saved')
     },
     onError: () => toast.error('Failed to save payment details'),
@@ -992,6 +1005,13 @@ function BusinessTab({ staffId }: { staffId: number }) {
             >
               Remove
             </button>
+          )}
+          {!logoFile && details?.business_logo && (
+            <img
+              src={details.business_logo}
+              alt="Current business logo"
+              className="mt-3 h-12 w-auto rounded border border-gray-100"
+            />
           )}
         </div>
       </div>
@@ -1202,7 +1222,14 @@ export function StaffDetailModal({ staffId, onClose }: StaffDetailModalProps) {
           ) : (
             <>
               {activeTab === 'info' && (
-                <InfoTab staff={staff} onSaved={onClose} onDeleted={onClose} />
+                // Keyed on the record's version: the form copies the values
+                // into state once, so fresh data has to remount it.
+                <InfoTab
+                  key={`${staff.id}-${staff.updated_at ?? ''}`}
+                  staff={staff}
+                  onSaved={onClose}
+                  onDeleted={onClose}
+                />
               )}
               {activeTab === 'availability' && <AvailabilityTab staffId={staff.id} />}
               {activeTab === 'classes' && <ClassesTab staffId={staff.id} />}

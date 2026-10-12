@@ -3,7 +3,7 @@ import hmac
 import logging
 
 import requests
-from apps.core.timezones import format_for_tenant
+from apps.core.timezones import format_date, format_time
 from django.conf import settings
 from django.utils import timezone
 
@@ -49,8 +49,8 @@ def send_cover_request_message(cover_offer) -> WhatsAppMessage | None:
                     "parameters": [
                         {"type": "text", "text": staff.name},
                         {"type": "text", "text": event.class_type.name},
-                        {"type": "text", "text": format_for_tenant(event.start_datetime, event.tenant, "%A %d %b %Y")},
-                        {"type": "text", "text": format_for_tenant(event.start_datetime, event.tenant, "%H:%M")},
+                        {"type": "text", "text": format_date(event.start_datetime, event.tenant)},
+                        {"type": "text", "text": format_time(event.start_datetime, event.tenant)},
                         {"type": "text", "text": cover_offer.accept_code},
                     ],
                 }
@@ -60,7 +60,8 @@ def send_cover_request_message(cover_offer) -> WhatsAppMessage | None:
 
     body = (
         f"Hi {staff.name}, cover is needed for {event.class_type.name} "
-        f"on {event.start_datetime:%A %d %b %Y} at {event.start_datetime:%H:%M}. "
+        f"on {format_date(event.start_datetime, event.tenant)} "
+        f"at {format_time(event.start_datetime, event.tenant)}. "
         f"Reply ACCEPT {cover_offer.accept_code} to take this class."
     )
 

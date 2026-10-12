@@ -7,7 +7,7 @@ from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
 from django.utils import timezone
 
-from apps.core.timezones import format_for_tenant
+from apps.core.timezones import format_date, format_datetime, format_time
 from apps.tenants.email import get_tenant_email_sender
 
 from .models import CoverOffer, CoverRequest
@@ -40,8 +40,8 @@ def _send_cover_request_email(offer: CoverOffer) -> None:
         "class_name": event.class_type.name,
         # Local to the gym: start_datetime is UTC, so a 9pm Auckland class
         # would otherwise be announced as 09:00 — and a 9am one on the wrong day.
-        "event_date": format_for_tenant(event.start_datetime, tenant, "%A, %d %B %Y"),
-        "event_time": format_for_tenant(event.start_datetime, tenant, "%H:%M"),
+        "event_date": format_date(event.start_datetime, tenant),
+        "event_time": format_time(event.start_datetime, tenant),
         "location": event.site.name if event.site else "",
         "urgency": cover_request.urgency,
         "bonus_amount": cover_request.bonus_amount if cover_request.bonus_amount else None,
@@ -89,7 +89,7 @@ def _create_cover_in_app_notification(offer: CoverOffer) -> None:
         title=f"Cover needed: {event.class_type.name}",
         body=(
             f"{event.class_type.name} on "
-            f"{format_for_tenant(event.start_datetime, cover_request.tenant, '%d %b %Y at %H:%M')} "
+            f"{format_datetime(event.start_datetime, cover_request.tenant)} "
             f"needs a cover instructor. Be the first to accept!"
         ),
         related_object_type="cover_offer",
@@ -101,6 +101,13 @@ def _create_cover_in_app_notification(offer: CoverOffer) -> None:
             "accept_code": offer.accept_code,
         },
     )
+
+
+def _can_be_notified(staff) -> bool:
+    """Cover notices go to active staff only."""
+    from apps.staff.models import StaffProfile
+
+    return staff.status == StaffProfile.Status.ACTIVE and not staff.is_deleted
 
 
 @shared_task(name="cover.notify_cover_offers")
@@ -115,6 +122,12 @@ def notify_cover_offers(offer_pk: int):
         ).get(pk=offer_pk)
     except CoverOffer.DoesNotExist:
         logger.error("CoverOffer %s not found", offer_pk)
+        return
+
+    # Offers are only made to active staff, but this runs later, on the queue.
+    # Someone made inactive in between should not hear about it.
+    if not _can_be_notified(offer.staff):
+        logger.info("Offer %s: staff %s is not active — not notified", offer_pk, offer.staff_id)
         return
 
     try:
@@ -209,6 +222,10 @@ def send_cover_reminders():
             CoverRequest.Status.CRITICAL,
         ],
         cover_request__tenant__is_active=True,
+        # An offer made while someone was active outlives them being made
+        # inactive; they should stop hearing about it.
+        staff__status="active",
+        staff__is_deleted=False,
     ).select_related(
         "staff__user",
         "cover_request__timetable_event__class_type",
@@ -226,7 +243,8 @@ def send_cover_reminders():
             notification_type=Notification.NotificationType.COVER_REQUEST,
             title="Reminder: cover still needs you",
             body=(
-                f"{event.class_type.name} on {event.start_datetime:%d %b %Y at %H:%M} "
+                f"{event.class_type.name} on "
+                f"{format_datetime(event.start_datetime, offer.cover_request.tenant)} "
                 f"still needs cover. Accept code: {offer.accept_code}"
             ),
             related_object_type="cover_offer",

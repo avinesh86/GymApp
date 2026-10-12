@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
 from apps.core.mixins import TenantScopedMixin
-from apps.core.timezones import local_day_bounds
+from apps.core.timezones import local_day_bounds, local_today
 from apps.core.permissions import IsGymManager, IsInstructorOrAbove, IsTeamLeader
 from apps.staff.models import StaffProfile
 from apps.users.constants import UserRole
@@ -95,12 +95,12 @@ class RecurringTimetableRuleViewSet(TenantScopedMixin, ModelViewSet):
         Generates from the rule's valid_from (or today, whichever is later) up to
         valid_to (or 12 weeks out if no end date was set).
         """
-        from datetime import date, timedelta
+        from datetime import timedelta
 
         from .services import generate_recurring_events
 
         rule = self.get_object()
-        today = date.today()
+        today = local_today(request.tenant)
         from_date = max(today, rule.valid_from)
         to_date = rule.valid_to or (today + timedelta(weeks=12))
 

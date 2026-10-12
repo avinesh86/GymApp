@@ -39,6 +39,9 @@ class CoverRequestSerializer(serializers.ModelSerializer):
         return instructor.name if instructor else None
 
     def get_notes(self, obj):
+        # The reason typed when the request was raised, else the absence's.
+        if obj.notes:
+            return obj.notes
         if obj.absence:
             return obj.absence.notes or obj.absence.reason
         return ""

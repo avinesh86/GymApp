@@ -39,7 +39,7 @@ class RecurringTimetableRuleSerializer(serializers.ModelSerializer):
         model = RecurringTimetableRule
         fields = [
             "id", "class_type", "site", "day_of_week", "start_time", "end_time",
-            "instructor", "valid_from", "valid_to", "is_active", "series_id",
+            "instructor", "capacity", "valid_from", "valid_to", "is_active", "series_id",
         ]
         read_only_fields = ["id"]
         extra_kwargs = {"series_id": {"required": False}}
