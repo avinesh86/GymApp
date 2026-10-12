@@ -94,13 +94,13 @@ class TestStaffPopupSave:
         instructor.user.refresh_from_db()
         assert instructor.user.role == "team_leader"
 
-    def test_a_manager_cannot_change_a_role(self, tenant, manager_user, instructor):
+    def test_a_manager_can_make_someone_an_admin(self, tenant, manager_user, instructor):
         resp = _patch_staff(instructor, manager_user, tenant, {"role": "admin"})
 
-        assert resp.status_code == 403
+        assert resp.status_code == 200
         instructor.refresh_from_db()
-        assert instructor.role == "instructor"
-        assert Membership.objects.get(user=instructor.user, tenant=tenant).role == "instructor"
+        assert instructor.role == "admin"
+        assert Membership.objects.get(user=instructor.user, tenant=tenant).role == "admin"
 
     def test_a_manager_can_save_the_form_with_the_role_untouched(
         self, tenant, manager_user, instructor
@@ -113,7 +113,7 @@ class TestStaffPopupSave:
         instructor.refresh_from_db()
         assert instructor.priority_tier == 2
 
-    def test_only_an_owner_grants_ownership(self, tenant, admin_user, instructor):
+    def test_an_admin_cannot_grant_ownership(self, tenant, admin_user, instructor):
         resp = _patch_staff(instructor, admin_user, tenant, {"role": "owner"})
 
         assert resp.status_code == 403

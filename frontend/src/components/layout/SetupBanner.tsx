@@ -13,7 +13,7 @@ export function SetupBanner() {
 
   if (dismissed) return null
 
-  const isOwnerOrAdmin = user?.role === 'owner' || user?.role === 'admin'
+  const isOwnerOrAdmin = ['owner', 'admin', 'gym_manager'].includes(user?.role ?? '')
 
   if (!setup_completed && isOwnerOrAdmin) {
     return (

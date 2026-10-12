@@ -23,6 +23,8 @@ class UserRole:
     ]
 
     MANAGEMENT_ROLES = [OWNER, ADMIN, GYM_MANAGER]
+    # A gym manager runs the gym day to day and has everything the owner has.
+    FULL_ACCESS_ROLES = (OWNER, GYM_MANAGER)
     STAFF_ROLES = [TEAM_LEADER, INSTRUCTOR]
 
     _VALID = {OWNER, ADMIN, GYM_MANAGER, PAYROLL, TEAM_LEADER, INSTRUCTOR, CLASS_COUNT_ADMIN}

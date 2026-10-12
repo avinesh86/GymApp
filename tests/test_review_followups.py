@@ -5,8 +5,8 @@ Follow-ups from the "does every form keep what it saves" review.
 - inactive staff get no cover notices, including for offers already out;
 - the reason typed on a cover request is kept;
 - a recurring class keeps the capacity it was created with;
-- gym managers and admins can add classes and staff, without being able to
-  hand out more access than they hold;
+- gym managers have the owner's access, and with admins can add classes and
+  staff (an admin cannot make an owner);
 - every date a person reads is in the timezone chosen in Settings, written the
   same way, on any operating system.
 """
@@ -283,16 +283,31 @@ def test_managers_and_admins_can_add_a_staff_member(gym, role):
     assert StaffProfile.objects.filter(tenant=gym, name="New Starter").exists()
 
 
-def test_a_manager_cannot_add_an_admin(gym):
+def test_a_manager_can_add_an_admin(gym):
     response = _api(gym, "gym_manager").post(
         "/api/v1/staff/",
-        {"name": "Sneaky Admin", "email": "sneaky@example.com", "role": "admin"},
+        {"name": "New Admin", "email": "new-admin@example.com", "role": "admin"},
         format="json",
     )
 
-    assert response.status_code == 403
-    assert not StaffProfile.objects.filter(email="sneaky@example.com").exists()
-    assert not Membership.objects.filter(user__email="sneaky@example.com").exists()
+    assert response.status_code == 201, response.data
+    assert Membership.objects.get(user__email="new-admin@example.com", tenant=gym).role == "admin"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "/api/v1/tenants/settings/",  # Settings — was owner/admin only
+        "/api/v1/users/",  # Settings > Access
+        "/api/v1/invoices/",
+    ],
+)
+def test_a_manager_reaches_everything_the_owner_does(gym, url):
+    owner = _api(gym, "owner").get(url)
+    manager = _api(gym, "gym_manager").get(url)
+
+    assert owner.status_code == 200, (url, owner.status_code)
+    assert manager.status_code == 200, (url, manager.status_code)
 
 
 def test_an_admin_can_add_an_admin_but_not_an_owner(gym):

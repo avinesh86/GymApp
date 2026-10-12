@@ -87,16 +87,13 @@ class StaffProfileViewSet(TenantScopedMixin, ModelViewSet):
     def _check_may_grant(self, role):
         """Nobody hands out more access than they hold themselves.
 
-        Adding a staff member creates their login with this role, so a gym
-        manager adding an "Admin" was a way to make an admin. Managers and
-        admins add staff freely otherwise.
+        Adding a staff member creates their login with this role. Owners and
+        gym managers have full access and can add anyone, admins included; an
+        admin can add anyone except an owner.
         """
-        actor_role = self.request.user.role
         granted = UserRole.from_staff_role(role)
-        if granted == UserRole.OWNER and actor_role != UserRole.OWNER:
-            raise PermissionDenied("Only an owner can give someone the owner role.")
-        if granted == UserRole.ADMIN and actor_role not in (UserRole.OWNER, UserRole.ADMIN):
-            raise PermissionDenied("Only an owner or admin can give someone the admin role.")
+        if granted == UserRole.OWNER and self.request.user.role not in UserRole.FULL_ACCESS_ROLES:
+            raise PermissionDenied("Only an owner or gym manager can give someone the owner role.")
 
     def perform_create(self, serializer):
         data = serializer.validated_data
@@ -124,14 +121,12 @@ class StaffProfileViewSet(TenantScopedMixin, ModelViewSet):
         old_role = serializer.instance.role
         new_role = serializer.validated_data.get("role", old_role)
         if new_role != old_role:
-            # The role decides what the person can do in this gym, so changing
-            # it is an owner/admin action (as on the Access screen) — and only
-            # an owner hands out or takes away ownership.
+            # The role decides what the person can do in this gym. Owners,
+            # gym managers and admins can change it; ownership is only handed
+            # out or taken away by someone with full access.
             actor_role = self.request.user.role
-            if actor_role not in (UserRole.OWNER, UserRole.ADMIN):
-                raise PermissionDenied("Only an owner or admin can change a staff member's role.")
-            if UserRole.OWNER in (old_role, new_role) and actor_role != UserRole.OWNER:
-                raise PermissionDenied("Only an owner can change the owner role.")
+            if UserRole.OWNER in (old_role, new_role) and actor_role not in UserRole.FULL_ACCESS_ROLES:
+                raise PermissionDenied("Only an owner or gym manager can change the owner role.")
 
         staff = serializer.save(updated_by=self.request.user)
         if staff.role != old_role:

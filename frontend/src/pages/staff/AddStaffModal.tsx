@@ -27,9 +27,9 @@ interface AddStaffModalProps {
 export function AddStaffModal({ isOpen, onClose }: AddStaffModalProps) {
   const queryClient = useQueryClient()
   const { user } = useAuth()
-  // Adding a staff member creates their login with this role. A gym manager
-  // can add anyone up to their own level; only an owner or admin adds an admin.
-  const canGrantAdmin = user?.role === 'owner' || user?.role === 'admin'
+  // Adding a staff member creates their login with this role. Owners, gym
+  // managers and admins can add any of these, admins included.
+  const canGrantAdmin = ['owner', 'gym_manager', 'admin'].includes(user?.role ?? '')
   const roleOptions = ROLE_OPTIONS.filter((opt) => canGrantAdmin || opt.value !== 'admin')
 
   const [firstName, setFirstName] = useState('')

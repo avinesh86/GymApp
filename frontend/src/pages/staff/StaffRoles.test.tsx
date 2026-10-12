@@ -35,13 +35,13 @@ describe('AddStaffModal — roles on offer', () => {
     vi.mocked(listClassTypes).mockResolvedValue([])
   })
 
-  it('lets a gym manager add staff, without offering Admin', () => {
+  it('lets a gym manager add staff, admins included', () => {
     auth.role = 'gym_manager'
     wrap(<AddStaffModal isOpen onClose={vi.fn()} />)
 
     expect(roleOptions()).toContain('Instructor')
     expect(roleOptions()).toContain('Gym Manager')
-    expect(roleOptions()).not.toContain('Admin')
+    expect(roleOptions()).toContain('Admin')
   })
 
   it('offers Admin to an admin', () => {

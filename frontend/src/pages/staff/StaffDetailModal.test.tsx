@@ -133,17 +133,18 @@ describe('StaffDetailModal — Info tab', () => {
     expect(screen.getByLabelText('Status')).toHaveValue('inactive')
   })
 
-  it('leaves the role alone for a manager, who may not change it', async () => {
+  it('lets a gym manager change a role, admin included', async () => {
     auth.role = 'gym_manager'
-    vi.mocked(updateStaff).mockResolvedValue(makeStaff({ priority_tier: 2 }))
+    vi.mocked(updateStaff).mockResolvedValue(makeStaff({ role: 'admin' }))
 
     renderModal()
-    expect(await screen.findByLabelText('Role')).toBeDisabled()
-    await userEvent.selectOptions(screen.getByLabelText('Priority Tier'), '2')
+    const role = await screen.findByLabelText('Role')
+    expect(role).toBeEnabled()
+    await userEvent.selectOptions(role, 'admin')
     await userEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
 
     await waitFor(() => expect(updateStaff).toHaveBeenCalled())
-    expect(vi.mocked(updateStaff).mock.calls[0][1]).not.toHaveProperty('role')
+    expect(vi.mocked(updateStaff).mock.calls[0][1]).toMatchObject({ role: 'admin' })
   })
 
   it('sends a qualification\'s dates as issued_at / expires_at', async () => {

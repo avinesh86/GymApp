@@ -123,9 +123,9 @@ interface InfoTabProps {
 function InfoTab({ staff, onSaved, onDeleted }: InfoTabProps) {
   const queryClient = useQueryClient()
   const { user } = useAuth()
-  // A role decides what someone can do in the gym, so only an owner or admin
-  // changes it — the API refuses it from anyone else.
-  const canChangeRole = user?.role === 'owner' || user?.role === 'admin'
+  // A role decides what someone can do in the gym: owners, gym managers and
+  // admins change it.
+  const canChangeRole = ['owner', 'gym_manager', 'admin'].includes(user?.role ?? '')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const [email, setEmail] = useState(staff.email)
@@ -239,7 +239,7 @@ function InfoTab({ staff, onSaved, onDeleted }: InfoTabProps) {
             value={role}
             onChange={(e) => setRole(e.target.value as UserRole)}
             disabled={!canChangeRole}
-            title={canChangeRole ? undefined : 'Only an owner or admin can change a role'}
+            title={canChangeRole ? undefined : 'Only an owner, gym manager or admin can change a role'}
             className={`${inputClass} disabled:bg-gray-50 disabled:text-gray-500`}
           >
             {/* An owner isn't offered below; keep theirs showing as what it is. */}
