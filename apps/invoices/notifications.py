@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 
+from apps.core.timezones import format_date, format_date_range
 from apps.notifications.models import Notification
 from apps.staff.models import StaffProfile
 
@@ -14,7 +15,7 @@ NT = Notification.NotificationType
 
 
 def _period(invoice) -> str:
-    return f"{invoice.period_start:%d %b} – {invoice.period_end:%d %b %Y}"
+    return format_date_range(invoice.period_start, invoice.period_end)
 
 
 def _staff_with_roles(tenant, roles):
@@ -91,7 +92,7 @@ def notify_rejected(invoice, reason: str) -> None:
 def notify_paid(invoice) -> None:
     """Receipt-style confirmation to the instructor."""
     ref = invoice.payment_reference or "—"
-    when = f"{invoice.payment_date:%d %b %Y}" if invoice.payment_date else "soon"
+    when = format_date(invoice.payment_date) if invoice.payment_date else "soon"
     _notify(
         invoice.tenant, _instructor_user(invoice), NT.INVOICE_PAID,
         "Invoice paid — receipt",

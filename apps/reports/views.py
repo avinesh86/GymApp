@@ -6,7 +6,7 @@ from django.db.models.functions import Coalesce
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.core.timezones import format_for_tenant
+from apps.core.timezones import format_date, format_time, local_date
 from apps.attendance.models import AttendanceRecord
 from apps.core.permissions import IsGymManager, IsPayroll
 from apps.cover.models import CoverRequest
@@ -112,10 +112,10 @@ class AttendanceReportView(APIView):
         # --- daily_breakdown: all events, null attendance if no record ---
         daily_map: dict[str, list] = defaultdict(list)
         for event in events:
-            daily_map[event.start_datetime.date().isoformat()].append({
+            daily_map[local_date(event.start_datetime, event.tenant).isoformat()].append({
                 "event_id": event.id,
                 "class_name": event.class_type.name,
-                "time": format_for_tenant(event.start_datetime, event.tenant, "%H:%M"),
+                "time": format_time(event.start_datetime, event.tenant),
                 "instructor_name": event.instructor.name if event.instructor else None,
                 "site_name": event.site.name if event.site else None,
                 "attendance_count": event_counts.get(event.pk),
@@ -131,7 +131,7 @@ class AttendanceReportView(APIView):
         week_attendance: dict[str, list] = defaultdict(list)
         week_class_count: dict[str, int] = defaultdict(int)
         for event in events:
-            week_start = monday_of_week(event.start_datetime.date()).isoformat()
+            week_start = monday_of_week(local_date(event.start_datetime, event.tenant)).isoformat()
             week_class_count[week_start] += 1
             if event.pk in event_counts:
                 week_attendance[week_start].append(event_counts[event.pk])
@@ -208,8 +208,8 @@ class AttendanceReportView(APIView):
                 "class_name": event.class_type.name,
                 "instructor_name": event.instructor.name if event.instructor else None,
                 "site_name": event.site.name if event.site else None,
-                "date": format_for_tenant(event.start_datetime, event.tenant, "%a %-d %b"),
-                "time": format_for_tenant(event.start_datetime, event.tenant, "%H:%M"),
+                "date": format_date(event.start_datetime, event.tenant),
+                "time": format_time(event.start_datetime, event.tenant),
                 "attendance_count": event_counts[event.pk],
                 "color": get_class_color(event.class_type),
             }
@@ -221,7 +221,7 @@ class AttendanceReportView(APIView):
         ct_weekly: dict[str, dict[str, list]] = defaultdict(lambda: defaultdict(list))
         for event in events:
             if event.pk in event_counts:
-                week_start = monday_of_week(event.start_datetime.date()).isoformat()
+                week_start = monday_of_week(local_date(event.start_datetime, event.tenant)).isoformat()
                 ct_weekly[event.class_type.name][week_start].append(event_counts[event.pk])
 
         class_type_weekly_trend = {
@@ -368,7 +368,7 @@ class InstructorChartsReportView(APIView):
             class_type = event.class_type
             per_class[class_type.id].append(record.count)
             per_class_meta[class_type.id] = class_type
-            weekly[monday_of_week(event.start_datetime.date()).isoformat()].append(record.count)
+            weekly[monday_of_week(local_date(event.start_datetime, event.tenant)).isoformat()].append(record.count)
 
         avg_attendance_per_class = [
             {
@@ -494,7 +494,7 @@ class ClassesReportView(APIView):
         weekly = defaultdict(list)
         by_dow = defaultdict(list)
         for record in attendance_qs:
-            event_date = record.timetable_event.start_datetime.date()
+            event_date = local_date(record.timetable_event.start_datetime, request.tenant)
             weekly[monday_of_week(event_date).isoformat()].append(record.count)
             by_dow[event_date.weekday()].append(record.count)
 
@@ -697,7 +697,7 @@ class ClassViabilityReportView(APIView):
         ).select_related("timetable_event__class_type")
         for record in records:
             event = record.timetable_event
-            week = monday_of_week(event.start_datetime.date()).isoformat()
+            week = monday_of_week(local_date(event.start_datetime, event.tenant)).isoformat()
             trend_weekly[week]["total"] += 1
             if record.count >= event.class_type.green_threshold:
                 trend_weekly[week]["viable"] += 1

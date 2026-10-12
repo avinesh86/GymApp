@@ -7,7 +7,7 @@ is announced on the wrong day.
 """
 
 import logging
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.conf import settings
@@ -41,6 +41,53 @@ def to_tenant_local(value, tenant):
 def format_for_tenant(value, tenant, fmt: str) -> str:
     """``strftime`` in the gym's local time. Use this for anything a person reads."""
     return to_tenant_local(value, tenant).strftime(fmt)
+
+
+# ─── The one way a date or time is written out ───────────────────────────────
+#
+# Every email, notification, WhatsApp message, report and invoice goes through
+# these, so a class reads the same wherever it is mentioned: in the timezone
+# chosen in Settings, as "Tue 6 Oct 2026" and "09:00".
+#
+# The day is written with ``.day`` rather than a strftime code: the code for a
+# day without a leading zero is "%-d" on Linux and "%#d" on Windows, and using
+# either one crashes on the other.
+
+
+def _local(value, tenant):
+    """Datetimes move to the gym's timezone; plain dates have none to move to."""
+    return to_tenant_local(value, tenant) if isinstance(value, datetime) else value
+
+
+def local_date(value, tenant) -> date:
+    """The calendar day a stored datetime falls on at the gym."""
+    return to_tenant_local(value, tenant).date()
+
+
+def local_today(tenant) -> date:
+    """Today's date at the gym — not the server's, which is UTC."""
+    return local_date(djtz.now(), tenant)
+
+
+def format_date(value, tenant=None) -> str:
+    """"Tue 6 Oct 2026". Accepts a datetime (converted) or a plain date."""
+    local = _local(value, tenant)
+    return f"{local:%a} {local.day} {local:%b %Y}"
+
+
+def format_time(value, tenant) -> str:
+    """"09:00", in the gym's local time."""
+    return f"{to_tenant_local(value, tenant):%H:%M}"
+
+
+def format_datetime(value, tenant) -> str:
+    """"Tue 6 Oct 2026 at 09:00"."""
+    return f"{format_date(value, tenant)} at {format_time(value, tenant)}"
+
+
+def format_date_range(start, end, tenant=None) -> str:
+    """"Thu 1 Oct 2026 – Sat 31 Oct 2026"."""
+    return f"{format_date(start, tenant)} – {format_date(end, tenant)}"
 
 
 def local_day_bounds(tenant, from_date, to_date):

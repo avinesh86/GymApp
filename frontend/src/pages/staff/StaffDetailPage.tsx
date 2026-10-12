@@ -34,6 +34,13 @@ import { Modal } from '../../components/ui/Modal'
 import { Input } from '../../components/ui/Input'
 import { Select } from '../../components/ui/Select'
 import { format } from 'date-fns'
+import {
+  AVAILABILITY_BANDS,
+  AVAILABILITY_DAYS,
+  availabilityCellKey,
+  bandForStartTime,
+  type AvailabilityBandKey,
+} from './availabilityBands'
 
 const ROLE_LABELS: Record<string, string> = {
   owner: 'Owner', admin: 'Admin', gym_manager: 'Gym Manager',
@@ -41,43 +48,22 @@ const ROLE_LABELS: Record<string, string> = {
   instructor: 'Instructor', class_count_admin: 'Class Count Admin',
 }
 
-const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-
 // ─── Availability time-band grid ──────────────────────────────────────────────
 
-const WEEK_DAYS = [
-  { label: 'Monday',    dayOfWeek: 1 },
-  { label: 'Tuesday',   dayOfWeek: 2 },
-  { label: 'Wednesday', dayOfWeek: 3 },
-  { label: 'Thursday',  dayOfWeek: 4 },
-  { label: 'Friday',    dayOfWeek: 5 },
-  { label: 'Saturday',  dayOfWeek: 6 },
-  { label: 'Sunday',    dayOfWeek: 0 },
-]
+// day_of_week is 0 = Monday … 6 = Sunday, as the API stores it. This grid used
+// to number Monday as 1 and Sunday as 0, which saved every day one out.
+const WEEK_DAYS = AVAILABILITY_DAYS.map((label, dayOfWeek) => ({ label, dayOfWeek }))
 
-type TimeBand = 'morning' | 'lunch' | 'afternoon' | 'evening'
+type TimeBand = AvailabilityBandKey
 
-const TIME_BANDS: { key: TimeBand; label: string; startTime: string; endTime: string }[] = [
-  { key: 'morning',   label: 'Morning',   startTime: '05:00:00', endTime: '12:00:00' },
-  { key: 'lunch',     label: 'Lunch',     startTime: '12:00:00', endTime: '14:00:00' },
-  { key: 'afternoon', label: 'Afternoon', startTime: '14:00:00', endTime: '18:00:00' },
-  { key: 'evening',   label: 'Evening',   startTime: '18:00:00', endTime: '23:59:00' },
-]
+const TIME_BANDS = AVAILABILITY_BANDS.map((band) => ({
+  key: band.key,
+  label: band.label,
+  startTime: band.start,
+  endTime: band.end,
+}))
 
-/** Returns the time-band key for a given start_time string (HH:MM or HH:MM:SS). */
-function getBandForStartTime(startTime: string): TimeBand | null {
-  const hours = parseInt(startTime.split(':')[0], 10)
-  if (hours >= 5  && hours < 12) return 'morning'
-  if (hours >= 12 && hours < 14) return 'lunch'
-  if (hours >= 14 && hours < 18) return 'afternoon'
-  if (hours >= 18)               return 'evening'
-  return null
-}
-
-/** Serialise a day+band pair to the Set key format. */
-function toCellKey(dayOfWeek: number, band: TimeBand): string {
-  return `${dayOfWeek}-${band}`
-}
+const toCellKey = availabilityCellKey
 
 export function StaffDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -132,7 +118,9 @@ export function StaffDetailPage() {
   })
 
   const { mutate: addRate } = useMutation({
-    mutationFn: () => createPayRate(staffId, { rate_per_hour: ratePerHour, effective_from: effectiveFrom }),
+    // rate_per_hour is a read-only alias of amount; sent under that name the
+    // rate was rejected for having no amount.
+    mutationFn: () => createPayRate(staffId, { rate_type: 'hourly', amount: ratePerHour, effective_from: effectiveFrom }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'pay-rates'] })
       toast.success('Pay rate added')
@@ -154,8 +142,8 @@ export function StaffDetailPage() {
   const { mutate: addQual } = useMutation({
     mutationFn: () => createQualification(staffId, {
       name: qualName,
-      issued_date: issuedDate,
-      expiry_date: expiryDate || null,
+      issued_at: issuedDate,
+      expires_at: expiryDate || null,
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'qualifications'] })
@@ -204,10 +192,7 @@ export function StaffDetailPage() {
   useEffect(() => {
     const active = new Set<string>()
     for (const slot of availability) {
-      const band = getBandForStartTime(slot.start_time)
-      if (band !== null) {
-        active.add(toCellKey(slot.day_of_week, band))
-      }
+      active.add(toCellKey(slot.day_of_week, bandForStartTime(slot.start_time)))
     }
     setSelectedCells(active)
   }, [availability])

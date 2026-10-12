@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from apps.core.timezones import format_datetime, local_date
+
 from .models import Invoice, InvoiceApproval, InvoiceLineItem, PayrollBatch, PayRun
 
 
@@ -18,7 +20,10 @@ class InvoiceLineItemSerializer(serializers.ModelSerializer):
 
     def get_event_date(self, obj):
         if obj.timetable_event:
-            return obj.timetable_event.start_datetime.date().isoformat()
+            # The gym's day, not UTC's — a 9am Auckland class is the evening
+            # before in UTC and was invoiced under the wrong date.
+            event = obj.timetable_event
+            return local_date(event.start_datetime, event.tenant).isoformat()
         return None
 
     def get_duration_minutes(self, obj):
@@ -43,6 +48,12 @@ class InvoiceApprovalSerializer(serializers.ModelSerializer):
     approved_by_email = serializers.CharField(source="approved_by.email", read_only=True)
     actor_name = serializers.SerializerMethodField()
     timestamp = serializers.DateTimeField(source="approved_at", read_only=True)
+    # The same moment, written out in the gym's timezone. The page otherwise
+    # formats `timestamp` in whatever timezone the viewer's browser is set to.
+    timestamp_display = serializers.SerializerMethodField()
+
+    def get_timestamp_display(self, obj):
+        return format_datetime(obj.approved_at, obj.invoice.tenant) if obj.approved_at else ""
 
     def get_actor_name(self, obj):
         if obj.approved_by:
@@ -54,7 +65,7 @@ class InvoiceApprovalSerializer(serializers.ModelSerializer):
         model = InvoiceApproval
         fields = [
             "id", "approved_by", "approved_by_email", "actor_name",
-            "role", "action", "notes", "approved_at", "timestamp",
+            "role", "action", "notes", "approved_at", "timestamp", "timestamp_display",
         ]
         read_only_fields = fields
 

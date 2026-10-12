@@ -126,6 +126,13 @@ export async function getMyStaffProfile(): Promise<StaffMember> {
   return response.data
 }
 
+/** A staff member's own edits. `staff/{id}/` is manager-only, so My Profile
+ * saves here — the endpoint accepts contact details and nothing else. */
+export async function updateMyStaffProfile(data: { phone?: string }): Promise<StaffMember> {
+  const response = await apiClient.patch<StaffMember>('staff/me/', data)
+  return response.data
+}
+
 // ─── Payment Details ──────────────────────────────────────────────────────────
 
 export interface PaymentDetails {
@@ -137,7 +144,12 @@ export interface PaymentDetails {
   sort_code: string
   payment_reference: string
   additional_notes: string
+  /** URL of the saved logo. Read-only here — upload with `logo`. */
+  business_logo?: string | null
 }
+
+/** The text fields of the form — what a save sends. */
+export type PaymentDetailsInput = Omit<PaymentDetails, 'id' | 'business_logo'>
 
 export async function getPaymentDetails(staffId: number): Promise<PaymentDetails> {
   const response = await apiClient.get<PaymentDetails>(`staff/${staffId}/payment-details/`)
@@ -146,10 +158,21 @@ export async function getPaymentDetails(staffId: number): Promise<PaymentDetails
 
 export async function createOrUpdatePaymentDetails(
   staffId: number,
-  data: Partial<PaymentDetails>
+  data: Partial<PaymentDetailsInput>,
+  logo?: File | null,
 ): Promise<PaymentDetails> {
-  // Use PUT for full replacement, falling back gracefully if the record doesn't exist yet
-  const response = await apiClient.put<PaymentDetails>(`staff/${staffId}/payment-details/`, data)
+  const url = `staff/${staffId}/payment-details/`
+  if (logo) {
+    // A file can't travel as JSON, so the whole form goes up as multipart.
+    const formData = new FormData()
+    Object.entries(data).forEach(([key, value]) => formData.append(key, value ?? ''))
+    formData.append('business_logo', logo)
+    const response = await apiClient.put<PaymentDetails>(url, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    return response.data
+  }
+  const response = await apiClient.put<PaymentDetails>(url, data)
   return response.data
 }
 

@@ -120,6 +120,7 @@ class CoverRequestViewSet(TenantScopedMixin, ModelViewSet):
             requested_by=self.request.user,
             urgency=self.request.data.get("urgency"),
             bonus_amount=self.request.data.get("bonus_amount", 0),
+            notes=self.request.data.get("notes") or "",
             initial_status=initial_status_for_tenant(self.request.tenant),
         )
         serializer.instance = cover_request

@@ -116,6 +116,17 @@ class TenantSettings(models.Model):
     # Hours-before-class at which an unfilled request becomes Critical.
     cover_critical_threshold_hours = models.PositiveSmallIntegerField(default=4)
     auto_generate_invoices = models.BooleanField(default=True)
+    # Timetable display preferences. 0 = Sunday, 1 = Monday, 6 = Saturday
+    # (JavaScript's getDay numbering, which is what the calendar works in).
+    week_start_day = models.PositiveSmallIntegerField(
+        default=1,
+        choices=[(0, "Sunday"), (1, "Monday"), (6, "Saturday")],
+    )
+    default_timetable_view = models.CharField(
+        max_length=10,
+        choices=[("week", "Week"), ("list", "List")],
+        default="week",
+    )
     # Outgoing email configuration for notifications
     notification_from_email = models.EmailField(blank=True, default="")
     notification_from_name = models.CharField(max_length=100, blank=True, default="")

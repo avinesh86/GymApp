@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 
+from apps.core.timezones import format_datetime
 from apps.notifications.models import Notification
 from apps.staff.models import StaffProfile
 
@@ -16,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def _event_label(event) -> str:
-    return f"{event.class_type.name} on {event.start_datetime:%d %b %Y at %H:%M}"
+    return f"{event.class_type.name} on {format_datetime(event.start_datetime, event.tenant)}"
 
 
 def _managers(tenant):

@@ -67,7 +67,8 @@ def test_cover_email_shows_the_local_time(nz_gym):
 
     body = mail.outbox[0].body + "".join(c for c, _ in mail.outbox[0].alternatives)
     assert "21:00" in body, "should show the gym's 9pm, not UTC 09:00"
-    assert "Sunday, 06 September 2026" in body
+    # Same day as before, in the one wording every date now uses.
+    assert "Sun 6 Sep 2026" in body
 
 
 def test_a_morning_class_is_not_announced_on_the_wrong_day(nz_gym):
