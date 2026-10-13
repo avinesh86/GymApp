@@ -59,8 +59,8 @@ Elements and the server then calls Stripe, so a real test needs Stripe *test*
 keys — including `VITE_STRIPE_PUBLISHABLE_KEY`, which Vite bakes in at build
 time. Worth adding once those exist.
 
-**Attendance and invoices.** The flows are covered by API-level tests in
-`tests/test_e2e_attendance_and_invoicing.py`; the click-through versions are
+**Invoices.** The flow is covered by API-level tests in
+`tests/test_e2e_attendance_and_invoicing.py`; the click-through version is
 still to write.
 
 ## In CI

@@ -13,7 +13,7 @@ Production-ready Django 5 SaaS application for gym operations management.
 - Timetable with recurring event generation
 - Cover request workflow with WhatsApp Business Cloud API notifications
 - Invoice and payroll approval workflow with PDF generation
-- Attendance tracking with QR code support
+- Attendance tracking
 - Role-based access control (7 roles)
 - CSV bulk import for staff, timetable, and attendance
 - Reports and analytics
@@ -281,7 +281,7 @@ python manage.py migrate
 
 ## API Authentication (JWT)
 
-All API endpoints (except the WhatsApp webhook and QR attendance submit) require a JWT Bearer token.
+All API endpoints (except the WhatsApp webhook) require a JWT Bearer token.
 
 ### Obtain tokens
 

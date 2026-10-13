@@ -18,14 +18,11 @@ import { CoverBoardPage } from './pages/cover/CoverBoardPage'
 import { InvoicesPage } from './pages/invoices/InvoicesPage'
 import { InvoiceDetailPage } from './pages/invoices/InvoiceDetailPage'
 import { AttendancePage } from './pages/attendance/AttendancePage'
-import { QRAttendancePage } from './pages/qr-attendance/QRAttendancePage'
-import { QRSubmitPage } from './pages/qr-attendance/QRSubmitPage'
 import { ReportsPage } from './pages/reports/ReportsPage'
 import { CSVImportPage } from './pages/imports/CSVImportPage'
 import { SettingsPage } from './pages/settings/SettingsPage'
 import { MySchedulePage } from './pages/schedule/MySchedulePage'
 import { InstructorCalendarPage } from './pages/schedule/InstructorCalendarPage'
-import { AttendanceEntryPage } from './pages/attendance/AttendanceEntryPage'
 import { ProfilePage } from './pages/profile/ProfilePage'
 import { AcceptCoverPage } from './pages/cover/AcceptCoverPage'
 import { SignupPage } from './pages/auth/SignupPage'
@@ -118,7 +115,7 @@ function PermissionRoute({
   permission,
   children,
 }: {
-  permission: 'dashboard' | 'timetable' | 'staff' | 'cover' | 'invoices' | 'attendance' | 'qr_attendance' | 'reports' | 'imports' | 'settings'
+  permission: 'dashboard' | 'timetable' | 'staff' | 'cover' | 'invoices' | 'attendance' | 'reports' | 'imports' | 'settings'
   children: React.ReactNode
 }) {
   const { can } = usePermission()
@@ -163,7 +160,6 @@ export default function App() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/set-password" element={<SetPasswordPage />} />
           <Route path="/cover/accept/:code" element={<AcceptCoverPage />} />
-          <Route path="/attendance/qr" element={<QRSubmitPage />} />
 
           {/* Protected */}
           <Route
@@ -241,15 +237,6 @@ export default function App() {
             />
 
             <Route
-              path="/qr-attendance"
-              element={
-                <PermissionRoute permission="qr_attendance">
-                  <QRAttendancePage />
-                </PermissionRoute>
-              }
-            />
-
-            <Route
               path="/reports"
               element={
                 <PermissionRoute permission="reports">
@@ -278,14 +265,8 @@ export default function App() {
 
             <Route path="/my-schedule" element={<MySchedulePage />} />
             <Route path="/calendar" element={<InstructorCalendarPage />} />
-            <Route
-              path="/attendance-entry"
-              element={
-                <PermissionRoute permission="attendance">
-                  <AttendanceEntryPage />
-                </PermissionRoute>
-              }
-            />
+            {/* Bulk Attendance was merged into Attendance; old bookmarks still land. */}
+            <Route path="/attendance-entry" element={<Navigate to="/attendance" replace />} />
             <Route path="/profile" element={<ProfilePage />} />
 
             {/* Catch-all */}

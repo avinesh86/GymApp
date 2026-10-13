@@ -27,8 +27,8 @@ test.describe.serial('signing in and getting around', () => {
 
   // Every section an owner should be able to reach by clicking. If a menu item
   // renders but leads nowhere, this is where it shows up.
-  // [menu label, heading it should land on]. They differ in places: both
-  // attendance screens are headed "Attendance Entry".
+  // [menu label, heading it should land on]. They differ in places: the
+  // Attendance screen is headed "Attendance Entry".
   const sections: Array<[string, string]> = [
     ['Dashboard', 'Dashboard'],
     ['Timetable', 'Timetable'],
@@ -36,8 +36,6 @@ test.describe.serial('signing in and getting around', () => {
     ['Cover Board', 'Cover Board'],
     ['Invoices', 'Invoices'],
     ['Attendance', 'Attendance Entry'],
-    ['Bulk Attendance', 'Attendance Entry'],
-    ['QR Attendance', 'QR Attendance'],
     ['Reports', 'Reports'],
     ['CSV Import', 'CSV Import'],
     ['Settings', 'Settings'],
