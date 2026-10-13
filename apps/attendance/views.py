@@ -1,5 +1,3 @@
-from datetime import timedelta
-
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.decorators import action
@@ -7,17 +5,12 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
 from apps.core.mixins import TenantScopedMixin
-from apps.core.permissions import IsClassCountAdmin, IsGymManager
-from apps.core.timezones import format_time, local_date
+from apps.core.permissions import IsClassCountAdmin
 from apps.timetable.models import TimetableEvent
 from apps.timetable.serializers import TimetableEventSerializer
 
-from .models import AttendanceRecord, QRAttendanceToken
-from .serializers import (
-    AttendanceRecordSerializer,
-    QRAttendanceTokenSerializer,
-    SubmitQRAttendanceSerializer,
-)
+from .models import AttendanceRecord
+from .serializers import AttendanceRecordSerializer
 
 # Statuses that an attendance count closes out into COMPLETED. Recording a count
 # is the signal a class actually ran, so it completes the class regardless of
@@ -143,122 +136,3 @@ class AttendanceRecordViewSet(TenantScopedMixin, ModelViewSet):
             status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
         )
 
-
-class QRAttendanceTokenViewSet(TenantScopedMixin, ModelViewSet):
-    serializer_class = QRAttendanceTokenSerializer
-    permission_classes = [IsGymManager]
-
-    def get_permissions(self):
-        # 'submit' and 'info' are public — anyone with a valid QR token can use them
-        if getattr(self, 'action', None) in ('submit', 'info'):
-            return []
-        return super().get_permissions()
-
-    def get_queryset(self):
-        """Tokens for this gym, optionally narrowed to a window of classes.
-
-        `from` and `to` are dates against the class, not the token, so the QR
-        page can ask "which of these classes already has a code?" for whatever
-        range it is showing.
-        """
-        qs = QRAttendanceToken.objects.filter(
-            timetable_event__tenant=self.request.tenant
-        )
-        params = self.request.query_params
-        date_from = params.get("from")
-        date_to = params.get("to")
-        if date_from:
-            qs = qs.filter(timetable_event__start_datetime__date__gte=date_from)
-        if date_to:
-            qs = qs.filter(timetable_event__start_datetime__date__lte=date_to)
-        # Ordered so pagination is stable — an unordered queryset can repeat or
-        # skip rows between pages.
-        return qs.order_by("-timetable_event__start_datetime", "-created_at")
-
-    # A backstop only — is_valid() closes a code as soon as the class is
-    # counted. Measured from the class, not from generation, so codes can be
-    # printed in advance.
-    TOKEN_LIFETIME_AFTER_CLASS = timedelta(days=7)
-
-    def perform_create(self, serializer):
-        event_id = self.request.data.get("timetable_event")
-        event = TimetableEvent.objects.get(pk=event_id, tenant=self.request.tenant)
-        ends_at = event.end_datetime or event.start_datetime
-        expires_at = ends_at + self.TOKEN_LIFETIME_AFTER_CLASS
-        serializer.save(timetable_event=event, expires_at=expires_at)
-
-    @action(detail=False, methods=["get"], url_path="info", permission_classes=[])
-    def info(self, request):
-        """Public: session details for a QR token, so the submit page can show
-        what's being recorded before the instructor enters a count."""
-        token_str = request.query_params.get("token", "")
-        try:
-            qr = QRAttendanceToken.objects.select_related(
-                "timetable_event__class_type",
-                "timetable_event__site",
-                "timetable_event__instructor",
-            ).get(token=token_str)
-        except QRAttendanceToken.DoesNotExist:
-            return Response({"detail": "Invalid token."}, status=status.HTTP_404_NOT_FOUND)
-
-        event = qr.timetable_event
-        return Response(
-            {
-                "valid": qr.is_valid(),
-                "is_used": qr.is_used,
-                "class_type_name": event.class_type.name,
-                # Whoever scans the code is standing at the gym, so show
-                # them the gym's clock rather than UTC.
-                "date": local_date(event.start_datetime, event.tenant).isoformat(),
-                "start_time": format_time(event.start_datetime, event.tenant),
-                "site_name": event.site.name if event.site else None,
-                "instructor_name": event.instructor.name if event.instructor else None,
-            }
-        )
-
-    @action(detail=False, methods=["post"], url_path="submit", permission_classes=[])
-    def submit(self, request):
-        serializer = SubmitQRAttendanceSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        token_str = serializer.validated_data["token"]
-        count = serializer.validated_data["count"]
-        notes = serializer.validated_data.get("notes", "")
-
-        try:
-            qr_token = QRAttendanceToken.objects.select_related(
-                "timetable_event__tenant"
-            ).get(token=token_str)
-        except QRAttendanceToken.DoesNotExist:
-            return Response({"detail": "Invalid token."}, status=status.HTTP_404_NOT_FOUND)
-
-        if not qr_token.is_valid():
-            # Say which, so the person holding the phone knows whether to find
-            # a manager or simply stop.
-            if qr_token.attendance_already_recorded():
-                detail = "Attendance for this class has already been recorded."
-            elif qr_token.is_used:
-                detail = "This code has already been used."
-            else:
-                detail = "This code has expired. Ask a manager for a new one."
-            return Response({"detail": detail}, status=status.HTTP_400_BAD_REQUEST)
-
-        record, created = AttendanceRecord.objects.update_or_create(
-            timetable_event=qr_token.timetable_event,
-            defaults={
-                "tenant": qr_token.timetable_event.tenant,
-                "count": count,
-                "notes": notes,
-                "recorded_at": timezone.now(),
-            },
-        )
-
-        qr_token.is_used = True
-        qr_token.save(update_fields=["is_used"])
-
-        _complete_on_attendance(qr_token.timetable_event)
-
-        return Response(
-            AttendanceRecordSerializer(record).data,
-            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
-        )

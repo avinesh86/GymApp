@@ -11,7 +11,6 @@ const PAGE_TITLES: Record<string, string> = {
   '/cover':         'Cover Board',
   '/invoices':      'Invoices',
   '/attendance':    'Attendance',
-  '/qr-attendance': 'QR Attendance',
   '/reports':       'Reports',
   '/imports':       'CSV Import',
   '/settings':      'Settings',

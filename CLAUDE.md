@@ -16,7 +16,7 @@ Multi-tenant SaaS gym management platform. Django DRF backend + React/TypeScript
 ```
 GymApp/
 ├── apps/
-│   ├── attendance/     # Attendance records, QR tokens
+│   ├── attendance/     # Attendance records
 │   ├── cover/          # Cover requests, offers
 │   ├── invoices/       # Invoicing, line items, approvals
 │   ├── reports/        # Attendance, viability, payroll reports
