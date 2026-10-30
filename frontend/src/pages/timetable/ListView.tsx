@@ -137,6 +137,7 @@ export function ListView({
         keyExtractor={(event) => event.id}
         onRowClick={onEventClick}
         emptyMessage="No classes found for this period"
+        stickyHeader
       />
 
       {totalPages > 1 && (
