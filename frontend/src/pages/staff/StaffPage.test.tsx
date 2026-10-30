@@ -89,3 +89,65 @@ describe('StaffPage — filters, sort, class tags (F4)', () => {
     expect(within(tags).getByText('Yoga')).toBeInTheDocument()
   })
 })
+
+describe('StaffPage — clear filters', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(listStaff).mockResolvedValue({ count: 1, next: null, previous: null, results: [ALICE] as never })
+    vi.mocked(listClassTypes).mockResolvedValue([{ id: 9, name: 'Yoga' }] as never)
+  })
+
+  it('is hidden on the default view (Active staff, nothing else set)', async () => {
+    renderPage()
+    await screen.findByLabelText('Filter by class type')
+    expect(screen.queryByRole('button', { name: /clear filters/i })).not.toBeInTheDocument()
+  })
+
+  it('returns the filters to their defaults but keeps the sort order', async () => {
+    renderPage()
+    const classSelect = await screen.findByLabelText('Filter by class type')
+    await screen.findByRole('option', { name: 'Yoga' })
+
+    await userEvent.selectOptions(classSelect, '9')
+    await userEvent.selectOptions(screen.getByLabelText('Filter by status'), 'inactive')
+    await userEvent.selectOptions(screen.getByLabelText('Sort order'), '-name')
+
+    await userEvent.click(screen.getByRole('button', { name: /clear filters/i }))
+
+    expect(classSelect).toHaveValue('')
+    expect(screen.getByLabelText('Filter by status')).toHaveValue('active')
+    expect(screen.getByLabelText('Sort order')).toHaveValue('-name')
+    await waitFor(() =>
+      expect(listStaff).toHaveBeenLastCalledWith(
+        expect.objectContaining({ class_type: undefined, status: 'active', ordering: '-name' }),
+      ),
+    )
+  })
+})
+
+describe('StaffPage — nobody matches the filters', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(listStaff).mockImplementation(async (params) =>
+      params?.status === 'inactive'
+        ? { count: 0, next: null, previous: null, results: [] }
+        : ({ count: 1, next: null, previous: null, results: [ALICE] } as never),
+    )
+    vi.mocked(listClassTypes).mockResolvedValue([{ id: 9, name: 'Yoga' }] as never)
+  })
+
+  it('says no staff match, and offers to clear rather than to add staff', async () => {
+    renderPage()
+    await screen.findByText('Alice')
+
+    await userEvent.selectOptions(screen.getByLabelText('Filter by status'), 'inactive')
+
+    expect(await screen.findByText('No staff match these filters')).toBeInTheDocument()
+    expect(screen.queryByText('Add your first staff member to get started')).not.toBeInTheDocument()
+
+    const clearButtons = screen.getAllByRole('button', { name: /clear filters/i })
+    await userEvent.click(clearButtons[clearButtons.length - 1])
+
+    expect(await screen.findByText('Alice')).toBeInTheDocument()
+  })
+})

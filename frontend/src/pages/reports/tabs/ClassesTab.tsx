@@ -17,6 +17,7 @@ import {
 import { getClassesReport, getClassTypes } from '../../../api/reports'
 import { Table } from '../../../components/ui/Table'
 import { PageSpinner } from '../../../components/ui/Spinner'
+import { ClearFiltersButton } from '../../../components/ui/ClearFiltersButton'
 import type { ClassReportRow } from '../../../types'
 
 type PeriodKey = 'this_month' | 'last_month' | 'custom'
@@ -136,6 +137,8 @@ export function ClassesTab() {
             <option key={ct.id} value={ct.id}>{ct.name}</option>
           ))}
         </select>
+
+        <ClearFiltersButton active={selectedClassType !== undefined} onClear={() => setSelectedClassType(undefined)} />
       </div>
 
       {rows.length === 0 ? (

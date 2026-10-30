@@ -77,3 +77,28 @@ describe('ClassesTab — filter + charts (F7)', () => {
     expect(await screen.findByText('No class data available')).toBeInTheDocument()
   })
 })
+
+describe('ClassesTab — clear filters', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(getClassesReport).mockResolvedValue(REPORT as never)
+    vi.mocked(getClassTypes).mockResolvedValue([{ id: 9, name: 'Yoga', color: '#06b6d4' }] as never)
+  })
+
+  it('clears the class filter but keeps the chosen period', async () => {
+    renderTab()
+    await screen.findByRole('option', { name: 'Yoga' })
+    expect(screen.queryByRole('button', { name: /clear filters/i })).not.toBeInTheDocument()
+
+    // Changing the period reloads the tab, so find the filter afterwards.
+    await userEvent.click(screen.getByRole('button', { name: 'Last Month' }))
+    const select = await screen.findByLabelText('Filter by class type')
+    await screen.findByRole('option', { name: 'Yoga' })
+    await userEvent.selectOptions(select, '9')
+    await userEvent.click(await screen.findByRole('button', { name: /clear filters/i }))
+
+    expect(await screen.findByLabelText('Filter by class type')).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Last Month' })).toHaveClass('bg-cyan-500')
+    expect(screen.queryByRole('button', { name: /clear filters/i })).not.toBeInTheDocument()
+  })
+})

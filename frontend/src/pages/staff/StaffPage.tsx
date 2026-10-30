@@ -8,6 +8,7 @@ import { StaffCard } from './StaffCard'
 import { AddStaffModal } from './AddStaffModal'
 import { StaffDetailModal } from './StaffDetailModal'
 import { Button } from '../../components/ui/Button'
+import { ClearFiltersButton } from '../../components/ui/ClearFiltersButton'
 import { Pagination } from '../../components/ui/Pagination'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { PageSpinner } from '../../components/ui/Spinner'
@@ -77,6 +78,21 @@ export function StaffPage() {
   const [ordering, setOrdering] = useState<'name' | '-name'>('name')
   const [showClassTags, setShowClassTags] = useState(false)
   const [page, setPage] = useState(1)
+
+  // Status starts on Active, so that is its cleared state. Sort order and
+  // class tags are display choices, not filters, and are left alone.
+  const hasFilters =
+    !!searchInput || !!roleFilter || statusFilter !== 'active' || !!classTypeFilter || !!dayFilter || !!rateTypeFilter
+
+  function clearFilters() {
+    setSearchInput('')
+    setRoleFilter('')
+    setStatusFilter('active')
+    setClassTypeFilter('')
+    setDayFilter('')
+    setRateTypeFilter('')
+    setPage(1)
+  }
 
   const search = useDebounce(searchInput, 300)
 
@@ -224,11 +240,20 @@ export function StaffPage() {
           <Tag className="h-4 w-4" />
           {showClassTags ? 'Hide Class Tags' : 'Show Class Tags'}
         </button>
+
+        <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
       </div>
 
       {/* Grid */}
       {isLoading ? (
         <PageSpinner />
+      ) : staffList.length === 0 && hasFilters ? (
+        <EmptyState
+          icon={<Users className="h-12 w-12" />}
+          title="No staff match these filters"
+          description="Try a different filter, or clear them to see everyone"
+          action={{ label: 'Clear Filters', onClick: clearFilters }}
+        />
       ) : staffList.length === 0 ? (
         <EmptyState
           icon={<Users className="h-12 w-12" />}

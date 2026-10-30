@@ -19,6 +19,7 @@ import { ListView } from './ListView'
 import { ClassDetailModal } from './ClassDetailModal'
 import { AddClassModal } from './AddClassModal'
 import { Button } from '../../components/ui/Button'
+import { ClearFiltersButton } from '../../components/ui/ClearFiltersButton'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { PageSpinner } from '../../components/ui/Spinner'
 import { RoleGuard } from '../../components/shared/RoleGuard'
@@ -55,6 +56,20 @@ export function TimetablePage() {
   const [listPage, setListPage] = useState(1)
 
   const search = useDebounce(searchInput, 300)
+
+  const hasFilters =
+    !!searchInput || !!statusFilter || !!siteFilter || !!instructorFilter || !!classTypeFilter || awaitingOnly
+
+  // Leaves the week and the view as they are — only the filters reset.
+  function clearFilters() {
+    setSearchInput('')
+    setStatusFilter('')
+    setSiteFilter('')
+    setInstructorFilter('')
+    setClassTypeFilter('')
+    setAwaitingOnly(false)
+    setListPage(1)
+  }
 
   const weekEnd = endOfWeek(currentWeekStart, { weekStartsOn: 1 })
   const isCurrentWeek = isSameWeek(currentWeekStart, new Date(), { weekStartsOn: 1 })
@@ -310,6 +325,8 @@ export function TimetablePage() {
           <ClipboardCheck className="h-4 w-4" />
           Awaiting Attendance
         </button>
+
+        <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
       </div>
 
       {/* Main content */}
