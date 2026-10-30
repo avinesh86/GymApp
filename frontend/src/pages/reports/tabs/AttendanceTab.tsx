@@ -43,12 +43,17 @@ function StatBox({ label, value }: { label: string; value: string | number }) {
   )
 }
 
-function attendanceBg(count: number | null): string {
-  if (count === null) return 'bg-gray-100 text-gray-400'
-  if (count < 5) return 'bg-red-100 text-red-700'
-  if (count < 15) return 'bg-orange-100 text-orange-700'
-  if (count < 25) return 'bg-yellow-100 text-yellow-700'
-  return 'bg-green-100 text-green-700'
+// Tinted by the class's own viability thresholds (Settings → Viability), the
+// same colour the timetable shows.
+const VIABILITY_BG: Record<string, string> = {
+  red: 'bg-red-100 text-red-700',
+  amber: 'bg-yellow-100 text-yellow-800',
+  green: 'bg-green-100 text-green-700',
+  purple: 'bg-purple-100 text-purple-700',
+}
+
+function attendanceBg(viability: string | undefined): string {
+  return VIABILITY_BG[viability ?? ''] ?? 'bg-gray-100 text-gray-400'
 }
 
 export interface CalendarEvent {
@@ -56,6 +61,7 @@ export interface CalendarEvent {
   class_name: string
   time: string
   attendance_count: number | null
+  viability_color?: string
   color: string
 }
 
@@ -65,7 +71,7 @@ export function CalendarEventChip({ ev }: { ev: CalendarEvent }) {
   const name = ev.class_name.length > 10 ? ev.class_name.slice(0, 10) + '…' : ev.class_name
   return (
     <div
-      className={`rounded px-1.5 py-0.5 text-xs truncate ${attendanceBg(ev.attendance_count)}`}
+      className={`rounded px-1.5 py-0.5 text-xs truncate ${attendanceBg(ev.viability_color)}`}
       title={`${ev.class_name} · ${ev.time}${ev.attendance_count !== null ? ` · ${ev.attendance_count}` : ''}`}
     >
       <span
@@ -318,10 +324,10 @@ export function AttendanceTab() {
             <div className="px-4 pt-3 pb-1 flex flex-wrap gap-3 text-xs text-gray-500">
               {[
                 { label: 'No attendance yet', cls: 'bg-gray-100' },
-                { label: 'Low (<5)', cls: 'bg-red-100' },
-                { label: 'Moderate (5–14)', cls: 'bg-orange-100' },
-                { label: 'Good (15–24)', cls: 'bg-yellow-100' },
-                { label: 'Excellent (25+)', cls: 'bg-green-100' },
+                { label: 'Red', cls: 'bg-red-100' },
+                { label: 'Amber', cls: 'bg-yellow-100' },
+                { label: 'Green', cls: 'bg-green-100' },
+                { label: 'Purple', cls: 'bg-purple-100' },
               ].map((item) => (
                 <span key={item.label} className="flex items-center gap-1.5">
                   <span className={`inline-block w-3 h-3 rounded-sm ${item.cls}`} />

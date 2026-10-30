@@ -74,7 +74,6 @@ def class_type(tenant):
         tenant=tenant,
         name="Yoga",
         duration_minutes=60,
-        red_threshold=3,
         amber_threshold=6,
         green_threshold=10,
         purple_threshold=20,

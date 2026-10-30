@@ -13,8 +13,8 @@ class ClassType(TenantAwareModel):
         blank=True,
         help_text="Comma-separated list of required qualification names.",
     )
-    # Attendance viability thresholds
-    red_threshold = models.PositiveIntegerField(default=3)
+    # Attendance viability: the count at which each colour starts. Below
+    # amber_threshold is red. See apps/timetable/viability.py.
     amber_threshold = models.PositiveIntegerField(default=6)
     green_threshold = models.PositiveIntegerField(default=10)
     purple_threshold = models.PositiveIntegerField(default=20)
