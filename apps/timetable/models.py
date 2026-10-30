@@ -15,6 +15,9 @@ class ClassType(TenantAwareModel):
     )
     # Attendance viability: the count at which each colour starts. Below
     # amber_threshold is red. See apps/timetable/viability.py.
+    # DEPRECATED, unused: kept for one release so a rolled-back deploy (whose
+    # code still selects this column) keeps working. Drop it in a later release.
+    red_threshold = models.PositiveIntegerField(default=3)
     amber_threshold = models.PositiveIntegerField(default=6)
     green_threshold = models.PositiveIntegerField(default=10)
     purple_threshold = models.PositiveIntegerField(default=20)

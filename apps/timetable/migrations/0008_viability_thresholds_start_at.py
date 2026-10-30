@@ -13,10 +13,13 @@ This moves each gym's numbers to what they meant:
     green starts at  = old Amber
     purple starts at = old Purple
 
-then drops red_threshold, which the new Settings screen no longer asks for.
+red_threshold is left in place, unused. deploy.sh rolls code back on a
+failed deploy but not the database, and the previous release still reads
+that column, so dropping it here would break a rollback. A later release
+drops it.
 """
 
-from django.db import migrations, models
+from django.db import migrations
 
 
 def to_start_at(apps, schema_editor):
@@ -50,5 +53,4 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.RunPython(to_start_at, to_below),
-        migrations.RemoveField(model_name="classtype", name="red_threshold"),
     ]

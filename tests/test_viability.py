@@ -78,6 +78,12 @@ def test_migration_keeps_what_the_gym_meant(tenant):
         v = ClassTypeNew.objects.get(pk=virtual.pk)
         assert (v.amber_threshold, v.green_threshold, v.purple_threshold) == (1, 3, 5)
         assert viability_colour(0, v.amber_threshold, v.green_threshold, v.purple_threshold) == "red"
+
+        # The column stays this release: if the deploy fails and rolls the
+        # code back, the previous release still selects it.
+        with connection.cursor() as cursor:
+            columns = [c.name for c in connection.introspection.get_table_description(cursor, "timetable_class_type")]
+        assert "red_threshold" in columns
     finally:
         MigrationExecutor(connection).migrate([AFTER])
 
