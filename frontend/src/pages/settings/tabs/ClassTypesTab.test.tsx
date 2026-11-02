@@ -28,7 +28,7 @@ describe('ClassTypesTab — colour picker (F11)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(listClassTypes).mockResolvedValue([
-      { id: 1, name: 'Yoga', color: '#06b6d4', description: '', duration_minutes: 60, default_location: '', required_qualifications: '', red_threshold: 3, amber_threshold: 6, green_threshold: 10, purple_threshold: 20, is_active: true },
+      { id: 1, name: 'Yoga', color: '#06b6d4', description: '', duration_minutes: 60, default_location: '', required_qualifications: '', amber_threshold: 6, green_threshold: 10, purple_threshold: 20, is_active: true },
     ] as never)
     vi.mocked(listSites).mockResolvedValue([])
     vi.mocked(createClassType).mockResolvedValue({ id: 2 } as never)

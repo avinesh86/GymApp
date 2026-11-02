@@ -13,7 +13,10 @@ vi.mock('../../api/timetable', () => ({
   listClassTypes: vi.fn(),
 }))
 vi.mock('../../api/staff', () => ({ listStaff: vi.fn() }))
-vi.mock('../../api/settings', () => ({ listSites: vi.fn() }))
+vi.mock('../../api/settings', () => ({
+  listSites: vi.fn(),
+  getTimetableDisplay: vi.fn().mockResolvedValue({ tile_style: 'tint' }),
+}))
 // Guards depend on auth context we don't need for this test.
 vi.mock('../../components/shared/RoleGuard', () => ({
   RoleGuard: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -115,6 +118,36 @@ describe('TimetablePage — awaiting attendance filter (F3)', () => {
     await waitFor(() =>
       expect(getWeekEvents).toHaveBeenLastCalledWith(
         expect.objectContaining({ awaiting: undefined }),
+      ),
+    )
+  })
+})
+
+describe('TimetablePage — clear filters', () => {
+  it('is hidden until a filter is set', async () => {
+    renderPage()
+    await screen.findByLabelText('Filter by class')
+    expect(screen.queryByRole('button', { name: /clear filters/i })).not.toBeInTheDocument()
+  })
+
+  it('resets every filter in one click and re-queries unfiltered', async () => {
+    renderPage()
+    const classSelect = await screen.findByLabelText('Filter by class')
+    await screen.findByRole('option', { name: 'Spin' })
+
+    await userEvent.selectOptions(classSelect, '8')
+    await userEvent.type(screen.getByPlaceholderText('Search classes...'), 'core')
+    await userEvent.click(screen.getByRole('button', { name: /awaiting attendance/i }))
+
+    await userEvent.click(screen.getByRole('button', { name: /clear filters/i }))
+
+    expect(classSelect).toHaveValue('')
+    expect(screen.getByPlaceholderText('Search classes...')).toHaveValue('')
+    expect(screen.getByRole('button', { name: /awaiting attendance/i })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.queryByRole('button', { name: /clear filters/i })).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(getWeekEvents).toHaveBeenLastCalledWith(
+        expect.objectContaining({ class_type: undefined, search: undefined, awaiting: undefined }),
       ),
     )
   })

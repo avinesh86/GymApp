@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
-from apps.core.permissions import IsAdmin, IsOwner
+from apps.core.permissions import IsAdmin, IsOwner, TenantPermission
 
 from .models import Site, TenantBranding, TenantSettings
 from .serializers import SiteSerializer, TenantBrandingSerializer, TenantSettingsSerializer
@@ -100,6 +100,20 @@ class CurrentTenantSettingsView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data)
+
+
+class TimetableDisplayView(APIView):
+    """GET how the timetable is drawn — for everyone who can see it.
+
+    The full settings are admin-only (they hold mail credentials), but
+    managers and instructors see the timetable too and need its tile style.
+    """
+
+    permission_classes = [TenantPermission]
+
+    def get(self, request):
+        settings_obj, _ = TenantSettings.objects.get_or_create(tenant=request.tenant)
+        return Response({"tile_style": settings_obj.timetable_tile_style})
 
 
 class SiteViewSet(ModelViewSet):

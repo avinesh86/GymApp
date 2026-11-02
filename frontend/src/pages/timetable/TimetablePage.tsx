@@ -12,13 +12,15 @@ import {
 import { ChevronLeft, ChevronRight, Plus, LayoutGrid, List, Search, ClipboardCheck } from 'lucide-react'
 import { getWeekEvents, listEventsPaginated, listClassTypes } from '../../api/timetable'
 import { listStaff } from '../../api/staff'
-import { listSites } from '../../api/settings'
+import { getTimetableDisplay, listSites } from '../../api/settings'
+import { VIABILITY_PASTEL } from './tileColours'
 import type { TimetableEvent } from '../../types'
 import { WeekView } from './WeekView'
 import { ListView } from './ListView'
 import { ClassDetailModal } from './ClassDetailModal'
 import { AddClassModal } from './AddClassModal'
 import { Button } from '../../components/ui/Button'
+import { ClearFiltersButton } from '../../components/ui/ClearFiltersButton'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { PageSpinner } from '../../components/ui/Spinner'
 import { RoleGuard } from '../../components/shared/RoleGuard'
@@ -39,6 +41,32 @@ function useDebounce<T>(value: T, delay: number): T {
 
 type ViewMode = 'week' | 'list'
 
+const LEGEND = [
+  { key: 'red', label: 'Red' },
+  { key: 'amber', label: 'Amber' },
+  { key: 'green', label: 'Green' },
+  { key: 'purple', label: 'Purple' },
+]
+
+/** What the pastel tile backgrounds mean. */
+function ViabilityLegend() {
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-3 text-xs text-gray-500" aria-label="Viability colours">
+      <span>Once attendance is recorded:</span>
+      {LEGEND.map((item) => (
+        <span key={item.key} className="flex items-center gap-1.5">
+          <span
+            className="inline-block w-3 h-3 rounded-sm border border-gray-200"
+            style={{ backgroundColor: VIABILITY_PASTEL[item.key] }}
+          />
+          {item.label}
+        </span>
+      ))}
+      <span className="text-gray-400">· ranges for each class are in Settings → Viability</span>
+    </div>
+  )
+}
+
 export function TimetablePage() {
   const [viewMode, setViewMode] = useState<ViewMode>('week')
   const [currentWeekStart, setCurrentWeekStart] = useState(() =>
@@ -55,6 +83,20 @@ export function TimetablePage() {
   const [listPage, setListPage] = useState(1)
 
   const search = useDebounce(searchInput, 300)
+
+  const hasFilters =
+    !!searchInput || !!statusFilter || !!siteFilter || !!instructorFilter || !!classTypeFilter || awaitingOnly
+
+  // Leaves the week and the view as they are — only the filters reset.
+  function clearFilters() {
+    setSearchInput('')
+    setStatusFilter('')
+    setSiteFilter('')
+    setInstructorFilter('')
+    setClassTypeFilter('')
+    setAwaitingOnly(false)
+    setListPage(1)
+  }
 
   const weekEnd = endOfWeek(currentWeekStart, { weekStartsOn: 1 })
   const isCurrentWeek = isSameWeek(currentWeekStart, new Date(), { weekStartsOn: 1 })
@@ -105,6 +147,11 @@ export function TimetablePage() {
   const { data: sites = [] } = useQuery({
     queryKey: ['sites'],
     queryFn: listSites,
+  })
+
+  const { data: display } = useQuery({
+    queryKey: ['timetable-display'],
+    queryFn: getTimetableDisplay,
   })
 
   const { data: staffPage } = useQuery({
@@ -310,6 +357,8 @@ export function TimetablePage() {
           <ClipboardCheck className="h-4 w-4" />
           Awaiting Attendance
         </button>
+
+        <ClearFiltersButton active={hasFilters} onClear={clearFilters} />
       </div>
 
       {/* Main content */}
@@ -317,11 +366,15 @@ export function TimetablePage() {
         {isLoading ? (
           <PageSpinner />
         ) : viewMode === 'week' ? (
-          <WeekView
-            weekStart={currentWeekStart}
-            events={weekEvents}
-            onEventClick={setSelectedEvent}
-          />
+          <>
+            <ViabilityLegend />
+            <WeekView
+              weekStart={currentWeekStart}
+              events={weekEvents}
+              onEventClick={setSelectedEvent}
+              tileStyle={display?.tile_style}
+            />
+          </>
         ) : (
           <ListView
             events={listData?.results ?? []}

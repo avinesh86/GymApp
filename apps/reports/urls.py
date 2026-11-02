@@ -1,5 +1,6 @@
 from django.urls import path
 
+from .class_filter import ReportClassFilterView
 from .views import (
     AttendanceReportView,
     ClassesReportView,
@@ -8,6 +9,7 @@ from .views import (
     InstructorChartsReportView,
     InstructorReliabilityReportView,
     PayrollReportView,
+    UnrecordedAttendanceReportView,
 )
 
 urlpatterns = [
@@ -18,4 +20,6 @@ urlpatterns = [
     path("payroll/", PayrollReportView.as_view(), name="report-payroll"),
     path("class-viability/", ClassViabilityReportView.as_view(), name="report-viability"),
     path("cover/", CoverReportView.as_view(), name="report-cover"),
+    path("unrecorded/", UnrecordedAttendanceReportView.as_view(), name="report-unrecorded"),
+    path("class-filter/", ReportClassFilterView.as_view(), name="report-class-filter"),
 ]

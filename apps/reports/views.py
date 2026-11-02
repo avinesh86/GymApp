@@ -6,13 +6,18 @@ from django.db.models.functions import Coalesce
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.core.timezones import format_date, format_time, local_date
+from django.utils import timezone
+
+from apps.core.timezones import format_date, format_time, local_date, to_tenant_local
 from apps.attendance.models import AttendanceRecord
 from apps.core.permissions import IsGymManager, IsPayroll
 from apps.cover.models import CoverRequest
 from apps.invoices.models import Invoice, PayRun
 from apps.staff.models import StaffProfile
 from apps.timetable.models import ClassType, TimetableEvent
+from apps.timetable.viability import AMBER, GREEN, PURPLE, RED, event_viability_colour
+
+from .class_filter import excluded_class_type_ids
 
 PALETTE = [
     "#06b6d4", "#f97316", "#8b5cf6", "#ec4899", "#10b981",
@@ -85,10 +90,19 @@ class AttendanceReportView(APIView):
 
         if class_type_id:
             event_qs = event_qs.filter(class_type_id=class_type_id)
+        event_qs = event_qs.exclude(class_type_id__in=excluded_class_type_ids(request.tenant))
 
         events = list(event_qs.order_by("start_datetime"))
 
-        total_classes = len(events)
+        # Counts and averages only cover classes that have happened. Future
+        # classes still appear on the calendar, but would otherwise inflate
+        # "classes" and drag down rates for work that hasn't happened yet.
+        now = timezone.now()
+        held = [
+            e for e in events
+            if e.start_datetime < now and e.status != TimetableEvent.Status.CANCELLED
+        ]
+        total_classes = len(held)
 
         # Pre-build a mapping of event pk → attendance count for events that have a record.
         # Doing this once prevents the defaultdict pre-creation bug where accessing
@@ -101,6 +115,7 @@ class AttendanceReportView(APIView):
                 pass
 
         classes_with_attendance = len(event_counts)
+        classes_without_attendance = sum(1 for e in held if e.pk not in event_counts)
         total_attendees = sum(event_counts.values())
         attendance_count_values = list(event_counts.values())
         avg_attendance = (
@@ -119,6 +134,7 @@ class AttendanceReportView(APIView):
                 "instructor_name": event.instructor.name if event.instructor else None,
                 "site_name": event.site.name if event.site else None,
                 "attendance_count": event_counts.get(event.pk),
+                "viability_color": event_viability_colour(event, event_counts.get(event.pk)),
                 "color": get_class_color(event.class_type),
             })
 
@@ -130,7 +146,7 @@ class AttendanceReportView(APIView):
         # --- weekly_trend ---
         week_attendance: dict[str, list] = defaultdict(list)
         week_class_count: dict[str, int] = defaultdict(int)
-        for event in events:
+        for event in held:
             week_start = monday_of_week(local_date(event.start_datetime, event.tenant)).isoformat()
             week_class_count[week_start] += 1
             if event.pk in event_counts:
@@ -174,7 +190,8 @@ class AttendanceReportView(APIView):
         dow_attendance: dict[int, list] = defaultdict(list)
         for event in events:
             if event.pk in event_counts:
-                dow_attendance[event.start_datetime.weekday()].append(event_counts[event.pk])
+                # The gym's day, not UTC's — a 5am Monday NZ class is Sunday in UTC.
+                dow_attendance[local_date(event.start_datetime, event.tenant).weekday()].append(event_counts[event.pk])
 
         by_day_of_week = [
             {
@@ -188,7 +205,7 @@ class AttendanceReportView(APIView):
         # --- by_time_slot ---
         slot_attendance: dict[str, list] = defaultdict(list)
         for event in events:
-            slot = slot_for_hour(event.start_datetime.hour)
+            slot = slot_for_hour(to_tenant_local(event.start_datetime, event.tenant).hour)
             if slot is not None and event.pk in event_counts:
                 slot_attendance[slot].append(event_counts[event.pk])
 
@@ -240,6 +257,7 @@ class AttendanceReportView(APIView):
             "to_date": to_date.isoformat(),
             "total_classes": total_classes,
             "classes_with_attendance": classes_with_attendance,
+            "classes_without_attendance": classes_without_attendance,
             "avg_attendance": avg_attendance,
             "total_attendees": total_attendees,
             "daily_breakdown": daily_breakdown,
@@ -421,6 +439,12 @@ class ClassesReportView(APIView):
         )
         if class_type_filter:
             class_types = class_types.filter(id=class_type_filter)
+        excluded = excluded_class_type_ids(request.tenant)
+        class_types = class_types.exclude(id__in=excluded)
+
+        # Only classes that have happened: a month's future classes would
+        # otherwise count as "classes" and dilute the cancellation rate.
+        now = timezone.now()
 
         by_class_type = []
         for class_type in class_types:
@@ -430,6 +454,7 @@ class ClassesReportView(APIView):
                 class_type=class_type,
                 start_datetime__date__gte=from_date,
                 start_datetime__date__lte=to_date,
+                start_datetime__lt=now,
             )
 
             total_scheduled = all_events.count()
@@ -468,6 +493,10 @@ class ClassesReportView(APIView):
                 "class_type_id": class_type.id,
                 "class_type_name": class_type.name,
                 "total_classes": total_scheduled,
+                # Averages use only recorded classes; unrecorded ones are
+                # reported separately rather than counted as zero.
+                "recorded_classes": total_attended,
+                "unrecorded_classes": max(total_scheduled - total_cancelled - total_attended, 0),
                 "avg_attendance": avg_attendance,
                 "viability_percentage": viability_percentage,
                 "cancellation_percentage": cancellation_percentage,
@@ -490,6 +519,7 @@ class ClassesReportView(APIView):
             attendance_qs = attendance_qs.filter(
                 timetable_event__class_type_id=class_type_filter
             )
+        attendance_qs = attendance_qs.exclude(timetable_event__class_type_id__in=excluded)
 
         weekly = defaultdict(list)
         by_dow = defaultdict(list)
@@ -626,36 +656,33 @@ class ClassViabilityReportView(APIView):
             except ValueError:
                 return Response({"detail": "Invalid 'to' date."}, status=400)
 
+        excluded = excluded_class_type_ids(request.tenant)
         class_types = ClassType.objects.filter(
             tenant=request.tenant, is_deleted=False, is_active=True
-        )
+        ).exclude(id__in=excluded)
 
         # F10: overall snapshot buckets aggregated across all class types.
         snapshot = {"excellent": 0, "good": 0, "moderate": 0, "low": 0, "pending": 0}
 
         by_class_type = []
         for class_type in class_types:
-            counts = list(
+            records = list(
                 AttendanceRecord.objects.filter(
                     Q(tenant=request.tenant, is_deleted=False, timetable_event__class_type=class_type)
                     & date_filter
-                ).values_list("count", flat=True)
+                ).select_related("timetable_event__class_type")
             )
 
-            total = len(counts)
-            avg_attendance = round(sum(counts) / total, 1) if total else 0.0
+            total = len(records)
+            avg_attendance = round(sum(r.count for r in records) / total, 1) if total else 0.0
 
-            red = amber = green = purple = 0
-            for c in counts:
-                if c >= class_type.purple_threshold:
-                    purple += 1
-                elif c >= class_type.green_threshold:
-                    green += 1
-                elif c >= class_type.amber_threshold:
-                    amber += 1
-                elif c >= class_type.red_threshold:
-                    red += 1
-                # counts below red_threshold are simply not viable — not bucketed
+            # Same rule as the timetable, including any per-class overrides,
+            # so a class is the same colour in both places.
+            colours = [event_viability_colour(r.timetable_event, r.count) for r in records]
+            red = colours.count(RED)
+            amber = colours.count(AMBER)
+            green = colours.count(GREEN)
+            purple = colours.count(PURPLE)
 
             viable = green + purple
             viability_percentage = round(viable / total * 100, 1) if total else 0.0
@@ -684,9 +711,14 @@ class ClassViabilityReportView(APIView):
             event_filter &= Q(start_datetime__date__gte=date.fromisoformat(from_str))
         if to_str:
             event_filter &= Q(start_datetime__date__lte=date.fromisoformat(to_str))
+        # Pending = classes that have happened with no count yet. Future
+        # classes aren't pending anything.
         snapshot["pending"] = (
-            TimetableEvent.objects.filter(event_filter, attendance_record__isnull=True)
+            TimetableEvent.objects.filter(
+                event_filter, attendance_record__isnull=True, start_datetime__lt=timezone.now(),
+            )
             .exclude(status=TimetableEvent.Status.CANCELLED)
+            .exclude(class_type_id__in=excluded)
             .count()
         )
 
@@ -694,12 +726,12 @@ class ClassViabilityReportView(APIView):
         trend_weekly = defaultdict(lambda: {"viable": 0, "total": 0})
         records = AttendanceRecord.objects.filter(
             Q(tenant=request.tenant, is_deleted=False) & date_filter
-        ).select_related("timetable_event__class_type")
+        ).exclude(timetable_event__class_type_id__in=excluded).select_related("timetable_event__class_type")
         for record in records:
             event = record.timetable_event
             week = monday_of_week(local_date(event.start_datetime, event.tenant)).isoformat()
             trend_weekly[week]["total"] += 1
-            if record.count >= event.class_type.green_threshold:
+            if event_viability_colour(event, record.count) in (GREEN, PURPLE):
                 trend_weekly[week]["viable"] += 1
 
         viability_trend = [
@@ -756,3 +788,105 @@ class CoverReportView(APIView):
             "by_status": list(by_status),
             "by_urgency": list(by_urgency),
         })
+
+
+class UnrecordedAttendanceReportView(APIView):
+    """
+    GET /api/v1/reports/unrecorded/?from=YYYY-MM-DD&to=YYYY-MM-DD
+
+    Classes that have happened but have no attendance count, to spot slots
+    that repeatedly go unrecorded. They are left out of every average, so
+    without this they would simply vanish from the reports.
+
+    Returns:
+      {
+        "total": N,
+        "by_slot": [ {class_type_id, class_name, day, time, missed, held,
+                      last_missed, instructors: [{name, missed}]} ],
+        "classes": [ {event_id, class_name, date, time, instructor_name, site_name} ],
+      }
+
+    Slots are a class at a weekday and start time, in the gym's local time,
+    most-missed first. ``held`` is how many classes ran in that slot, so
+    "missed 4 of 6" reads as a pattern rather than a one-off.
+    """
+
+    permission_classes = [IsGymManager]
+
+    def get(self, request):
+        from_date, to_date, error = parse_date_params(request)
+        if error:
+            return error
+
+        events = list(
+            TimetableEvent.objects.filter(
+                tenant=request.tenant,
+                is_deleted=False,
+                start_datetime__date__gte=from_date,
+                start_datetime__date__lte=to_date,
+                start_datetime__lt=timezone.now(),
+            )
+            .exclude(status=TimetableEvent.Status.CANCELLED)
+            .exclude(class_type_id__in=excluded_class_type_ids(request.tenant))
+            .select_related("class_type", "instructor", "site", "attendance_record", "tenant")
+            .order_by("-start_datetime")
+        )
+
+        def has_count(event):
+            try:
+                return event.attendance_record is not None and not event.attendance_record.is_deleted
+            except AttendanceRecord.DoesNotExist:
+                return False
+
+        def slot_key(event):
+            local = to_tenant_local(event.start_datetime, event.tenant)
+            return (event.class_type_id, local.weekday(), local.strftime("%H:%M"))
+
+        held: dict[tuple, int] = defaultdict(int)
+        for event in events:
+            held[slot_key(event)] += 1
+
+        unrecorded = [e for e in events if not has_count(e)]
+
+        slots: dict[tuple, dict] = {}
+        for event in unrecorded:  # most recent first, so the first seen is the last missed
+            key = slot_key(event)
+            slot = slots.get(key)
+            if slot is None:
+                slot = slots[key] = {
+                    "class_type_id": event.class_type_id,
+                    "class_name": event.class_type.name,
+                    "day": DAY_NAMES[key[1]],
+                    "time": format_time(event.start_datetime, event.tenant),
+                    "missed": 0,
+                    "held": held[key],
+                    "last_missed": format_date(event.start_datetime, event.tenant),
+                    "_instructors": defaultdict(int),
+                    "_order": (key[1], key[2]),
+                }
+            slot["missed"] += 1
+            slot["_instructors"][event.instructor.name if event.instructor else "Unassigned"] += 1
+
+        by_slot = []
+        for slot in sorted(slots.values(), key=lambda s: (-s["missed"], s["_order"], s["class_name"])):
+            instructors = slot.pop("_instructors")
+            slot.pop("_order")
+            slot["instructors"] = [
+                {"name": name, "missed": n}
+                for name, n in sorted(instructors.items(), key=lambda kv: (-kv[1], kv[0]))
+            ]
+            by_slot.append(slot)
+
+        classes = [
+            {
+                "event_id": event.id,
+                "class_name": event.class_type.name,
+                "date": format_date(event.start_datetime, event.tenant),
+                "time": format_time(event.start_datetime, event.tenant),
+                "instructor_name": event.instructor.name if event.instructor else None,
+                "site_name": event.site.name if event.site else None,
+            }
+            for event in unrecorded
+        ]
+
+        return Response({"total": len(unrecorded), "by_slot": by_slot, "classes": classes})

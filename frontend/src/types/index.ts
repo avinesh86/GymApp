@@ -66,7 +66,11 @@ export interface TenantSettings {
   /** 0 = Sunday, 1 = Monday, 6 = Saturday */
   week_start_day?: number
   default_timetable_view?: 'week' | 'list'
+  timetable_tile_style?: TimetableTileStyle
 }
+
+/** How strongly a class's own colour shows on its timetable tile. */
+export type TimetableTileStyle = 'stripe' | 'tint' | 'solid'
 
 export interface TenantBranding {
   app_name: string
@@ -107,7 +111,6 @@ export interface ClassType {
   duration_minutes: number
   default_location: string
   required_qualifications: string
-  red_threshold: number
   amber_threshold: number
   green_threshold: number
   purple_threshold: number
@@ -199,6 +202,8 @@ export interface TimetableEvent {
   attendance_count: number | null
   notes: string
   viability_color?: string
+  /** Hex colour of the class type, from Settings → Classes. */
+  class_type_color?: string
   internal_notes?: string
   cancellation_reason?: string
   recurring_pattern_id?: string | null
@@ -269,16 +274,6 @@ export interface AttendanceRecord {
   recorded_by: number | null
   recorded_at: string | null
   is_verified: boolean
-}
-
-export interface QRToken {
-  id: number
-  timetable_event: number
-  event: number
-  token: string
-  url: string
-  expires_at: string
-  is_used: boolean
 }
 
 // ─── Invoices ─────────────────────────────────────────────────────────────────
@@ -355,6 +350,8 @@ export interface AttendanceReport {
   to_date: string
   total_classes: number
   classes_with_attendance: number
+  /** Classes that have happened with no count — left out of averages. */
+  classes_without_attendance: number
   avg_attendance: number
   total_attendees: number
   daily_breakdown: Array<{
@@ -366,6 +363,7 @@ export interface AttendanceReport {
       instructor_name: string | null
       site_name: string | null
       attendance_count: number | null
+      viability_color: string
       color: string
     }>
   }>
@@ -452,12 +450,42 @@ export interface ClassReportRow {
   class_type_id: number
   class_type_name: string
   total_classes: number
+  /** Classes with a count — the only ones averages use. */
+  recorded_classes: number
+  /** Classes that ran with no count recorded. */
+  unrecorded_classes: number
   avg_attendance: number
   viability_percentage: number
   cancellation_percentage: number
   capacity: number
   target: number
   color: string
+}
+
+export interface UnrecordedSlot {
+  class_type_id: number
+  class_name: string
+  day: string
+  time: string
+  /** Times this slot ran with no attendance recorded. */
+  missed: number
+  /** Times this slot ran at all in the period. */
+  held: number
+  last_missed: string
+  instructors: Array<{ name: string; missed: number }>
+}
+
+export interface UnrecordedReport {
+  total: number
+  by_slot: UnrecordedSlot[]
+  classes: Array<{
+    event_id: number
+    class_name: string
+    date: string
+    time: string
+    instructor_name: string | null
+    site_name: string | null
+  }>
 }
 
 export interface ClassesReport {

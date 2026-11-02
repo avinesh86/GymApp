@@ -1,7 +1,7 @@
 """Rendering stored UTC datetimes in a gym's own local time.
 
 Every datetime is stored as UTC (USE_TZ=True, TIME_ZONE="UTC"). Anything a
-person reads — an email, a WhatsApp message, a report, a QR screen — has to be
+person reads — an email, a WhatsApp message, a report — has to be
 converted first, or a 9pm Auckland class is announced as 09:00, and a 9am one
 is announced on the wrong day.
 """

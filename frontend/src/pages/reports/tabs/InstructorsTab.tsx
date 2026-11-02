@@ -17,6 +17,7 @@ import {
 import { getInstructorReliabilityReport, getInstructorCharts } from '../../../api/reports'
 import { Table } from '../../../components/ui/Table'
 import { PageSpinner } from '../../../components/ui/Spinner'
+import { ClearFiltersButton } from '../../../components/ui/ClearFiltersButton'
 import type { InstructorReliabilityReport } from '../../../types'
 
 type PeriodKey = 'this_month' | 'last_month' | 'custom'
@@ -144,6 +145,8 @@ export function InstructorsTab() {
             <option key={i.instructor_id} value={i.instructor_id}>{i.instructor_name}</option>
           ))}
         </select>
+
+        <ClearFiltersButton active={selectedInstructor !== undefined} onClear={() => setSelectedInstructor(undefined)} />
       </div>
 
       {/* Reliability score bar chart */}

@@ -8,7 +8,6 @@ export type Permission =
   | 'cover'
   | 'invoices'
   | 'attendance'
-  | 'qr_attendance'
   | 'reports'
   | 'imports'
   | 'settings'
@@ -20,7 +19,6 @@ export const ALL_PERMISSIONS: Permission[] = [
   'cover',
   'invoices',
   'attendance',
-  'qr_attendance',
   'reports',
   'imports',
   'settings',
@@ -29,12 +27,12 @@ export const ALL_PERMISSIONS: Permission[] = [
 // Default permissions per role — these are used when no localStorage override exists.
 export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Permission[] | ['*']> = {
   owner:            ['*'],
-  admin:            ['dashboard', 'timetable', 'staff', 'cover', 'invoices', 'attendance', 'qr_attendance', 'reports', 'imports', 'settings'],
+  admin:            ['dashboard', 'timetable', 'staff', 'cover', 'invoices', 'attendance', 'reports', 'imports', 'settings'],
   gym_manager:      ['*'],
   payroll:          ['dashboard', 'invoices', 'reports'],
-  team_leader:      ['dashboard', 'timetable', 'cover', 'attendance', 'qr_attendance'],
+  team_leader:      ['dashboard', 'timetable', 'cover', 'attendance'],
   instructor:       ['dashboard', 'timetable', 'attendance', 'invoices'],
-  class_count_admin: ['dashboard', 'attendance', 'qr_attendance'],
+  class_count_admin: ['dashboard', 'attendance'],
 }
 
 const LOCAL_STORAGE_KEY = 'fitops_role_access'

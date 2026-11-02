@@ -9,6 +9,7 @@ import {
   listQualifications,
   createQualification,
   listAvailability,
+  createAvailability,
   listPayRates,
   listPayRateOverrides,
   getPaymentDetails,
@@ -35,6 +36,8 @@ vi.mock('../../api/staff', () => ({
   listCapabilities: vi.fn(),
   createCapability: vi.fn(),
   deleteCapability: vi.fn(),
+  listClassRates: vi.fn().mockResolvedValue([]),
+  saveClassRates: vi.fn(),
   listAvailability: vi.fn(),
   createAvailability: vi.fn(),
   deleteAvailability: vi.fn(),
@@ -109,7 +112,9 @@ describe('StaffDetailModal — Info tab', () => {
     // `is_active` is not a field on a staff profile — the API ignored it and
     // answered 200, which is how the status change vanished without an error.
     expect(payload).not.toHaveProperty('is_active')
-    await waitFor(() => expect(onClose).toHaveBeenCalled())
+    // Saving keeps the popup open, so the other tabs can be filled in too.
+    expect(await screen.findByRole('status')).toHaveTextContent('Saved')
+    expect(onClose).not.toHaveBeenCalled()
   })
 
   it('reopens with the values that were just saved', async () => {
@@ -226,5 +231,84 @@ describe('StaffDetailModal — other tabs', () => {
     expect(id).toBe(7)
     expect(fields).toMatchObject({ business_name: 'Mia Fitness' })
     expect(file).toBe(logo)
+  })
+})
+
+describe('StaffDetailModal — unsaved changes', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    auth.role = 'owner'
+    vi.mocked(getStaff).mockResolvedValue(makeStaff())
+    vi.mocked(listQualifications).mockResolvedValue([])
+    vi.mocked(listClassTypes).mockResolvedValue([])
+    vi.mocked(listAvailability).mockResolvedValue([])
+  })
+
+  it('asks before switching tabs, and keeps the edit if you stay', async () => {
+    renderModal()
+    await userEvent.selectOptions(await screen.findByLabelText('Priority Tier'), '1')
+    expect(screen.getByText('Unsaved changes')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Availability' }))
+    expect(await screen.findByText('Discard unsaved changes?')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Keep editing' }))
+    expect(screen.getByLabelText('Priority Tier')).toHaveValue('1')
+  })
+
+  it('moves on and drops the edit if you discard', async () => {
+    renderModal()
+    await userEvent.selectOptions(await screen.findByLabelText('Priority Tier'), '1')
+    await userEvent.click(screen.getByRole('button', { name: 'Availability' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard' }))
+
+    expect(await screen.findByText(/Checked slots indicate preferred availability/)).toBeInTheDocument()
+    expect(updateStaff).not.toHaveBeenCalled()
+  })
+
+  it('asks before closing with unsaved changes', async () => {
+    const { onClose } = renderModal()
+    await userEvent.selectOptions(await screen.findByLabelText('Priority Tier'), '1')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(onClose).not.toHaveBeenCalled()
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard' }))
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('closes straight away when nothing has changed', async () => {
+    const { onClose } = renderModal()
+    await screen.findByLabelText('Priority Tier')
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(onClose).toHaveBeenCalled()
+    expect(screen.queryByText('Discard unsaved changes?')).not.toBeInTheDocument()
+  })
+})
+
+describe('StaffDetailModal — Availability saves on Save', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    auth.role = 'owner'
+    vi.mocked(getStaff).mockResolvedValue(makeStaff())
+    vi.mocked(listQualifications).mockResolvedValue([])
+    vi.mocked(listClassTypes).mockResolvedValue([])
+    vi.mocked(listAvailability).mockResolvedValue([])
+    vi.mocked(createAvailability).mockResolvedValue({} as never)
+  })
+
+  it('stores ticked slots only when Save Changes is pressed', async () => {
+    renderModal()
+    await screen.findByLabelText('Priority Tier')
+    await userEvent.click(screen.getByRole('button', { name: 'Availability' }))
+
+    const [firstSlot] = await screen.findAllByRole('checkbox')
+    await userEvent.click(firstSlot)
+    expect(createAvailability).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
+    await waitFor(() =>
+      expect(createAvailability).toHaveBeenCalledWith(7, expect.objectContaining({ day_of_week: 0 })),
+    )
+    expect(await screen.findByRole('status')).toHaveTextContent('Saved')
   })
 })

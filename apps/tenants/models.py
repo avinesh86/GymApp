@@ -127,6 +127,19 @@ class TenantSettings(models.Model):
         choices=[("week", "Week"), ("list", "List")],
         default="week",
     )
+    # How strongly a class's own colour shows on its timetable tile: a stripe
+    # down the side, a light tint behind it, or the solid colour. Recorded
+    # classes take their viability colour instead, whichever is chosen.
+    timetable_tile_style = models.CharField(
+        max_length=10,
+        choices=[("stripe", "Stripe"), ("tint", "Tint"), ("solid", "Solid")],
+        default="tint",
+    )
+    # Class types left out of the Attendance, Classes and Viability reports
+    # (e.g. virtual classes, family swim). Shared by every manager at the gym
+    # and remembered until someone changes it. Stored as exclusions so a new
+    # class type shows up in reports without anyone ticking it.
+    report_excluded_class_types = models.JSONField(default=list, blank=True)
     # Outgoing email configuration for notifications
     notification_from_email = models.EmailField(blank=True, default="")
     notification_from_name = models.CharField(max_length=100, blank=True, default="")
