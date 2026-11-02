@@ -7,6 +7,7 @@ from .views import (
     CurrentWhatsAppAccountView,
     SiteViewSet,
     TenantSetupStatusView,
+    TimetableDisplayView,
 )
 
 router = DefaultRouter()
@@ -16,6 +17,7 @@ urlpatterns = [
     path("branding/", CurrentTenantBrandingView.as_view(), name="tenant-branding"),
     path("settings/", CurrentTenantSettingsView.as_view(), name="tenant-settings"),
     path("setup-status/", TenantSetupStatusView.as_view(), name="setup-status"),
+    path("timetable-display/", TimetableDisplayView.as_view(), name="timetable-display"),
     path("whatsapp-account/", CurrentWhatsAppAccountView.as_view(), name="tenant-whatsapp-account"),
     path("", include(router.urls)),
 ]

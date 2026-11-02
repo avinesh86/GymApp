@@ -1,11 +1,17 @@
 import apiClient from './client'
-import type { TenantSettings, TenantBranding, WhatsAppAccount, Site, User, PaginatedResponse, SetupStatus } from '../types'
+import type { TimetableTileStyle, TenantSettings, TenantBranding, WhatsAppAccount, Site, User, PaginatedResponse, SetupStatus } from '../types'
 
 function unwrapList<T>(data: T[] | PaginatedResponse<T>): T[] {
   return Array.isArray(data) ? data : data.results
 }
 
 // ─── Tenant Settings ──────────────────────────────────────────────────────────
+
+/** The gym's timetable tile style — readable by everyone who sees the timetable. */
+export async function getTimetableDisplay(): Promise<{ tile_style: TimetableTileStyle }> {
+  const response = await apiClient.get<{ tile_style: TimetableTileStyle }>('tenants/timetable-display/')
+  return response.data
+}
 
 export async function getTenantSettings(): Promise<TenantSettings> {
   const response = await apiClient.get<TenantSettings>('tenants/settings/')

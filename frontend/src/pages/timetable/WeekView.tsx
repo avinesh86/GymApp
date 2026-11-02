@@ -1,20 +1,21 @@
 import React from 'react'
 import { format, addDays, isSameDay } from 'date-fns'
 import { Clock, MapPin } from 'lucide-react'
-import type { TimetableEvent, TimetableEventStatus } from '../../types'
+import type { TimetableEvent, TimetableEventStatus, TimetableTileStyle } from '../../types'
+import { DEFAULT_TILE_STYLE, tileColours } from './tileColours'
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
 const STATUS_CONFIG: Record<
   TimetableEventStatus,
-  { label: string; borderColor: string; badgeBg: string; badgeText: string; dotBg: string }
+  { label: string; badgeBg: string; badgeText: string; dotBg: string }
 > = {
-  completed:   { label: 'Completed',          borderColor: 'border-l-green-400',  badgeBg: 'bg-green-100',  badgeText: 'text-green-700',  dotBg: 'bg-green-500' },
-  scheduled:   { label: 'Scheduled',          borderColor: 'border-l-cyan-400',   badgeBg: 'bg-cyan-100',   badgeText: 'text-cyan-700',   dotBg: 'bg-cyan-500' },
-  unfilled:    { label: 'Unfilled',           borderColor: 'border-l-amber-400',  badgeBg: 'bg-amber-100',  badgeText: 'text-amber-700',  dotBg: 'bg-amber-500' },
-  awaiting_attendance: { label: 'Awaiting Attendance', borderColor: 'border-l-orange-400', badgeBg: 'bg-orange-100', badgeText: 'text-orange-700', dotBg: 'bg-orange-500' },
-  needs_cover: { label: 'Needs Cover',         borderColor: 'border-l-red-400',    badgeBg: 'bg-red-100',    badgeText: 'text-red-700',    dotBg: 'bg-red-500' },
-  cancelled:   { label: 'Cancelled',           borderColor: 'border-l-gray-300',   badgeBg: 'bg-gray-100',   badgeText: 'text-gray-500',   dotBg: 'bg-gray-400' },
+  completed:   { label: 'Completed',          badgeBg: 'bg-green-100',  badgeText: 'text-green-700',  dotBg: 'bg-green-500' },
+  scheduled:   { label: 'Scheduled',          badgeBg: 'bg-cyan-100',   badgeText: 'text-cyan-700',   dotBg: 'bg-cyan-500' },
+  unfilled:    { label: 'Unfilled',           badgeBg: 'bg-amber-100',  badgeText: 'text-amber-700',  dotBg: 'bg-amber-500' },
+  awaiting_attendance: { label: 'Awaiting Attendance', badgeBg: 'bg-orange-100', badgeText: 'text-orange-700', dotBg: 'bg-orange-500' },
+  needs_cover: { label: 'Needs Cover',         badgeBg: 'bg-red-100',    badgeText: 'text-red-700',    dotBg: 'bg-red-500' },
+  cancelled:   { label: 'Cancelled',           badgeBg: 'bg-gray-100',   badgeText: 'text-gray-500',   dotBg: 'bg-gray-400' },
 }
 
 // ─── Viability color config ───────────────────────────────────────────────────
@@ -40,19 +41,25 @@ function formatTime(time: string): string {
 
 interface WeekClassCardProps {
   event: TimetableEvent
+  tileStyle: TimetableTileStyle
   onClick: (event: TimetableEvent) => void
 }
 
-function WeekClassCard({ event, onClick }: WeekClassCardProps) {
+function WeekClassCard({ event, tileStyle, onClick }: WeekClassCardProps) {
   const config = STATUS_CONFIG[event.status] ?? STATUS_CONFIG.scheduled
+  // The stripe and background come from the class colour, or the viability
+  // pastel once attendance is recorded; status shows in the badge.
+  const { style, onDark } = tileColours(event, tileStyle)
+  const muted = onDark ? 'text-white/80' : 'text-gray-400'
 
   return (
     <div
       onClick={() => onClick(event)}
+      data-testid="week-class-card"
+      style={style}
       className={[
-        'bg-white rounded-lg border border-gray-100 border-l-4 p-2 cursor-pointer',
+        'rounded-lg border border-gray-100 border-l-4 p-2 cursor-pointer',
         'hover:shadow-md transition-shadow duration-150 select-none',
-        config.borderColor,
       ].join(' ')}
     >
       {/* Status badge row */}
@@ -69,7 +76,14 @@ function WeekClassCard({ event, onClick }: WeekClassCardProps) {
         </span>
 
         {event.attendance_count !== null && (
-          <span className="h-5 w-5 rounded-full bg-green-500 text-white text-xs font-bold flex items-center justify-center shrink-0">
+          <span
+            className={[
+              'h-5 w-5 rounded-full text-white text-xs font-bold flex items-center justify-center shrink-0',
+              // Matches the tile's viability colour, so a red tile doesn't carry a green count.
+              VIABILITY_DOT_CLASS[event.viability_color ?? ''] ?? 'bg-green-500',
+            ].join(' ')}
+            data-testid="attendance-count"
+          >
             {event.attendance_count}
           </span>
         )}
@@ -77,7 +91,7 @@ function WeekClassCard({ event, onClick }: WeekClassCardProps) {
 
       {/* Class name + viability dot */}
       <div className="flex items-center gap-1 min-w-0">
-        <p className="text-xs font-bold text-gray-900 truncate leading-snug flex-1">
+        <p className={`text-xs font-bold truncate leading-snug flex-1 ${onDark ? 'text-white' : 'text-gray-900'}`}>
           {event.class_type_name}
         </p>
         {event.viability_color && (
@@ -92,20 +106,20 @@ function WeekClassCard({ event, onClick }: WeekClassCardProps) {
       </div>
 
       {/* Time */}
-      <div className="flex items-center gap-0.5 mt-1 text-xs text-gray-400">
+      <div className={`flex items-center gap-0.5 mt-1 text-xs ${muted}`}>
         <Clock className="h-2.5 w-2.5 shrink-0" />
         <span>{formatTime(event.start_time)} – {formatTime(event.end_time)}</span>
       </div>
 
       {/* Location */}
-      <div className="flex items-center gap-0.5 mt-0.5 text-xs text-gray-400">
+      <div className={`flex items-center gap-0.5 mt-0.5 text-xs ${muted}`}>
         <MapPin className="h-2.5 w-2.5 shrink-0" />
         <span className="truncate">{event.site_name}</span>
       </div>
 
       {/* Instructor */}
       {event.instructor_name && (
-        <p className="text-xs text-gray-400 truncate mt-0.5">{event.instructor_name.split(' ')[0]}</p>
+        <p className={`text-xs truncate mt-0.5 ${muted}`}>{event.instructor_name.split(' ')[0]}</p>
       )}
     </div>
   )
@@ -117,9 +131,10 @@ interface WeekViewProps {
   weekStart: Date
   events: TimetableEvent[]
   onEventClick: (event: TimetableEvent) => void
+  tileStyle?: TimetableTileStyle
 }
 
-export function WeekView({ weekStart, events, onEventClick }: WeekViewProps) {
+export function WeekView({ weekStart, events, onEventClick, tileStyle = DEFAULT_TILE_STYLE }: WeekViewProps) {
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
   const today = new Date()
 
@@ -162,7 +177,7 @@ export function WeekView({ weekStart, events, onEventClick }: WeekViewProps) {
                 </div>
               ) : (
                 dayEvents.map((event) => (
-                  <WeekClassCard key={event.id} event={event} onClick={onEventClick} />
+                  <WeekClassCard key={event.id} event={event} tileStyle={tileStyle} onClick={onEventClick} />
                 ))
               )}
             </div>

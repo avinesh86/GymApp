@@ -47,6 +47,7 @@ class RecurringTimetableRuleSerializer(serializers.ModelSerializer):
 
 class TimetableEventSerializer(serializers.ModelSerializer):
     class_type_name = serializers.CharField(source="class_type.name", read_only=True)
+    class_type_color = serializers.CharField(source="class_type.color", read_only=True)
     instructor_name = serializers.CharField(source="instructor.name", read_only=True)
     site_name = serializers.CharField(source="site.name", read_only=True)
     date = serializers.SerializerMethodField()
@@ -148,7 +149,7 @@ class TimetableEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = TimetableEvent
         fields = [
-            "id", "class_type", "class_type_name", "site", "site_name",
+            "id", "class_type", "class_type_name", "class_type_color", "site", "site_name",
             "instructor", "instructor_name", "original_instructor", "original_instructor_name",
             "start_datetime", "end_datetime",
             "date", "start_time", "end_time",
@@ -161,7 +162,7 @@ class TimetableEventSerializer(serializers.ModelSerializer):
         read_only_fields = [
             "id", "date", "start_time", "end_time",
             "attendance_count", "viability_color",
-            "original_instructor_name", "class_type_name", "site_name", "instructor_name",
+            "original_instructor_name", "class_type_name", "class_type_color", "site_name", "instructor_name",
             "created_at", "updated_at",
         ]
 

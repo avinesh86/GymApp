@@ -57,3 +57,55 @@ describe('WeekView — which day a class goes on', () => {
     expect(column('6')).toHaveTextContent('Early Spin')
   })
 })
+
+describe('WeekView — tile colours', () => {
+  const weekStart = new Date(2030, 2, 4)
+  const card = () => screen.getByTestId('week-class-card')
+
+  it('tints the tile with the class colour by default, and keeps the status label', () => {
+    render(
+      <WeekView weekStart={weekStart} events={[makeEvent({ class_type_color: '#0d9488' })]} onEventClick={() => {}} />,
+    )
+    expect(card()).toHaveStyle({ backgroundColor: '#0d948826', borderLeftColor: '#0d9488' })
+    expect(card()).toHaveTextContent('Scheduled')
+  })
+
+  it("uses the gym's chosen style", () => {
+    render(
+      <WeekView
+        weekStart={weekStart}
+        events={[makeEvent({ class_type_color: '#0d9488' })]}
+        onEventClick={() => {}}
+        tileStyle="solid"
+      />,
+    )
+    expect(card()).toHaveStyle({ backgroundColor: '#0d9488' })
+  })
+
+  it('turns a recorded class the pastel of its viability colour', () => {
+    render(
+      <WeekView
+        weekStart={weekStart}
+        events={[makeEvent({ class_type_color: '#0d9488', status: 'completed', attendance_count: 10, viability_color: 'amber' })]}
+        onEventClick={() => {}}
+        tileStyle="solid"
+      />,
+    )
+    expect(card()).toHaveStyle({ backgroundColor: '#fef3c7', borderLeftColor: '#0d9488' })
+    expect(card()).toHaveTextContent('Completed')
+  })
+})
+
+describe('WeekView — attendance count bubble', () => {
+  it('takes the viability colour, so a red class does not show a green count', () => {
+    render(
+      <WeekView
+        weekStart={new Date(2030, 2, 4)}
+        events={[makeEvent({ status: 'completed', attendance_count: 2, viability_color: 'red' })]}
+        onEventClick={() => {}}
+      />,
+    )
+    expect(screen.getByTestId('attendance-count')).toHaveClass('bg-red-500')
+    expect(screen.getByTestId('attendance-count')).not.toHaveClass('bg-green-500')
+  })
+})

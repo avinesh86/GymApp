@@ -55,6 +55,7 @@ class TenantSettingsSerializer(serializers.ModelSerializer):
             "auto_generate_invoices",
             "week_start_day",
             "default_timetable_view",
+            "timetable_tile_style",
             "notification_from_email",
             "notification_from_name",
             "notification_email_password",

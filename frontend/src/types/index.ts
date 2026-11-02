@@ -66,7 +66,11 @@ export interface TenantSettings {
   /** 0 = Sunday, 1 = Monday, 6 = Saturday */
   week_start_day?: number
   default_timetable_view?: 'week' | 'list'
+  timetable_tile_style?: TimetableTileStyle
 }
+
+/** How strongly a class's own colour shows on its timetable tile. */
+export type TimetableTileStyle = 'stripe' | 'tint' | 'solid'
 
 export interface TenantBranding {
   app_name: string
@@ -199,6 +203,8 @@ export interface TimetableEvent {
   attendance_count: number | null
   notes: string
   viability_color?: string
+  /** Hex colour of the class type, from Settings → Classes. */
+  class_type_color?: string
   internal_notes?: string
   cancellation_reason?: string
   recurring_pattern_id?: string | null
