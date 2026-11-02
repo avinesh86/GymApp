@@ -271,16 +271,6 @@ export interface AttendanceRecord {
   is_verified: boolean
 }
 
-export interface QRToken {
-  id: number
-  timetable_event: number
-  event: number
-  token: string
-  url: string
-  expires_at: string
-  is_used: boolean
-}
-
 // ─── Invoices ─────────────────────────────────────────────────────────────────
 
 export type InvoiceStatus =

@@ -1,5 +1,5 @@
 """
-Tests for attendance views: submit_for_event, _list_awaiting, QR token submit.
+Tests for attendance views: submit_for_event, _list_awaiting.
 """
 
 from datetime import timedelta
@@ -7,11 +7,10 @@ from datetime import timedelta
 import urllib.parse
 
 import pytest
-from django.contrib.auth.models import AnonymousUser
 from django.utils import timezone
 from rest_framework.test import APIRequestFactory, force_authenticate
 
-from apps.attendance.models import AttendanceRecord, QRAttendanceToken
+from apps.attendance.models import AttendanceRecord
 from apps.timetable.models import TimetableEvent
 from tests.factories import TimetableEventFactory
 
@@ -231,107 +230,3 @@ class TestListAwaiting:
         event_ids = [item["event"] for item in response.data]
         assert old_event.pk not in event_ids
 
-
-# ---------------------------------------------------------------------------
-# QR Token Submit
-# ---------------------------------------------------------------------------
-
-@pytest.mark.django_db
-class TestQRTokenSubmit:
-    def _create_token(self, event, expired=False, used=False):
-        expires_at = timezone.now() + (timedelta(hours=-1) if expired else timedelta(hours=2))
-        return QRAttendanceToken.objects.create(
-            timetable_event=event,
-            expires_at=expires_at,
-            is_used=used,
-        )
-
-    def test_valid_token_creates_attendance(self, tenant, past_event):
-        token = self._create_token(past_event)
-
-        factory = APIRequestFactory()
-        request = factory.post("/api/v1/attendance/qr-tokens/submit/", {
-            "token": token.token,
-            "count": 12,
-        }, format="json")
-        request.user = AnonymousUser()
-        request.tenant = tenant
-
-        from apps.attendance.views import QRAttendanceTokenViewSet
-        view = QRAttendanceTokenViewSet.as_view({"post": "submit"})
-        response = view(request)
-
-        assert response.status_code == 201
-        record = AttendanceRecord.objects.get(timetable_event=past_event)
-        assert record.count == 12
-
-        token.refresh_from_db()
-        assert token.is_used is True
-
-    def test_expired_token_returns_400(self, tenant, past_event):
-        token = self._create_token(past_event, expired=True)
-
-        factory = APIRequestFactory()
-        request = factory.post("/api/v1/attendance/qr-tokens/submit/", {
-            "token": token.token,
-            "count": 10,
-        }, format="json")
-        request.user = AnonymousUser()
-        request.tenant = tenant
-
-        from apps.attendance.views import QRAttendanceTokenViewSet
-        view = QRAttendanceTokenViewSet.as_view({"post": "submit"})
-        response = view(request)
-
-        assert response.status_code == 400
-
-    def test_used_token_returns_400(self, tenant, past_event):
-        token = self._create_token(past_event, used=True)
-
-        factory = APIRequestFactory()
-        request = factory.post("/api/v1/attendance/qr-tokens/submit/", {
-            "token": token.token,
-            "count": 10,
-        }, format="json")
-        request.user = AnonymousUser()
-        request.tenant = tenant
-
-        from apps.attendance.views import QRAttendanceTokenViewSet
-        view = QRAttendanceTokenViewSet.as_view({"post": "submit"})
-        response = view(request)
-
-        assert response.status_code == 400
-
-    def test_invalid_token_returns_404(self, tenant):
-        factory = APIRequestFactory()
-        request = factory.post("/api/v1/attendance/qr-tokens/submit/", {
-            "token": "totally-invalid-token",
-            "count": 10,
-        }, format="json")
-        request.user = AnonymousUser()
-        request.tenant = tenant
-
-        from apps.attendance.views import QRAttendanceTokenViewSet
-        view = QRAttendanceTokenViewSet.as_view({"post": "submit"})
-        response = view(request)
-
-        assert response.status_code == 404
-
-    def test_valid_token_transitions_event_to_completed(self, tenant, past_event):
-        token = self._create_token(past_event)
-        assert past_event.status == TimetableEvent.Status.SCHEDULED
-
-        factory = APIRequestFactory()
-        request = factory.post("/api/v1/attendance/qr-tokens/submit/", {
-            "token": token.token,
-            "count": 8,
-        }, format="json")
-        request.user = AnonymousUser()
-        request.tenant = tenant
-
-        from apps.attendance.views import QRAttendanceTokenViewSet
-        view = QRAttendanceTokenViewSet.as_view({"post": "submit"})
-        view(request)
-
-        past_event.refresh_from_db()
-        assert past_event.status == TimetableEvent.Status.COMPLETED

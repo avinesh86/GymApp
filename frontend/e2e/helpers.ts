@@ -46,8 +46,7 @@ export async function signIn(page: Page, who = OWNER) {
  * Moves to a section by clicking its menu item, as a person would.
  *
  * `heading` is separate from the menu label because they do not always match —
- * both Attendance and Bulk Attendance lead to a page headed "Attendance
- * Entry".
+ * Attendance leads to a page headed "Attendance Entry".
  */
 export async function goToSection(page: Page, label: string, heading = label) {
   await page.getByRole('link', { name: label, exact: true }).click()

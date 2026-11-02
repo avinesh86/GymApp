@@ -20,7 +20,6 @@ const FEATURES: FeatureRow[] = [
   { permission: 'cover',         label: 'Cover Board' },
   { permission: 'invoices',      label: 'Invoices' },
   { permission: 'attendance',    label: 'Attendance Entry' },
-  { permission: 'qr_attendance', label: 'QR Attendance' },
   { permission: 'reports',       label: 'Reports' },
   { permission: 'imports',       label: 'CSV Import' },
   { permission: 'settings',      label: 'Settings' },

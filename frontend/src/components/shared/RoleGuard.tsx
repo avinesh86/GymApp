@@ -8,7 +8,6 @@ type Permission =
   | 'cover'
   | 'invoices'
   | 'attendance'
-  | 'qr_attendance'
   | 'reports'
   | 'imports'
   | 'settings'
