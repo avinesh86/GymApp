@@ -13,7 +13,10 @@ vi.mock('../../api/timetable', () => ({
   listClassTypes: vi.fn(),
 }))
 vi.mock('../../api/staff', () => ({ listStaff: vi.fn() }))
-vi.mock('../../api/settings', () => ({ listSites: vi.fn() }))
+vi.mock('../../api/settings', () => ({
+  listSites: vi.fn(),
+  getTimetableDisplay: vi.fn().mockResolvedValue({ tile_style: 'tint' }),
+}))
 // Guards depend on auth context we don't need for this test.
 vi.mock('../../components/shared/RoleGuard', () => ({
   RoleGuard: ({ children }: { children: React.ReactNode }) => <>{children}</>,
