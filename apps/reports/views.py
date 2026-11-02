@@ -13,6 +13,7 @@ from apps.cover.models import CoverRequest
 from apps.invoices.models import Invoice, PayRun
 from apps.staff.models import StaffProfile
 from apps.timetable.models import ClassType, TimetableEvent
+from apps.timetable.viability import AMBER, GREEN, PURPLE, RED, event_viability_colour
 
 PALETTE = [
     "#06b6d4", "#f97316", "#8b5cf6", "#ec4899", "#10b981",
@@ -119,6 +120,7 @@ class AttendanceReportView(APIView):
                 "instructor_name": event.instructor.name if event.instructor else None,
                 "site_name": event.site.name if event.site else None,
                 "attendance_count": event_counts.get(event.pk),
+                "viability_color": event_viability_colour(event, event_counts.get(event.pk)),
                 "color": get_class_color(event.class_type),
             })
 
@@ -635,27 +637,23 @@ class ClassViabilityReportView(APIView):
 
         by_class_type = []
         for class_type in class_types:
-            counts = list(
+            records = list(
                 AttendanceRecord.objects.filter(
                     Q(tenant=request.tenant, is_deleted=False, timetable_event__class_type=class_type)
                     & date_filter
-                ).values_list("count", flat=True)
+                ).select_related("timetable_event__class_type")
             )
 
-            total = len(counts)
-            avg_attendance = round(sum(counts) / total, 1) if total else 0.0
+            total = len(records)
+            avg_attendance = round(sum(r.count for r in records) / total, 1) if total else 0.0
 
-            red = amber = green = purple = 0
-            for c in counts:
-                if c >= class_type.purple_threshold:
-                    purple += 1
-                elif c >= class_type.green_threshold:
-                    green += 1
-                elif c >= class_type.amber_threshold:
-                    amber += 1
-                elif c >= class_type.red_threshold:
-                    red += 1
-                # counts below red_threshold are simply not viable — not bucketed
+            # Same rule as the timetable, including any per-class overrides,
+            # so a class is the same colour in both places.
+            colours = [event_viability_colour(r.timetable_event, r.count) for r in records]
+            red = colours.count(RED)
+            amber = colours.count(AMBER)
+            green = colours.count(GREEN)
+            purple = colours.count(PURPLE)
 
             viable = green + purple
             viability_percentage = round(viable / total * 100, 1) if total else 0.0
@@ -699,7 +697,7 @@ class ClassViabilityReportView(APIView):
             event = record.timetable_event
             week = monday_of_week(local_date(event.start_datetime, event.tenant)).isoformat()
             trend_weekly[week]["total"] += 1
-            if record.count >= event.class_type.green_threshold:
+            if event_viability_colour(event, record.count) in (GREEN, PURPLE):
                 trend_weekly[week]["viable"] += 1
 
         viability_trend = [

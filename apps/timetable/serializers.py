@@ -4,6 +4,7 @@ from rest_framework import serializers
 from apps.core.timezones import tenant_timezone
 
 from .models import ClassBonus, ClassType, RecurringTimetableRule, TimetableEvent
+from .viability import event_viability_colour
 
 
 def _tenant_timezone(event):
@@ -27,11 +28,30 @@ class ClassTypeSerializer(serializers.ModelSerializer):
         model = ClassType
         fields = [
             "id", "name", "color", "description", "duration_minutes", "default_location",
-            "required_qualifications", "red_threshold", "amber_threshold",
+            "required_qualifications", "amber_threshold",
             "green_threshold", "purple_threshold", "is_active",
             "bonuses", "created_at",
         ]
         read_only_fields = ["id", "created_at"]
+
+    def validate(self, attrs):
+        # Each threshold is where a colour starts, so they must climb. Amber
+        # starts at 1 or more so that nobody turning up is always red.
+        def current(field):
+            if field in attrs:
+                return attrs[field]
+            if self.instance is not None:
+                return getattr(self.instance, field)
+            return ClassType._meta.get_field(field).default
+
+        amber, green, purple = (current(f) for f in ("amber_threshold", "green_threshold", "purple_threshold"))
+        if amber < 1:
+            raise serializers.ValidationError({"amber_threshold": "Amber must start at 1 or more."})
+        if green < amber:
+            raise serializers.ValidationError({"green_threshold": "Green must start at or above where amber starts."})
+        if purple < green:
+            raise serializers.ValidationError({"purple_threshold": "Purple must start at or above where green starts."})
+        return attrs
 
 
 class RecurringTimetableRuleSerializer(serializers.ModelSerializer):
@@ -97,16 +117,7 @@ class TimetableEventSerializer(serializers.ModelSerializer):
         # Viability is known the moment a count is recorded — don't gate on the
         # stored `status` field, which can lag behind reality (e.g. a count
         # recorded against a still-'unfilled' class).
-        count = self.get_attendance_count(obj)
-        if count is None:
-            return "pending"
-        if count >= obj.effective_purple_threshold:
-            return "purple"
-        if count >= obj.effective_green_threshold:
-            return "green"
-        if count >= obj.effective_amber_threshold:
-            return "amber"
-        return "red"
+        return event_viability_colour(obj, self.get_attendance_count(obj))
 
     def _display_status(self, obj):
         """Lifecycle status derived from ground truth (time + attendance), not

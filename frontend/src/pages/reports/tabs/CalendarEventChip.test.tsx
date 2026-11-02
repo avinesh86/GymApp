@@ -37,3 +37,18 @@ describe('CalendarEventChip (F6 — show class time)', () => {
     expect(screen.getByTitle(/Les Mills BodyAttack · 07:45/)).toBeInTheDocument()
   })
 })
+
+describe('CalendarEventChip — viability colour', () => {
+  // The chip used fixed cut-offs (under 5 red, 5–14 orange…) for every class,
+  // so a Sprint with 10 people looked the same as a Virtual with 10. It now
+  // takes the class's own colour from the server.
+  it("uses the class's own viability colour, not fixed numbers", () => {
+    render(<CalendarEventChip ev={makeEvent({ attendance_count: 10, viability_color: 'amber' })} />)
+    expect(screen.getByTitle(/Aqua 45/)).toHaveClass('bg-yellow-100')
+  })
+
+  it('is grey until attendance is recorded', () => {
+    render(<CalendarEventChip ev={makeEvent({ attendance_count: null, viability_color: 'pending' })} />)
+    expect(screen.getByTitle(/Aqua 45/)).toHaveClass('bg-gray-100')
+  })
+})
