@@ -107,7 +107,6 @@ export interface ClassType {
   duration_minutes: number
   default_location: string
   required_qualifications: string
-  red_threshold: number
   amber_threshold: number
   green_threshold: number
   purple_threshold: number
@@ -356,6 +355,7 @@ export interface AttendanceReport {
       instructor_name: string | null
       site_name: string | null
       attendance_count: number | null
+      viability_color: string
       color: string
     }>
   }>

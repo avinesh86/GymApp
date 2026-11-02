@@ -113,7 +113,6 @@ class ClassTypeFactory(factory.django.DjangoModelFactory):
     tenant = factory.SubFactory(TenantFactory)
     name = factory.Sequence(lambda n: f"Class Type {n}")
     duration_minutes = 60
-    red_threshold = 3
     amber_threshold = 6
     green_threshold = 10
     purple_threshold = 20

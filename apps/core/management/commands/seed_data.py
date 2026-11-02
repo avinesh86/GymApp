@@ -152,19 +152,19 @@ class Command(BaseCommand):
         from apps.timetable.models import ClassBonus, ClassType
 
         class_types = []
+        # (name, minutes, amber starts, green starts, purple starts)
         types_data = [
-            ("Yoga", 60, 3, 6, 10, 20),
-            ("Spin", 45, 5, 10, 15, 25),
-            ("HIIT", 30, 4, 8, 12, 20),
+            ("Yoga", 60, 6, 10, 20),
+            ("Spin", 45, 10, 15, 25),
+            ("HIIT", 30, 8, 12, 20),
         ]
 
-        for name, duration, red, amber, green, purple in types_data:
+        for name, duration, amber, green, purple in types_data:
             ct, created = ClassType.objects.get_or_create(
                 tenant=tenant,
                 name=name,
                 defaults={
                     "duration_minutes": duration,
-                    "red_threshold": red,
                     "amber_threshold": amber,
                     "green_threshold": green,
                     "purple_threshold": purple,
