@@ -29,7 +29,9 @@ def to_start_at(apps, schema_editor):
         green = max(ct.amber_threshold, amber)
         purple = max(ct.purple_threshold, green)
         ClassType._base_manager.filter(pk=ct.pk).update(
-            amber_threshold=amber, green_threshold=green, purple_threshold=purple,
+            amber_threshold=amber,
+            green_threshold=green,
+            purple_threshold=purple,
         )
 
 
@@ -46,7 +48,6 @@ def to_below(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("timetable", "0007_recurringtimetablerule_capacity"),
     ]
