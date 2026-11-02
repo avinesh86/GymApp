@@ -30,6 +30,8 @@ import { getAttendanceReport, getClassTypes } from '../../../api/reports'
 import { PageSpinner } from '../../../components/ui/Spinner'
 import { Card } from '../../../components/ui/Card'
 import { ClearFiltersButton } from '../../../components/ui/ClearFiltersButton'
+import { ReportClassFilter } from '../ReportClassFilter'
+import { UnrecordedSection } from '../UnrecordedSection'
 
 type PeriodKey = 'this_month' | 'last_month' | 'custom'
 
@@ -284,6 +286,10 @@ export function AttendanceTab() {
             setLogPage(1)
           }}
         />
+
+        <div className="ml-auto">
+          <ReportClassFilter />
+        </div>
       </div>
 
       {isLoading ? (
@@ -293,9 +299,11 @@ export function AttendanceTab() {
       ) : (
         <>
           {/* Summary stats */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatBox label="Classes" value={report.total_classes} />
+          {/* Only classes that have happened; averages use recorded ones only. */}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+            <StatBox label="Classes Held" value={report.total_classes} />
             <StatBox label="With Attendance" value={report.classes_with_attendance} />
+            <StatBox label="Not Recorded" value={report.classes_without_attendance ?? 0} />
             <StatBox
               label="Avg Attendance"
               value={parseFloat(String(report.avg_attendance ?? 0)).toFixed(1)}
@@ -578,6 +586,8 @@ export function AttendanceTab() {
               </ResponsiveContainer>
             </div>
           )}
+
+          <UnrecordedSection from={dateRange.from} to={dateRange.to} />
 
           {/* Class Log */}
           <Card padding={false}>

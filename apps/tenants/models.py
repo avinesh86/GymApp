@@ -135,6 +135,11 @@ class TenantSettings(models.Model):
         choices=[("stripe", "Stripe"), ("tint", "Tint"), ("solid", "Solid")],
         default="tint",
     )
+    # Class types left out of the Attendance, Classes and Viability reports
+    # (e.g. virtual classes, family swim). Shared by every manager at the gym
+    # and remembered until someone changes it. Stored as exclusions so a new
+    # class type shows up in reports without anyone ticking it.
+    report_excluded_class_types = models.JSONField(default=list, blank=True)
     # Outgoing email configuration for notifications
     notification_from_email = models.EmailField(blank=True, default="")
     notification_from_name = models.CharField(max_length=100, blank=True, default="")

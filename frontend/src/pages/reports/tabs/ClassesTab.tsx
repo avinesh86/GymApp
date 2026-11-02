@@ -18,6 +18,7 @@ import { getClassesReport, getClassTypes } from '../../../api/reports'
 import { Table } from '../../../components/ui/Table'
 import { PageSpinner } from '../../../components/ui/Spinner'
 import { ClearFiltersButton } from '../../../components/ui/ClearFiltersButton'
+import { ReportClassFilter } from '../ReportClassFilter'
 import type { ClassReportRow } from '../../../types'
 
 type PeriodKey = 'this_month' | 'last_month' | 'custom'
@@ -79,7 +80,19 @@ export function ClassesTab() {
         </span>
       ),
     },
-    { key: 'total_classes', header: 'Total Classes', render: (row: ClassReportRow) => <span className="text-gray-700">{row.total_classes}</span> },
+    { key: 'total_classes', header: 'Classes Held', render: (row: ClassReportRow) => <span className="text-gray-700">{row.total_classes}</span> },
+    {
+      key: 'recorded_classes',
+      header: 'Recorded',
+      render: (row: ClassReportRow) => (
+        <span className="text-gray-700">
+          {row.recorded_classes ?? 0}
+          {(row.unrecorded_classes ?? 0) > 0 && (
+            <span className="ml-1 text-xs text-red-600">({row.unrecorded_classes} not)</span>
+          )}
+        </span>
+      ),
+    },
     { key: 'avg_attendance', header: 'Avg Attendance', render: (row: ClassReportRow) => <span className="text-gray-700">{parseFloat(String(row.avg_attendance ?? 0)).toFixed(1)}</span> },
     { key: 'capacity', header: 'Avg Capacity', render: (row: ClassReportRow) => <span className="text-gray-700">{parseFloat(String(row.capacity ?? 0)).toFixed(1)}</span> },
     {
@@ -139,6 +152,7 @@ export function ClassesTab() {
         </select>
 
         <ClearFiltersButton active={selectedClassType !== undefined} onClear={() => setSelectedClassType(undefined)} />
+        <ReportClassFilter />
       </div>
 
       {rows.length === 0 ? (
