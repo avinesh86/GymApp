@@ -73,7 +73,7 @@ export function ReportsPage() {
       {/* Stats summary row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         <SummaryCard
-          label="Classes This Month"
+          label="Classes Held This Month"
           value={attendanceSummary?.total_classes ?? '—'}
         />
         <SummaryCard

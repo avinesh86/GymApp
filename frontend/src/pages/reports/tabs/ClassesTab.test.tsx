@@ -14,6 +14,8 @@ vi.mock('recharts', async (importOriginal) => {
 vi.mock('../../../api/reports', () => ({
   getClassesReport: vi.fn(),
   getClassTypes: vi.fn(),
+  getReportClassFilter: vi.fn().mockResolvedValue({ excluded_class_types: [] }),
+  saveReportClassFilter: vi.fn(),
 }))
 
 const REPORT = {

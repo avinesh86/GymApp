@@ -8,7 +8,12 @@ vi.mock('recharts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('recharts')>()
   return { ...actual, ResponsiveContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div> }
 })
-vi.mock('../../../api/reports', () => ({ getClassViabilityReport: vi.fn() }))
+vi.mock('../../../api/reports', () => ({
+  getClassViabilityReport: vi.fn(),
+  getClassTypes: vi.fn().mockResolvedValue([]),
+  getReportClassFilter: vi.fn().mockResolvedValue({ excluded_class_types: [] }),
+  saveReportClassFilter: vi.fn(),
+}))
 
 const REPORT = {
   by_class_type: [

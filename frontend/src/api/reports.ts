@@ -6,6 +6,7 @@ import type {
   PayrollReport,
   ClassViabilityReport,
   ClassesReport,
+  UnrecordedReport,
   PaginatedResponse,
 } from '../types'
 
@@ -89,4 +90,23 @@ export async function getClassTypes(): Promise<ClassTypeOption[]> {
     'timetable/class-types/'
   )
   return unwrapList(response.data)
+}
+
+/** Past classes with no attendance recorded, grouped by class, day and time. */
+export async function getUnrecordedReport(from: string, to: string): Promise<UnrecordedReport> {
+  const response = await apiClient.get<UnrecordedReport>('reports/unrecorded/', { params: { from, to } })
+  return response.data
+}
+
+/** Class types the gym leaves out of the Attendance, Classes and Viability reports. */
+export async function getReportClassFilter(): Promise<{ excluded_class_types: number[] }> {
+  const response = await apiClient.get<{ excluded_class_types: number[] }>('reports/class-filter/')
+  return response.data
+}
+
+export async function saveReportClassFilter(excluded: number[]): Promise<{ excluded_class_types: number[] }> {
+  const response = await apiClient.put<{ excluded_class_types: number[] }>('reports/class-filter/', {
+    excluded_class_types: excluded,
+  })
+  return response.data
 }

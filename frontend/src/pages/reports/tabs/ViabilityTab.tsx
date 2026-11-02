@@ -13,6 +13,7 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { getClassViabilityReport } from '../../../api/reports'
+import { ReportClassFilter } from '../ReportClassFilter'
 import { PageSpinner } from '../../../components/ui/Spinner'
 import type { ClassViabilityRow, ViabilitySnapshot } from '../../../types'
 
@@ -82,6 +83,9 @@ export function ViabilityTab() {
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex justify-end">
+        <ReportClassFilter />
+      </div>
       {snapshot && <OverallSnapshot snapshot={snapshot} />}
 
       {/* Viability trend */}

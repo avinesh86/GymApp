@@ -360,6 +360,8 @@ export interface AttendanceReport {
   to_date: string
   total_classes: number
   classes_with_attendance: number
+  /** Classes that have happened with no count — left out of averages. */
+  classes_without_attendance: number
   avg_attendance: number
   total_attendees: number
   daily_breakdown: Array<{
@@ -458,12 +460,42 @@ export interface ClassReportRow {
   class_type_id: number
   class_type_name: string
   total_classes: number
+  /** Classes with a count — the only ones averages use. */
+  recorded_classes: number
+  /** Classes that ran with no count recorded. */
+  unrecorded_classes: number
   avg_attendance: number
   viability_percentage: number
   cancellation_percentage: number
   capacity: number
   target: number
   color: string
+}
+
+export interface UnrecordedSlot {
+  class_type_id: number
+  class_name: string
+  day: string
+  time: string
+  /** Times this slot ran with no attendance recorded. */
+  missed: number
+  /** Times this slot ran at all in the period. */
+  held: number
+  last_missed: string
+  instructors: Array<{ name: string; missed: number }>
+}
+
+export interface UnrecordedReport {
+  total: number
+  by_slot: UnrecordedSlot[]
+  classes: Array<{
+    event_id: number
+    class_name: string
+    date: string
+    time: string
+    instructor_name: string | null
+    site_name: string | null
+  }>
 }
 
 export interface ClassesReport {
