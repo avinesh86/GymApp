@@ -53,7 +53,7 @@ class StaffPayRateOverrideSerializer(serializers.ModelSerializer):
     class Meta:
         model = StaffPayRateOverride
         fields = [
-            "id", "class_type", "site", "amount",
+            "id", "class_type", "site", "rate_type", "amount", "per_head_rate",
             "effective_from", "effective_to", "created_at",
         ]
         read_only_fields = ["id", "created_at"]

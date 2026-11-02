@@ -158,6 +158,15 @@ class StaffPayRate(TenantAwareModel):
 
 
 class StaffPayRateOverride(TenantAwareModel):
+    """What one instructor is paid for one class type (optionally at one site),
+    taking priority over their default pay rate. Set beside each class they
+    teach on the staff popup's Classes tab."""
+
+    class RateType(models.TextChoices):
+        PER_CLASS = "per_class", "Per Class"
+        PER_HEAD = "per_head", "Per Head"
+        BLENDED = "blended", "Base + Per Head"
+
     staff = models.ForeignKey(StaffProfile, on_delete=models.CASCADE, related_name="pay_rate_overrides")
     class_type = models.ForeignKey(
         "timetable.ClassType",
@@ -171,7 +180,15 @@ class StaffPayRateOverride(TenantAwareModel):
         null=True,
         blank=True,
     )
-    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    rate_type = models.CharField(max_length=20, choices=RateType.choices, default=RateType.PER_CLASS)
+    amount = models.DecimalField(
+        max_digits=10, decimal_places=2,
+        help_text="Per class, or the base for Base + Per Head. Unused for Per Head.",
+    )
+    per_head_rate = models.DecimalField(
+        max_digits=10, decimal_places=2, default=0,
+        help_text="Per attendee, for Per Head and Base + Per Head.",
+    )
     effective_from = models.DateField()
     effective_to = models.DateField(null=True, blank=True)
 
