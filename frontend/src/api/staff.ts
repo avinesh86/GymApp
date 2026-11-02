@@ -182,7 +182,9 @@ export interface PayRateOverride {
   id?: number
   class_type: number | null
   site: number | null
+  rate_type?: 'per_class' | 'per_head' | 'blended'
   amount: string
+  per_head_rate?: string
   effective_from: string
   effective_to: string | null
 }
@@ -207,6 +209,49 @@ export async function createPayRateOverride(
 
 export async function deletePayRateOverride(staffId: number, overrideId: number): Promise<void> {
   await apiClient.delete(`staff/${staffId}/pay-rate-overrides/${overrideId}/`)
+}
+
+// ─── Class rates (pay per class type, on the Classes tab) ─────────────────────
+
+export type ClassRateType = 'per_class' | 'per_head' | 'blended'
+
+export interface ClassRate {
+  rate_type: ClassRateType
+  amount: string
+  per_head_rate: string
+  effective_from: string
+}
+
+export interface ClassRateRow {
+  class_type: number
+  class_type_name: string
+  /** The rate going forward, or null when the default pay rate applies. */
+  rate: ClassRate | null
+}
+
+export interface ClassRateChange {
+  class_type: number
+  /** null clears the class rate, so the default pay rate applies. */
+  rate_type: ClassRateType | null
+  amount?: string
+  per_head_rate?: string
+}
+
+export async function listClassRates(staffId: number): Promise<ClassRateRow[]> {
+  const response = await apiClient.get<{ rates: ClassRateRow[] }>(`staff/${staffId}/class-rates/`)
+  return response.data.rates
+}
+
+export async function saveClassRates(
+  staffId: number,
+  rates: ClassRateChange[],
+  effectiveFrom: string,
+): Promise<{ rates: ClassRateRow[]; drafts_repriced: number }> {
+  const response = await apiClient.post<{ rates: ClassRateRow[]; drafts_repriced: number }>(
+    `staff/${staffId}/class-rates/`,
+    { rates, effective_from: effectiveFrom },
+  )
+  return response.data
 }
 
 export async function updatePayRate(

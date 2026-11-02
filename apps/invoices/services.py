@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from apps.attendance.models import AttendanceRecord
 from apps.core.audit import log_audit
-from apps.core.timezones import format_date, format_date_range, format_datetime, local_today
+from apps.core.timezones import format_date, format_date_range, format_datetime, local_date, local_today
 from apps.staff.models import StaffPayRate, StaffPayRateOverride, StaffProfile
 from apps.timetable.models import TimetableEvent
 
@@ -63,7 +63,7 @@ def generate_invoice_for_instructor(
 
     for event in events:
         attendance_count = _get_attendance_count(event)
-        rate, rate_type, amount = _resolve_pay_rate(instructor, event, period_start, attendance_count)
+        _, rate_type, amount = _resolve_pay_rate(instructor, event, _class_day(event), attendance_count)
         description = (
             f"{event.class_type.name} — {format_datetime(event.start_datetime, event.tenant)}"
         )
@@ -73,7 +73,10 @@ def generate_invoice_for_instructor(
             timetable_event=event,
             description=description,
             quantity=Decimal("1"),
-            rate=rate,
+            # The line's rate is what this class pays. InvoiceLineItem.save()
+            # sets amount = quantity × rate, so storing the base rate here
+            # dropped the per-head part of per-head and base + per-head pay.
+            rate=amount,
             amount=amount,
         )
 
@@ -111,6 +114,15 @@ def _calculate_amount(rate_type: str, base_amount: Decimal, per_head_rate: Decim
     return base_amount
 
 
+def _class_day(event: TimetableEvent) -> date:
+    """The gym-local day a class ran — the day its pay rate is looked up for.
+
+    Rates used to be looked up for the first day of the pay period, so a rate
+    changed partway through a period was ignored for the whole period.
+    """
+    return local_date(event.start_datetime, event.tenant)
+
+
 def _resolve_pay_rate(
     instructor: StaffProfile,
     event: TimetableEvent,
@@ -143,7 +155,10 @@ def _resolve_pay_rate(
         ).order_by("-effective_from").first()
 
     if override:
-        return override.amount, "override", override.amount
+        amount = _calculate_amount(
+            override.rate_type, override.amount, override.per_head_rate, attendance_count,
+        )
+        return override.amount, "override", amount
 
     default_rate = (
         StaffPayRate.objects.filter(
@@ -223,15 +238,30 @@ def apply_pay_rates(invoice: Invoice) -> Invoice:
     for line_item in invoice.line_items.filter(is_deleted=False, is_manual_adjustment=False, is_bonus=False):
         if line_item.timetable_event:
             attendance_count = _get_attendance_count(line_item.timetable_event)
-            rate, _, amount = _resolve_pay_rate(
-                invoice.instructor, line_item.timetable_event, invoice.period_start, attendance_count
+            _, _, amount = _resolve_pay_rate(
+                invoice.instructor, line_item.timetable_event, _class_day(line_item.timetable_event), attendance_count
             )
-            line_item.rate = rate
+            # What this class pays; save() multiplies by quantity.
+            line_item.rate = amount
             line_item.amount = amount * line_item.quantity
             line_item.save(update_fields=["rate", "amount", "updated_at"])
 
     invoice.recalculate_total()
     return invoice
+
+
+def reprice_draft_invoices(instructor: StaffProfile) -> int:
+    """Re-apply current pay rates to the instructor's draft invoices.
+
+    Called after a pay rate changes. Only drafts are touched: once an invoice
+    is submitted, approved or paid, its amounts are settled.
+    """
+    drafts = Invoice.objects.filter(
+        tenant=instructor.tenant, instructor=instructor, status=Invoice.Status.DRAFT, is_deleted=False,
+    )
+    for invoice in drafts:
+        apply_pay_rates(invoice)
+    return len(drafts)
 
 
 def submit_invoice(invoice: Invoice, submitted_by) -> Invoice:
