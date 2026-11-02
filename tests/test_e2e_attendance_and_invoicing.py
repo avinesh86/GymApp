@@ -10,7 +10,7 @@ import pytest
 from django.utils import timezone
 from rest_framework.test import APIClient
 
-from apps.attendance.models import AttendanceRecord, QRAttendanceToken
+from apps.attendance.models import AttendanceRecord
 from apps.timetable.models import TimetableEvent
 from apps.users.models import Membership
 from tests.factories import (
@@ -50,7 +50,7 @@ def admin_api(gym):
 
 @pytest.fixture
 def public_api():
-    """Unauthenticated — the QR submit page is used by whoever scans it."""
+    """Unauthenticated — for checking what a signed-out visitor can reach."""
     client = APIClient()
     client.defaults["HTTP_HOST"] = HOST
     return client
@@ -76,10 +76,10 @@ def past_class(gym, instructor):
     )
 
 
-# ─── Bulk attendance ─────────────────────────────────────────────────────────
+# ─── Attendance entry ────────────────────────────────────────────────────────
 
 
-def test_bulk_attendance_records_a_count_and_completes_the_class(admin_api, past_class):
+def test_attendance_entry_records_a_count_and_completes_the_class(admin_api, past_class):
     response = admin_api.post(
         "/api/v1/attendance/records/submit-for-event/",
         {"event": past_class.pk, "count": 17},
@@ -148,80 +148,63 @@ def test_the_awaiting_list_drops_a_class_once_counted(admin_api, past_class):
     }, "a counted class should leave the awaiting list"
 
 
-# ─── QR attendance ───────────────────────────────────────────────────────────
+# ─── QR attendance (removed) ─────────────────────────────────────────────────
 
 
-def test_qr_journey_from_token_to_recorded_count(admin_api, public_api, past_class):
-    """The whole scan-to-count path: a manager mints a token, the person who
-    scans it reads the session back, submits, and the token burns."""
-    created = admin_api.post(
+@pytest.mark.parametrize(
+    "path",
+    [
         "/api/v1/attendance/qr-tokens/",
-        {"timetable_event": past_class.pk},
-        format="json",
-    )
-    assert created.status_code == 201, created.data
-    token = created.data["token"]
-
-    info = public_api.get(f"/api/v1/attendance/qr-tokens/info/?token={token}")
-    assert info.status_code == 200
-    assert info.data["valid"] is True
-    assert info.data["class_type_name"] == "Aqua Fit"
-    assert info.data["instructor_name"] == "Casey Jordan"
-
-    submitted = public_api.post(
+        "/api/v1/attendance/qr-tokens/info/",
         "/api/v1/attendance/qr-tokens/submit/",
-        {"token": token, "count": 23},
-        format="json",
+    ],
+)
+def test_the_qr_attendance_routes_are_gone(path):
+    """QR attendance was removed. Its submit and info routes took no login, so
+    they must not linger.
+
+    Checked against the URL table rather than by status code: where Django
+    also serves the built frontend, a catch-all answers any unknown path with
+    the app shell, so a 200 would not mean the API route survived.
+    """
+    from django.urls import Resolver404, resolve
+
+    try:
+        match = resolve(path)
+    except Resolver404:
+        return
+    assert not match.func.__module__.startswith("apps.attendance"), (
+        f"{path} is still served by the attendance app"
     )
-    assert submitted.status_code in (200, 201), submitted.data
-
-    assert AttendanceRecord.objects.get(timetable_event=past_class).count == 23
-    assert QRAttendanceToken.objects.get(token=token).is_used is True
 
 
-def test_a_qr_token_cannot_be_used_twice(admin_api, public_api, past_class):
-    """Otherwise a shared screenshot could overwrite the count later."""
-    token = admin_api.post(
-        "/api/v1/attendance/qr-tokens/",
-        {"timetable_event": past_class.pk},
-        format="json",
-    ).data["token"]
-    url = "/api/v1/attendance/qr-tokens/submit/"
-    public_api.post(url, {"token": token, "count": 23}, format="json")
-
-    second = public_api.post(url, {"token": token, "count": 99}, format="json")
-
-    assert second.status_code == 400
-    assert AttendanceRecord.objects.get(timetable_event=past_class).count == 23
-
-
-def test_an_unknown_qr_token_is_rejected(db, public_api):
-    assert public_api.get(
-        "/api/v1/attendance/qr-tokens/info/?token=not-a-real-token"
-    ).status_code == 404
-    assert public_api.post(
-        "/api/v1/attendance/qr-tokens/submit/",
-        {"token": "not-a-real-token", "count": 5},
-        format="json",
-    ).status_code == 404
-
-
-def test_qr_submit_needs_no_login(public_api, admin_api, past_class):
-    """The instructor scanning at poolside is not signed in — if this ever
-    starts requiring auth, QR attendance silently stops working."""
-    token = admin_api.post(
-        "/api/v1/attendance/qr-tokens/",
-        {"timetable_event": past_class.pk},
-        format="json",
-    ).data["token"]
-
+def test_a_scanned_code_can_no_longer_record_a_count(public_api, past_class):
     response = public_api.post(
         "/api/v1/attendance/qr-tokens/submit/",
-        {"token": token, "count": 8},
+        {"token": "anything", "count": 5},
         format="json",
     )
 
-    assert response.status_code not in (401, 403), response.data
+    assert response.status_code not in (200, 201)
+    assert not AttendanceRecord.objects.filter(timetable_event=past_class).exists()
+
+
+def test_recording_a_count_needs_a_login(public_api, past_class):
+    """With QR gone, the signed-in Attendance page is the only way in."""
+    response = public_api.post(
+        "/api/v1/attendance/records/submit-for-event/",
+        {"event": past_class.pk, "count": 8},
+        format="json",
+    )
+
+    assert response.status_code in (401, 403)
+    assert not AttendanceRecord.objects.filter(timetable_event=past_class).exists()
+
+
+def test_the_qr_token_table_is_dropped(db):
+    from django.db import connection
+
+    assert "attendance_qr_token" not in connection.introspection.table_names()
 
 
 # ─── Invoicing ───────────────────────────────────────────────────────────────

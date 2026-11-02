@@ -20,6 +20,11 @@ import {
   listCapabilities,
   createCapability,
   deleteCapability,
+  listClassRates,
+  saveClassRates,
+  type ClassRateChange,
+  type ClassRateRow,
+  type ClassRateType,
   listAvailability,
   createAvailability,
   deleteAvailability,
@@ -515,6 +520,34 @@ export function extractApiError(error: unknown, fallback: string): string {
   return fallback
 }
 
+const CLASS_RATE_TYPES: { value: ClassRateType; label: string }[] = [
+  { value: 'per_class', label: 'Per class' },
+  { value: 'per_head', label: 'Per head' },
+  { value: 'blended', label: 'Base + per head' },
+]
+
+/** One row's editable rate. An empty rate type means the default pay rate applies. */
+interface RateDraft {
+  rate_type: ClassRateType | ''
+  amount: string
+  per_head_rate: string
+}
+
+function draftFromRow(row: ClassRateRow | undefined): RateDraft {
+  const rate = row?.rate
+  return rate
+    ? { rate_type: rate.rate_type, amount: rate.amount, per_head_rate: rate.per_head_rate }
+    : { rate_type: '', amount: '', per_head_rate: '' }
+}
+
+/** Compares as money, so "45" and "45.00" are the same. */
+function sameDraft(a: RateDraft, b: RateDraft): boolean {
+  const money = (v: string) => (v === '' ? 0 : Number(v))
+  if (a.rate_type !== b.rate_type) return false
+  if (a.rate_type === '') return true
+  return money(a.amount) === money(b.amount) && money(a.per_head_rate) === money(b.per_head_rate)
+}
+
 export function ClassesTab({ staffId }: { staffId: number }) {
   const queryClient = useQueryClient()
 
@@ -528,10 +561,34 @@ export function ClassesTab({ staffId }: { staffId: number }) {
     queryFn: listClassTypes,
   })
 
+  const { data: rateRows = [] } = useQuery({
+    queryKey: ['staff', staffId, 'class-rates'],
+    queryFn: () => listClassRates(staffId),
+  })
+
+  // Edits not yet saved, by class type. Rows without an entry show the saved rate.
+  const [drafts, setDrafts] = useState<Record<number, RateDraft>>({})
+  const [startsFrom, setStartsFrom] = useState(() => format(new Date(), 'yyyy-MM-dd'))
+
+  const savedById = new Map(rateRows.map((r) => [r.class_type, r]))
+  const draftFor = (classTypeId: number) => drafts[classTypeId] ?? draftFromRow(savedById.get(classTypeId))
+  const changedIds = Object.keys(drafts)
+    .map(Number)
+    .filter((id) => !sameDraft(drafts[id], draftFromRow(savedById.get(id))))
+
+  function editRate(classTypeId: number, patch: Partial<RateDraft>) {
+    setDrafts((prev) => ({ ...prev, [classTypeId]: { ...draftFor(classTypeId), ...patch } }))
+  }
+
+  const invalidateTab = () => {
+    queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'capabilities'] })
+    queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'class-rates'] })
+  }
+
   const { mutate: addCap } = useMutation({
     mutationFn: (classTypeId: number) => createCapability(staffId, { class_type: classTypeId }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'capabilities'] })
+      invalidateTab()
       toast.success('Class type added')
     },
     onError: (error) => toast.error(extractApiError(error, 'Failed to add class type')),
@@ -540,10 +597,39 @@ export function ClassesTab({ staffId }: { staffId: number }) {
   const { mutate: removeCap } = useMutation({
     mutationFn: (capId: number) => deleteCapability(staffId, capId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'capabilities'] })
+      invalidateTab()
       toast.success('Class type removed')
     },
     onError: (error) => toast.error(extractApiError(error, 'Failed to remove class type')),
+  })
+
+  const missingAmount = changedIds.some((id) => {
+    const d = drafts[id]
+    if (d.rate_type === '') return false
+    const needsBase = d.rate_type !== 'per_head'
+    const needsHead = d.rate_type !== 'per_class'
+    return (needsBase && d.amount === '') || (needsHead && d.per_head_rate === '')
+  })
+
+  const { mutate: saveRates, isPending: isSavingRates } = useMutation({
+    mutationFn: () => {
+      const changes: ClassRateChange[] = changedIds.map((id) => {
+        const d = drafts[id]
+        return d.rate_type === ''
+          ? { class_type: id, rate_type: null }
+          : { class_type: id, rate_type: d.rate_type, amount: d.amount || '0', per_head_rate: d.per_head_rate || '0' }
+      })
+      return saveClassRates(staffId, changes, startsFrom)
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(['staff', staffId, 'class-rates'], data.rates)
+      queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'pay-rate-overrides'] })
+      queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      setDrafts({})
+      const n = data.drafts_repriced
+      toast.success(n > 0 ? `Class rates saved · ${n} draft invoice${n === 1 ? '' : 's'} updated` : 'Class rates saved')
+    },
+    onError: (error) => toast.error(extractApiError(error, 'Failed to save class rates')),
   })
 
   if (capsLoading || ctLoading) {
@@ -556,33 +642,142 @@ export function ClassesTab({ staffId }: { staffId: number }) {
   return (
     <div className="flex flex-col gap-2">
       <p className="text-sm text-gray-500 mb-2">
-        Toggle the class types this instructor is qualified to teach.
+        Tick the class types this instructor teaches, and set what they're paid for each. A class
+        with no rate is paid at their default pay rate.
       </p>
       {classTypes.map((ct) => {
         const isEnabled = enabledIds.has(ct.id)
+        const draft = draftFor(ct.id)
+        const saved = savedById.get(ct.id)?.rate
         return (
-          <label
+          <div
             key={ct.id}
-            className="flex items-center gap-3 p-3 rounded-lg border border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors"
+            className="flex flex-wrap items-center gap-3 p-3 rounded-lg border border-gray-100"
           >
-            <input
-              type="checkbox"
-              checked={isEnabled}
-              onChange={(e) => {
-                if (e.target.checked) {
-                  addCap(ct.id)
-                } else {
-                  const capId = capabilityByClassType.get(ct.id)
-                  if (capId !== undefined) removeCap(capId)
-                }
-              }}
-              className="h-4 w-4 rounded border-gray-300 text-cyan-500 focus:ring-cyan-400"
-            />
-            <span className="text-sm text-gray-800">{ct.name}</span>
-          </label>
+            <label className="flex items-center gap-3 cursor-pointer flex-1 min-w-[10rem]">
+              <input
+                type="checkbox"
+                checked={isEnabled}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    addCap(ct.id)
+                  } else {
+                    const capId = capabilityByClassType.get(ct.id)
+                    if (capId !== undefined) removeCap(capId)
+                  }
+                }}
+                className="h-4 w-4 rounded border-gray-300 text-cyan-500 focus:ring-cyan-400"
+              />
+              <span className="text-sm text-gray-800">{ct.name}</span>
+            </label>
+
+            {isEnabled && (
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  aria-label={`${ct.name} pay type`}
+                  value={draft.rate_type}
+                  onChange={(e) => {
+                    const next = e.target.value as ClassRateType | ''
+                    // Start the newly shown box empty rather than at a hidden $0.00.
+                    const usesBase = (t: string) => t === 'per_class' || t === 'blended'
+                    const usesHead = (t: string) => t === 'per_head' || t === 'blended'
+                    editRate(ct.id, {
+                      rate_type: next,
+                      ...(usesBase(next) && !usesBase(draft.rate_type) ? { amount: '' } : {}),
+                      ...(usesHead(next) && !usesHead(draft.rate_type) ? { per_head_rate: '' } : {}),
+                    })
+                  }}
+                  className="rounded-lg border border-gray-300 px-2 py-1 text-sm text-gray-900 bg-white"
+                >
+                  <option value="">Default pay rate</option>
+                  {CLASS_RATE_TYPES.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+                {(draft.rate_type === 'per_class' || draft.rate_type === 'blended') && (
+                  <MoneyInput
+                    label={draft.rate_type === 'blended' ? `${ct.name} base` : `${ct.name} rate`}
+                    value={draft.amount}
+                    onChange={(v) => editRate(ct.id, { amount: v })}
+                    suffix={draft.rate_type === 'blended' ? 'base' : 'per class'}
+                  />
+                )}
+                {(draft.rate_type === 'per_head' || draft.rate_type === 'blended') && (
+                  <MoneyInput
+                    label={`${ct.name} per head`}
+                    value={draft.per_head_rate}
+                    onChange={(v) => editRate(ct.id, { per_head_rate: v })}
+                    suffix="per head"
+                  />
+                )}
+                {saved && !drafts[ct.id] && (
+                  <span className="text-xs text-gray-400">since {saved.effective_from}</span>
+                )}
+              </div>
+            )}
+          </div>
         )
       })}
+
+      <div className="flex flex-wrap items-end justify-between gap-3 mt-2 pt-3 border-t border-gray-100">
+        <label className="text-xs text-gray-500">
+          New rates start from
+          <input
+            type="date"
+            value={startsFrom}
+            onChange={(e) => setStartsFrom(e.target.value)}
+            className="mt-1 block rounded-lg border border-gray-300 px-2 py-1 text-sm text-gray-900"
+          />
+        </label>
+        <div className="flex items-center gap-3">
+          {missingAmount && (
+            <span className="text-xs text-red-600" role="alert">Enter an amount for every rate</span>
+          )}
+          <Button
+            size="sm"
+            onClick={() => saveRates()}
+            isLoading={isSavingRates}
+            disabled={changedIds.length === 0 || missingAmount || !startsFrom}
+          >
+            Save Rates
+          </Button>
+        </div>
+      </div>
+      <p className="text-xs text-gray-400">
+        Classes before the start date keep their old rate. Draft invoices are updated; submitted,
+        approved and paid ones are not.
+      </p>
     </div>
+  )
+}
+
+function MoneyInput({
+  label,
+  value,
+  onChange,
+  suffix,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  suffix: string
+}) {
+  return (
+    <span className="flex items-center gap-1 text-sm text-gray-500">
+      <span className="relative">
+        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400">$</span>
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          aria-label={label}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-24 rounded-lg border border-gray-300 pl-5 pr-2 py-1 text-sm text-gray-900"
+        />
+      </span>
+      <span className="text-xs">{suffix}</span>
+    </span>
   )
 }
 
@@ -1187,6 +1382,7 @@ export function StaffDetailModal({ staffId, onClose }: StaffDetailModalProps) {
           {/* Close button */}
           <button
             onClick={onClose}
+            aria-label="Close"
             className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
           >
             <X className="h-5 w-5" />

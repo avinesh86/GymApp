@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from rest_framework_nested import routers as nested_routers
 
+from .class_rates_views import ClassRatesView
 from .views import (
     StaffAvailabilityViewSet,
     StaffCapabilityViewSet,
@@ -22,6 +23,7 @@ staff_router.register("pay-rates", StaffPayRateViewSet, basename="staff-pay-rate
 staff_router.register("pay-rate-overrides", StaffPayRateOverrideViewSet, basename="staff-pay-rate-overrides")
 
 urlpatterns = [
+    path("<int:staff_pk>/class-rates/", ClassRatesView.as_view(), name="staff-class-rates"),
     path("", include(router.urls)),
     path("", include(staff_router.urls)),
 ]

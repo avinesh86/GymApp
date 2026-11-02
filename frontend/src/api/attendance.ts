@@ -1,5 +1,5 @@
 import apiClient from './client'
-import type { AttendanceRecord, QRToken, PaginatedResponse } from '../types'
+import type { AttendanceRecord, PaginatedResponse } from '../types'
 
 function unwrapList<T>(data: T[] | PaginatedResponse<T>): T[] {
   return Array.isArray(data) ? data : data.results
@@ -57,46 +57,7 @@ export async function updateAttendance(id: number, count: number): Promise<Atten
   return response.data
 }
 
-// ─── QR Tokens ────────────────────────────────────────────────────────────────
-
-export async function listQRTokens(
-  range?: { from: string; to: string }
-): Promise<QRToken[]> {
-  const response = await apiClient.get<QRToken[] | PaginatedResponse<QRToken>>('attendance/qr-tokens/', {
-    params: range ?? {},
-  })
-  return unwrapList(response.data)
-}
-
-export async function createQRToken(eventId: number): Promise<QRToken> {
-  const response = await apiClient.post<QRToken>('attendance/qr-tokens/', { timetable_event: eventId })
-  return response.data
-}
-
 export async function submitAttendanceForEvent(eventId: number, count: number): Promise<AttendanceRecord> {
   const response = await apiClient.post<AttendanceRecord>('attendance/records/submit-for-event/', { event: eventId, count })
   return response.data
-}
-
-// ─── Public QR submit (scanned by the instructor, no login) ────────────────────
-
-export interface QRTokenInfo {
-  valid: boolean
-  is_used: boolean
-  class_type_name: string
-  date: string
-  start_time: string
-  site_name: string | null
-  instructor_name: string | null
-}
-
-export async function getQRTokenInfo(token: string): Promise<QRTokenInfo> {
-  const response = await apiClient.get<QRTokenInfo>('attendance/qr-tokens/info/', {
-    params: { token },
-  })
-  return response.data
-}
-
-export async function submitQRAttendance(token: string, count: number, notes = ''): Promise<void> {
-  await apiClient.post('attendance/qr-tokens/submit/', { token, count, notes })
 }

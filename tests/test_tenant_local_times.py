@@ -78,26 +78,3 @@ def test_a_morning_class_is_not_announced_on_the_wrong_day(nz_gym):
     )
     assert format_for_tenant(MORNING_CLASS_UTC, nz_gym, "%H:%M") == "09:00"
 
-
-def test_qr_session_info_shows_local_time(nz_gym, client):
-    """Whoever scans the code is standing at the gym."""
-    from apps.attendance.models import QRAttendanceToken
-
-    event = TimetableEventFactory(
-        tenant=nz_gym,
-        class_type=ClassTypeFactory(tenant=nz_gym, name="Aqua Fit"),
-        start_datetime=MORNING_CLASS_UTC,
-        end_datetime=MORNING_CLASS_UTC + dt.timedelta(hours=1),
-    )
-    token = QRAttendanceToken.objects.create(
-        timetable_event=event, expires_at=timezone.now() + dt.timedelta(hours=2)
-    )
-
-    response = client.get(
-        f"/api/v1/attendance/qr-tokens/info/?token={token.token}",
-        HTTP_HOST="nz.localhost",
-    )
-
-    assert response.status_code == 200
-    assert response.json()["start_time"] == "09:00"
-    assert response.json()["date"] == "2026-09-07"
