@@ -10,6 +10,7 @@ interface ConfirmDialogProps {
   title: string
   message: string
   confirmLabel?: string
+  cancelLabel?: string
   isLoading?: boolean
   variant?: 'danger' | 'primary'
 }
@@ -21,6 +22,7 @@ export function ConfirmDialog({
   title,
   message,
   confirmLabel = 'Confirm',
+  cancelLabel = 'Cancel',
   isLoading = false,
   variant = 'danger',
 }: ConfirmDialogProps) {
@@ -33,7 +35,7 @@ export function ConfirmDialog({
       footer={
         <div className="flex justify-end gap-3">
           <Button variant="secondary" onClick={onClose} disabled={isLoading}>
-            Cancel
+            {cancelLabel}
           </Button>
           <Button variant={variant} onClick={onConfirm} isLoading={isLoading}>
             {confirmLabel}
