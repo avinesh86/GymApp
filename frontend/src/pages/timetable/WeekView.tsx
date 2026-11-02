@@ -139,19 +139,24 @@ export function WeekView({ weekStart, events, onEventClick }: WeekViewProps) {
 
         return (
           <div key={day.toISOString()} className="flex flex-col gap-1.5 min-w-0">
-            {/* Day header */}
-            <div
-              className={[
-                'rounded-lg p-2 text-center',
-                isToday ? 'bg-cyan-500' : 'bg-gray-50 border border-gray-100',
-              ].join(' ')}
-            >
-              <p className={`text-xs font-medium uppercase tracking-wide ${isToday ? 'text-cyan-100' : 'text-gray-400'}`}>
-                {format(day, 'EEE')}
-              </p>
-              <p className={`text-base font-bold leading-none mt-0.5 ${isToday ? 'text-white' : 'text-gray-900'}`}>
-                {format(day, 'd')}
-              </p>
+            {/* Day header — sticks to the top of the page's scroll area so the
+                day and date stay readable while scrolling a long day. The
+                white backing hides cards scrolling up behind it. -top-6
+                cancels the page's p-6, which sticky otherwise keeps clear. */}
+            <div className="sticky -top-6 z-10 bg-white pb-1.5 -mb-1.5">
+              <div
+                className={[
+                  'rounded-lg p-2 text-center',
+                  isToday ? 'bg-cyan-500' : 'bg-gray-50 border border-gray-100',
+                ].join(' ')}
+              >
+                <p className={`text-xs font-medium uppercase tracking-wide ${isToday ? 'text-cyan-100' : 'text-gray-400'}`}>
+                  {format(day, 'EEE')}
+                </p>
+                <p className={`text-base font-bold leading-none mt-0.5 ${isToday ? 'text-white' : 'text-gray-900'}`}>
+                  {format(day, 'd')}
+                </p>
+              </div>
             </div>
 
             {/* Class cards */}
