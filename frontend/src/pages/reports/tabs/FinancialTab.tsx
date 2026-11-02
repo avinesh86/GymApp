@@ -15,6 +15,7 @@ import { listStaff } from '../../../api/staff'
 import { Table } from '../../../components/ui/Table'
 import { Card } from '../../../components/ui/Card'
 import { PageSpinner } from '../../../components/ui/Spinner'
+import { ClearFiltersButton } from '../../../components/ui/ClearFiltersButton'
 import type { InstructorPayrollSummary } from '../../../types'
 
 type PeriodKey = 'this_month' | 'last_month' | 'custom'
@@ -101,6 +102,8 @@ export function FinancialTab() {
             <option key={s.id} value={s.id}>{s.name || `${s.first_name} ${s.last_name}`.trim()}</option>
           ))}
         </select>
+
+        <ClearFiltersButton active={selectedInstructor !== undefined} onClear={() => setSelectedInstructor(undefined)} />
       </div>
 
       {isLoading || !report ? (

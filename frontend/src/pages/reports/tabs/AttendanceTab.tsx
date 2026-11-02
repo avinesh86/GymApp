@@ -29,6 +29,7 @@ import { ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import { getAttendanceReport, getClassTypes } from '../../../api/reports'
 import { PageSpinner } from '../../../components/ui/Spinner'
 import { Card } from '../../../components/ui/Card'
+import { ClearFiltersButton } from '../../../components/ui/ClearFiltersButton'
 
 type PeriodKey = 'this_month' | 'last_month' | 'custom'
 
@@ -268,6 +269,15 @@ export function AttendanceTab() {
             </option>
           ))}
         </select>
+
+        <ClearFiltersButton
+          active={selectedClassType !== undefined}
+          onClear={() => {
+            setSelectedClassType(undefined)
+            setCalendarWeekOffset(null)
+            setLogPage(1)
+          }}
+        />
       </div>
 
       {isLoading ? (
