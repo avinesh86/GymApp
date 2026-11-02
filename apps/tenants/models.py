@@ -127,6 +127,14 @@ class TenantSettings(models.Model):
         choices=[("week", "Week"), ("list", "List")],
         default="week",
     )
+    # How strongly a class's own colour shows on its timetable tile: a stripe
+    # down the side, a light tint behind it, or the solid colour. Recorded
+    # classes take their viability colour instead, whichever is chosen.
+    timetable_tile_style = models.CharField(
+        max_length=10,
+        choices=[("stripe", "Stripe"), ("tint", "Tint"), ("solid", "Solid")],
+        default="tint",
+    )
     # Outgoing email configuration for notifications
     notification_from_email = models.EmailField(blank=True, default="")
     notification_from_name = models.CharField(max_length=100, blank=True, default="")

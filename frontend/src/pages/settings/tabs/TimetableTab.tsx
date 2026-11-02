@@ -5,6 +5,7 @@ import { getTenantSettings, updateTenantSettings } from '../../../api/settings'
 import { Button } from '../../../components/ui/Button'
 import { Select } from '../../../components/ui/Select'
 import { Card } from '../../../components/ui/Card'
+import type { TimetableTileStyle } from '../../../types'
 
 const DAY_OPTIONS = [
   { value: 0, label: 'Sunday' },
@@ -17,17 +18,41 @@ const VIEW_OPTIONS = [
   { value: 'list', label: 'List View' },
 ]
 
+const TILE_STYLES: { value: TimetableTileStyle; label: string; hint: string }[] = [
+  { value: 'stripe', label: 'Stripe', hint: 'Class colour down the side' },
+  { value: 'tint', label: 'Tint', hint: 'Light wash of the class colour' },
+  { value: 'solid', label: 'Solid', hint: 'Full class colour' },
+]
+
+/** A miniature class tile in the given style, using an example teal class. */
+function TilePreview({ style }: { style: TimetableTileStyle }) {
+  const colour = '#0d9488'
+  const background = style === 'solid' ? colour : style === 'tint' ? `${colour}26` : '#ffffff'
+  return (
+    <div
+      aria-hidden="true"
+      className="rounded-md border border-gray-100 border-l-4 px-2 py-1.5 text-xs"
+      style={{ borderLeftColor: colour, backgroundColor: background }}
+    >
+      <p className={`font-bold ${style === 'solid' ? 'text-white' : 'text-gray-900'}`}>Sprint</p>
+      <p className={style === 'solid' ? 'text-white/80' : 'text-gray-400'}>8:30am</p>
+    </div>
+  )
+}
+
 export function TimetableTab() {
   const queryClient = useQueryClient()
   const { data: settings } = useQuery({ queryKey: ['tenant', 'settings'], queryFn: getTenantSettings })
 
   const [weekStart, setWeekStart] = useState('1')
   const [defaultView, setDefaultView] = useState('week')
+  const [tileStyle, setTileStyle] = useState<TimetableTileStyle>('tint')
 
   useEffect(() => {
     if (settings) {
       setWeekStart(String(settings.week_start_day ?? 1))
       setDefaultView(settings.default_timetable_view ?? 'week')
+      setTileStyle(settings.timetable_tile_style ?? 'tint')
     }
   }, [settings])
 
@@ -36,9 +61,11 @@ export function TimetableTab() {
       updateTenantSettings({
         week_start_day: Number(weekStart),
         default_timetable_view: defaultView as 'week' | 'list',
+        timetable_tile_style: tileStyle,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenant', 'settings'] })
+      queryClient.invalidateQueries({ queryKey: ['timetable-display'] })
       toast.success('Timetable settings saved')
     },
     onError: () => toast.error('Failed to save settings'),
@@ -61,6 +88,38 @@ export function TimetableTab() {
             onChange={(e) => setDefaultView(e.target.value)}
             options={VIEW_OPTIONS}
           />
+          <fieldset>
+            <legend className="text-sm font-medium text-gray-700 mb-1">Class Tile Colour</legend>
+            <p className="text-xs text-gray-500 mb-2">
+              How strongly each class's colour shows on the week view. Once attendance is recorded,
+              the tile turns a pastel of its viability colour instead.
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {TILE_STYLES.map((opt) => (
+                <label
+                  key={opt.value}
+                  className={[
+                    'flex flex-col gap-2 rounded-lg border p-2 cursor-pointer transition-colors',
+                    tileStyle === opt.value ? 'border-cyan-500 ring-1 ring-cyan-500' : 'border-gray-200 hover:border-gray-300',
+                  ].join(' ')}
+                >
+                  <TilePreview style={opt.value} />
+                  <span className="flex items-center gap-1.5 text-sm text-gray-900">
+                    <input
+                      type="radio"
+                      name="tile-style"
+                      value={opt.value}
+                      checked={tileStyle === opt.value}
+                      onChange={() => setTileStyle(opt.value)}
+                      className="accent-cyan-500"
+                    />
+                    {opt.label}
+                  </span>
+                  <span className="text-xs text-gray-500">{opt.hint}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <Button onClick={() => save()} isLoading={isPending} className="w-fit">
             Save Preferences
           </Button>
