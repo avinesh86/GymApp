@@ -31,6 +31,12 @@ function renderTab() {
 }
 
 describe('extractApiError', () => {
+  it('reads field errors inside the detail wrapper the API actually sends', () => {
+    // The API answers { detail: { field: [...] }, error: true }. Read flat,
+    // every message fell through to the generic fallback.
+    const err = { response: { data: { detail: { amount: ['Ensure this value is greater than or equal to 0.'] }, error: true } } }
+    expect(extractApiError(err, 'fallback')).toBe('Ensure this value is greater than or equal to 0.')
+  })
   it('reads DRF field errors', () => {
     const err = { response: { data: { class_type: ['This class type is required.'] } } }
     expect(extractApiError(err, 'fallback')).toBe('This class type is required.')
@@ -59,9 +65,12 @@ describe('ClassesTab', () => {
     renderTab()
     const checkbox = await screen.findByLabelText('Aqua 45')
     await userEvent.click(checkbox)
+    // Ticking is an edit; nothing is stored until Save.
+    expect(createCapability).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
 
     await waitFor(() => expect(createCapability).toHaveBeenCalledWith(1, { class_type: 10 }))
-    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Class type added'))
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Classes saved'))
   })
 
   it('surfaces the real backend error, not a generic "Failed" message', async () => {
@@ -72,11 +81,12 @@ describe('ClassesTab', () => {
     renderTab()
     const checkbox = await screen.findByLabelText('F2 Cardio')
     await userEvent.click(checkbox)
+    await userEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
 
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith('Instructor is not qualified for this class.'),
     )
-    expect(toast.error).not.toHaveBeenCalledWith('Failed to add class type')
+    expect(toast.error).not.toHaveBeenCalledWith('Failed to save classes')
   })
 })
 
@@ -112,7 +122,7 @@ describe('ClassesTab — pay rate beside each class', () => {
     const from = screen.getByLabelText('New rates start from')
     await userEvent.clear(from)
     await userEvent.type(from, '2026-11-02')
-    await userEvent.click(screen.getByRole('button', { name: 'Save Rates' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save Changes' }))
 
     await waitFor(() =>
       expect(saveClassRates).toHaveBeenCalledWith(
@@ -121,7 +131,7 @@ describe('ClassesTab — pay rate beside each class', () => {
         '2026-11-02',
       ),
     )
-    expect(toast.success).toHaveBeenCalledWith('Class rates saved · 2 draft invoices updated')
+    expect(toast.success).toHaveBeenCalledWith('Classes saved · 2 draft invoices updated')
   })
 
   it('needs an amount before it will save', async () => {
@@ -129,12 +139,12 @@ describe('ClassesTab — pay rate beside each class', () => {
     await userEvent.selectOptions(await screen.findByLabelText('Aqua 45 pay type'), 'per_head')
 
     expect(screen.getByRole('alert')).toHaveTextContent('Enter an amount for every rate')
-    expect(screen.getByRole('button', { name: 'Save Rates' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled()
   })
 
   it('Save is off until something changes', async () => {
     renderTab()
     await screen.findByLabelText('Aqua 45 rate')
-    expect(screen.getByRole('button', { name: 'Save Rates' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save Changes' })).toBeDisabled()
   })
 })

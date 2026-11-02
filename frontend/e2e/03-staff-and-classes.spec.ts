@@ -69,6 +69,8 @@ test.describe.serial('staff and the timetable', () => {
     await page.getByLabel('Status', { exact: true }).selectOption({ label: 'Inactive' })
     await page.getByRole('button', { name: 'Save Changes' }).click()
     await expectToast(page, 'Staff member updated')
+    // Saving keeps the popup open for the other tabs; close it to look again.
+    await page.getByRole('button', { name: 'Close', exact: true }).click()
 
     // An inactive member leaves the default (active) list — itself a sign the
     // status was stored.
@@ -87,6 +89,8 @@ test.describe.serial('staff and the timetable', () => {
     // tests after this one need this instructor to receive an offer.
     await page.getByLabel('Status', { exact: true }).selectOption({ label: 'Active' })
     await page.getByRole('button', { name: 'Save Changes' }).click()
+    await expectToast(page, 'Staff member updated')
+    await page.getByRole('button', { name: 'Close', exact: true }).click()
     await page.getByLabel('Filter by status').selectOption({ label: 'Active' })
     await expect(page.getByText(FULL_NAME).first()).toBeVisible()
   })

@@ -106,10 +106,66 @@ interface FieldProps {
 }
 
 function FieldGroup({ label, htmlFor, children }: FieldProps) {
+  const labelClass = 'text-xs font-medium text-gray-500 uppercase tracking-wide'
+  if (htmlFor) {
+    return (
+      <div className="flex flex-col gap-1">
+        <label htmlFor={htmlFor} className={labelClass}>{label}</label>
+        {children}
+      </div>
+    )
+  }
+  // No id to point at: wrap the control so the label still belongs to it.
   return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={htmlFor} className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</label>
+    <label className="flex flex-col gap-1">
+      <span className={labelClass}>{label}</span>
       {children}
+    </label>
+  )
+}
+
+// ─── Saving each tab ──────────────────────────────────────────────────────────
+
+/** What every tab is given so the popup knows about unsaved edits and saves. */
+interface TabSaveProps {
+  /** Called whenever the tab gains or loses unsaved changes. */
+  onDirtyChange: (dirty: boolean) => void
+  /** Called after a save succeeds; the popup stays open and says so. */
+  onSaved: () => void
+}
+
+/** Tells the popup when this tab's unsaved state changes. */
+function useReportDirty(dirty: boolean, onDirtyChange: (dirty: boolean) => void) {
+  useEffect(() => {
+    onDirtyChange(dirty)
+  }, [dirty, onDirtyChange])
+  // Leaving the tab (after the popup has checked) clears it.
+  useEffect(() => () => onDirtyChange(false), [onDirtyChange])
+}
+
+/** The same Save button at the foot of every tab; off until something changes. */
+function TabFooter({
+  dirty,
+  isSaving,
+  onSave,
+  disabled = false,
+  left,
+}: {
+  dirty: boolean
+  isSaving: boolean
+  onSave: () => void
+  disabled?: boolean
+  left?: React.ReactNode
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 pt-4 mt-1 border-t border-gray-100">
+      <div>{left}</div>
+      <div className="flex items-center gap-3">
+        {dirty && <span className="text-xs text-amber-600">Unsaved changes</span>}
+        <Button onClick={onSave} isLoading={isSaving} disabled={!dirty || disabled}>
+          Save Changes
+        </Button>
+      </div>
     </div>
   )
 }
@@ -119,13 +175,12 @@ const inputClass =
 
 // ─── Info Tab ─────────────────────────────────────────────────────────────────
 
-interface InfoTabProps {
+interface InfoTabProps extends TabSaveProps {
   staff: StaffMember
-  onSaved: () => void
   onDeleted: () => void
 }
 
-function InfoTab({ staff, onSaved, onDeleted }: InfoTabProps) {
+function InfoTab({ staff, onSaved, onDeleted, onDirtyChange }: InfoTabProps) {
   const queryClient = useQueryClient()
   const { user } = useAuth()
   // A role decides what someone can do in the gym: owners, gym managers and
@@ -156,6 +211,7 @@ function InfoTab({ staff, onSaved, onDeleted }: InfoTabProps) {
       queryClient.setQueryData(['staff', staff.id], updated)
       queryClient.invalidateQueries({ queryKey: ['staff'] })
       toast.success('Staff member updated')
+      // The popup stays open: the user may have more tabs to fill in.
       onSaved()
     },
     onError: (error) => toast.error(extractApiError(error, 'Failed to update staff member')),
@@ -188,6 +244,16 @@ function InfoTab({ staff, onSaved, onDeleted }: InfoTabProps) {
   const [qualName, setQualName] = useState('')
   const [issuedDate, setIssuedDate] = useState('')
   const [expiryDate, setExpiryDate] = useState('')
+
+  const dirty =
+    email !== staff.email ||
+    phone !== (staff.phone ?? '') ||
+    role !== staff.role ||
+    status !== staff.status ||
+    priorityTier !== String(staff.priority_tier ?? 1) ||
+    // A qualification typed in but not yet added would be lost too.
+    (showAddQual && (qualName !== '' || issuedDate !== ''))
+  useReportDirty(dirty, onDirtyChange)
 
   const { mutate: addQual } = useMutation({
     mutationFn: () =>
@@ -368,27 +434,20 @@ function InfoTab({ staff, onSaved, onDeleted }: InfoTabProps) {
         )}
       </div>
 
-      {/* Footer actions */}
-      <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-        <button
-          onClick={() => setShowDeleteConfirm(true)}
-          className="flex items-center gap-1.5 text-sm text-red-500 border border-red-200 rounded-lg px-3 py-2 hover:bg-red-50 transition-colors"
-        >
-          <Trash2 className="h-4 w-4" />
-          Delete
-        </button>
-        <div className="flex gap-2">
+      <TabFooter
+        dirty={dirty}
+        isSaving={isSaving}
+        onSave={() => save()}
+        left={
           <button
-            onClick={onSaved}
-            className="text-sm text-gray-600 border border-gray-200 rounded-lg px-4 py-2 hover:bg-gray-50 transition-colors"
+            onClick={() => setShowDeleteConfirm(true)}
+            className="flex items-center gap-1.5 text-sm text-red-500 border border-red-200 rounded-lg px-3 py-2 hover:bg-red-50 transition-colors"
           >
-            Cancel
+            <Trash2 className="h-4 w-4" />
+            Delete
           </button>
-          <Button onClick={() => save()} isLoading={isSaving}>
-            Save Changes
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
       <ConfirmDialog
         isOpen={showDeleteConfirm}
@@ -406,9 +465,8 @@ function InfoTab({ staff, onSaved, onDeleted }: InfoTabProps) {
 
 // ─── Availability Tab ─────────────────────────────────────────────────────────
 
-function AvailabilityTab({ staffId }: { staffId: number }) {
+function AvailabilityTab({ staffId, onDirtyChange, onSaved }: { staffId: number } & TabSaveProps) {
   const queryClient = useQueryClient()
-  const [pending, setPending] = useState<Set<string>>(new Set())
 
   const { data: availability = [], isLoading } = useQuery({
     queryKey: ['staff', staffId, 'availability'],
@@ -420,31 +478,46 @@ function AvailabilityTab({ staffId }: { staffId: number }) {
     slotMap.set(availabilityCellKey(slot.day_of_week, bandForStartTime(slot.start_time)), slot.id)
   }
 
-  async function toggleSlot(dayIndex: number, slotDef: AvailabilityBand) {
-    const cellKey = availabilityCellKey(dayIndex, slotDef.key)
-    const existingId = slotMap.get(cellKey)
-    setPending((prev) => new Set([...prev, cellKey]))
-    try {
-      if (existingId !== undefined) {
-        await deleteAvailability(staffId, existingId)
-      } else {
+  // Ticks are edits until Save; null means "as saved".
+  const [ticked, setTicked] = useState<Set<string> | null>(null)
+  const current = ticked ?? new Set(slotMap.keys())
+  const toAdd = [...current].filter((key) => !slotMap.has(key))
+  const toRemove = [...slotMap.keys()].filter((key) => !current.has(key))
+  const dirty = toAdd.length > 0 || toRemove.length > 0
+  useReportDirty(dirty, onDirtyChange)
+
+  function toggleSlot(cellKey: string) {
+    const next = new Set(current)
+    if (next.has(cellKey)) next.delete(cellKey)
+    else next.add(cellKey)
+    setTicked(next)
+  }
+
+  const { mutate: save, isPending: isSaving } = useMutation({
+    mutationFn: async () => {
+      for (const key of toRemove) await deleteAvailability(staffId, slotMap.get(key)!)
+      for (const key of toAdd) {
+        const [day, band] = key.split('-') // availabilityCellKey: "<day>-<band>"
+        const slotDef = AVAILABILITY_BANDS.find((b) => b.key === band)!
         await createAvailability(staffId, {
-          day_of_week: dayIndex,
+          day_of_week: Number(day),
           start_time: slotDef.start,
           end_time: slotDef.end,
         })
       }
-      queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'availability'] })
-    } catch {
-      toast.error('Failed to update availability')
-    } finally {
-      setPending((prev) => {
-        const next = new Set(prev)
-        next.delete(cellKey)
-        return next
-      })
-    }
-  }
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'availability'] })
+      setTicked(null)
+      toast.success('Availability saved')
+      onSaved()
+    },
+    onError: async (error) => {
+      // Some slots may have saved before the failure; show what's stored.
+      await queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'availability'] })
+      toast.error(extractApiError(error, 'Failed to save availability'))
+    },
+  })
 
   if (isLoading) {
     return <p className="text-sm text-gray-400 py-8 text-center">Loading availability...</p>
@@ -471,22 +544,17 @@ function AvailabilityTab({ staffId }: { staffId: number }) {
                 <td className="py-3 text-sm text-gray-700 font-medium">{dayName}</td>
                 {AVAILABILITY_BANDS.map((slotDef) => {
                   const cellKey = availabilityCellKey(dayIndex, slotDef.key)
-                  const isChecked = slotMap.has(cellKey)
-                  const isPendingCell = pending.has(cellKey)
                   return (
                     <td key={slotDef.key} className="py-3 text-center">
                       <div className="flex items-center justify-center">
-                        {isPendingCell ? (
-                          <span className="h-4 w-4 rounded border-2 border-cyan-400 border-t-transparent animate-spin inline-block" />
-                        ) : (
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => toggleSlot(dayIndex, slotDef)}
-                            aria-label={`${dayName} ${slotDef.label}`}
-                            className="h-4 w-4 rounded border-gray-300 text-cyan-500 focus:ring-cyan-400 cursor-pointer"
-                          />
-                        )}
+                        <input
+                          type="checkbox"
+                          checked={current.has(cellKey)}
+                          onChange={() => toggleSlot(cellKey)}
+                          disabled={isSaving}
+                          aria-label={`${dayName} ${slotDef.label}`}
+                          className="h-4 w-4 rounded border-gray-300 text-cyan-500 focus:ring-cyan-400 cursor-pointer"
+                        />
                       </div>
                     </td>
                   )
@@ -496,9 +564,10 @@ function AvailabilityTab({ staffId }: { staffId: number }) {
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-gray-400 pt-2 border-t border-gray-50">
-        Changes save immediately. Checked slots indicate preferred availability for cover requests.
+      <p className="text-xs text-gray-400">
+        Checked slots indicate preferred availability for cover requests.
       </p>
+      <TabFooter dirty={dirty} isSaving={isSaving} onSave={() => save()} />
     </div>
   )
 }
@@ -508,7 +577,11 @@ function AvailabilityTab({ staffId }: { staffId: number }) {
 /** Pull a human-readable message out of a DRF error response, falling back to
  *  a generic label. Without this, the user only ever sees "Failed to ...". */
 export function extractApiError(error: unknown, fallback: string): string {
-  const data = (error as { response?: { data?: unknown } })?.response?.data
+  let data = (error as { response?: { data?: unknown } })?.response?.data
+  // The API wraps field errors as { detail: { field: [...] }, error: true }.
+  // Unwrapped, every message fell through to the generic fallback.
+  const wrapped = (data as { detail?: unknown } | undefined)?.detail
+  if (wrapped && typeof wrapped === 'object') data = wrapped
   if (typeof data === 'string') return data
   if (data && typeof data === 'object') {
     const record = data as Record<string, unknown>
@@ -548,7 +621,13 @@ function sameDraft(a: RateDraft, b: RateDraft): boolean {
   return money(a.amount) === money(b.amount) && money(a.per_head_rate) === money(b.per_head_rate)
 }
 
-export function ClassesTab({ staffId }: { staffId: number }) {
+const noop = () => {}
+
+export function ClassesTab({
+  staffId,
+  onDirtyChange = noop,
+  onSaved = noop,
+}: { staffId: number } & Partial<TabSaveProps>) {
   const queryClient = useQueryClient()
 
   const { data: capabilities = [], isLoading: capsLoading } = useQuery({
@@ -566,42 +645,38 @@ export function ClassesTab({ staffId }: { staffId: number }) {
     queryFn: () => listClassRates(staffId),
   })
 
-  // Edits not yet saved, by class type. Rows without an entry show the saved rate.
+  // Ticks and rates are edits until Save. A null tick set means "as saved";
+  // rows without a rate draft show the saved rate.
+  const [tickedDraft, setTickedDraft] = useState<Set<number> | null>(null)
   const [drafts, setDrafts] = useState<Record<number, RateDraft>>({})
   const [startsFrom, setStartsFrom] = useState(() => format(new Date(), 'yyyy-MM-dd'))
 
+  const savedTicks = new Set(capabilities.map((c) => c.class_type))
+  const capabilityByClassType = new Map(capabilities.map((c) => [c.class_type, c.id]))
+  const ticked = tickedDraft ?? savedTicks
+  const ticksToAdd = [...ticked].filter((id) => !savedTicks.has(id))
+  const ticksToRemove = [...savedTicks].filter((id) => !ticked.has(id))
+
   const savedById = new Map(rateRows.map((r) => [r.class_type, r]))
   const draftFor = (classTypeId: number) => drafts[classTypeId] ?? draftFromRow(savedById.get(classTypeId))
+  // Only rates for classes still ticked are saved.
   const changedIds = Object.keys(drafts)
     .map(Number)
-    .filter((id) => !sameDraft(drafts[id], draftFromRow(savedById.get(id))))
+    .filter((id) => ticked.has(id) && !sameDraft(drafts[id], draftFromRow(savedById.get(id))))
+
+  const dirty = ticksToAdd.length > 0 || ticksToRemove.length > 0 || changedIds.length > 0
+  useReportDirty(dirty, onDirtyChange)
+
+  function toggleTick(classTypeId: number) {
+    const next = new Set(ticked)
+    if (next.has(classTypeId)) next.delete(classTypeId)
+    else next.add(classTypeId)
+    setTickedDraft(next)
+  }
 
   function editRate(classTypeId: number, patch: Partial<RateDraft>) {
     setDrafts((prev) => ({ ...prev, [classTypeId]: { ...draftFor(classTypeId), ...patch } }))
   }
-
-  const invalidateTab = () => {
-    queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'capabilities'] })
-    queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'class-rates'] })
-  }
-
-  const { mutate: addCap } = useMutation({
-    mutationFn: (classTypeId: number) => createCapability(staffId, { class_type: classTypeId }),
-    onSuccess: () => {
-      invalidateTab()
-      toast.success('Class type added')
-    },
-    onError: (error) => toast.error(extractApiError(error, 'Failed to add class type')),
-  })
-
-  const { mutate: removeCap } = useMutation({
-    mutationFn: (capId: number) => deleteCapability(staffId, capId),
-    onSuccess: () => {
-      invalidateTab()
-      toast.success('Class type removed')
-    },
-    onError: (error) => toast.error(extractApiError(error, 'Failed to remove class type')),
-  })
 
   const missingAmount = changedIds.some((id) => {
     const d = drafts[id]
@@ -611,8 +686,11 @@ export function ClassesTab({ staffId }: { staffId: number }) {
     return (needsBase && d.amount === '') || (needsHead && d.per_head_rate === '')
   })
 
-  const { mutate: saveRates, isPending: isSavingRates } = useMutation({
-    mutationFn: () => {
+  const { mutate: save, isPending: isSaving } = useMutation({
+    mutationFn: async () => {
+      for (const id of ticksToRemove) await deleteCapability(staffId, capabilityByClassType.get(id)!)
+      for (const id of ticksToAdd) await createCapability(staffId, { class_type: id })
+      if (changedIds.length === 0) return null
       const changes: ClassRateChange[] = changedIds.map((id) => {
         const d = drafts[id]
         return d.rate_type === ''
@@ -621,23 +699,29 @@ export function ClassesTab({ staffId }: { staffId: number }) {
       })
       return saveClassRates(staffId, changes, startsFrom)
     },
-    onSuccess: (data) => {
-      queryClient.setQueryData(['staff', staffId, 'class-rates'], data.rates)
-      queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'pay-rate-overrides'] })
-      queryClient.invalidateQueries({ queryKey: ['invoices'] })
+    onSuccess: async (data) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'capabilities'] }),
+        queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'class-rates'] }),
+        queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'pay-rate-overrides'] }),
+        queryClient.invalidateQueries({ queryKey: ['invoices'] }),
+      ])
+      setTickedDraft(null)
       setDrafts({})
-      const n = data.drafts_repriced
-      toast.success(n > 0 ? `Class rates saved · ${n} draft invoice${n === 1 ? '' : 's'} updated` : 'Class rates saved')
+      const n = data?.drafts_repriced ?? 0
+      toast.success(n > 0 ? `Classes saved · ${n} draft invoice${n === 1 ? '' : 's'} updated` : 'Classes saved')
+      onSaved()
     },
-    onError: (error) => toast.error(extractApiError(error, 'Failed to save class rates')),
+    onError: async (error) => {
+      // Some changes may have saved before the failure; show what's stored.
+      await queryClient.invalidateQueries({ queryKey: ['staff', staffId] })
+      toast.error(extractApiError(error, 'Failed to save classes'))
+    },
   })
 
   if (capsLoading || ctLoading) {
     return <p className="text-sm text-gray-400 py-6 text-center">Loading...</p>
   }
-
-  const enabledIds = new Set(capabilities.map((c) => c.class_type))
-  const capabilityByClassType = new Map(capabilities.map((c) => [c.class_type, c.id]))
 
   return (
     <div className="flex flex-col gap-2">
@@ -646,7 +730,7 @@ export function ClassesTab({ staffId }: { staffId: number }) {
         with no rate is paid at their default pay rate.
       </p>
       {classTypes.map((ct) => {
-        const isEnabled = enabledIds.has(ct.id)
+        const isTicked = ticked.has(ct.id)
         const draft = draftFor(ct.id)
         const saved = savedById.get(ct.id)?.rate
         return (
@@ -657,21 +741,15 @@ export function ClassesTab({ staffId }: { staffId: number }) {
             <label className="flex items-center gap-3 cursor-pointer flex-1 min-w-[10rem]">
               <input
                 type="checkbox"
-                checked={isEnabled}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    addCap(ct.id)
-                  } else {
-                    const capId = capabilityByClassType.get(ct.id)
-                    if (capId !== undefined) removeCap(capId)
-                  }
-                }}
+                checked={isTicked}
+                onChange={() => toggleTick(ct.id)}
+                disabled={isSaving}
                 className="h-4 w-4 rounded border-gray-300 text-cyan-500 focus:ring-cyan-400"
               />
               <span className="text-sm text-gray-800">{ct.name}</span>
             </label>
 
-            {isEnabled && (
+            {isTicked && (
               <div className="flex flex-wrap items-center gap-2">
                 <select
                   aria-label={`${ct.name} pay type`}
@@ -719,34 +797,30 @@ export function ClassesTab({ staffId }: { staffId: number }) {
         )
       })}
 
-      <div className="flex flex-wrap items-end justify-between gap-3 mt-2 pt-3 border-t border-gray-100">
-        <label className="text-xs text-gray-500">
-          New rates start from
-          <input
-            type="date"
-            value={startsFrom}
-            onChange={(e) => setStartsFrom(e.target.value)}
-            className="mt-1 block rounded-lg border border-gray-300 px-2 py-1 text-sm text-gray-900"
-          />
-        </label>
-        <div className="flex items-center gap-3">
-          {missingAmount && (
-            <span className="text-xs text-red-600" role="alert">Enter an amount for every rate</span>
-          )}
-          <Button
-            size="sm"
-            onClick={() => saveRates()}
-            isLoading={isSavingRates}
-            disabled={changedIds.length === 0 || missingAmount || !startsFrom}
-          >
-            Save Rates
-          </Button>
-        </div>
-      </div>
+      <label className="text-xs text-gray-500 mt-2 w-fit">
+        New rates start from
+        <input
+          type="date"
+          value={startsFrom}
+          onChange={(e) => setStartsFrom(e.target.value)}
+          className="mt-1 block rounded-lg border border-gray-300 px-2 py-1 text-sm text-gray-900"
+        />
+      </label>
       <p className="text-xs text-gray-400">
         Classes before the start date keep their old rate. Draft invoices are updated; submitted,
         approved and paid ones are not.
       </p>
+      <TabFooter
+        dirty={dirty}
+        isSaving={isSaving}
+        onSave={() => save()}
+        disabled={missingAmount || !startsFrom}
+        left={
+          missingAmount ? (
+            <span className="text-xs text-red-600" role="alert">Enter an amount for every rate</span>
+          ) : undefined
+        }
+      />
     </div>
   )
 }
@@ -783,7 +857,7 @@ function MoneyInput({
 
 // ─── Pay Rates Tab ────────────────────────────────────────────────────────────
 
-function PayRatesTab({ staffId }: { staffId: number }) {
+function PayRatesTab({ staffId, onDirtyChange, onSaved }: { staffId: number } & TabSaveProps) {
   const queryClient = useQueryClient()
 
   const [rateType, setRateType] = useState<RateType>('per_class')
@@ -813,12 +887,24 @@ function PayRatesTab({ staffId }: { staffId: number }) {
     queryFn: listClassTypes,
   })
 
+  const latest = [...payRates].sort(
+    (a, b) => new Date(b.effective_from ?? 0).getTime() - new Date(a.effective_from ?? 0).getTime()
+  )[0]
+
+  // Unsaved if the form differs from the latest saved rate (or, with none
+  // saved, has anything typed), or a class override is half filled in.
+  const money = (v: unknown) => (v === '' || v == null ? 0 : Number(v))
+  const rateDirty = latest
+    ? rateType !== latest.rate_type ||
+      money(amount) !== money(latest.amount) ||
+      money(perHeadRate) !== money(latest.per_head_rate) ||
+      effectiveFrom !== (latest.effective_from ?? '') ||
+      effectiveTo !== (latest.effective_to ?? '')
+    : amount !== '' || effectiveFrom !== ''
+  const overrideDirty = showAddOverride && (overrideAmount !== '' || overrideFrom !== '')
+  useReportDirty(rateDirty || overrideDirty, onDirtyChange)
+
   useEffect(() => {
-    const sorted = [...payRates].sort(
-      (a, b) =>
-        new Date(b.effective_from ?? 0).getTime() - new Date(a.effective_from ?? 0).getTime()
-    )
-    const latest = sorted[0]
     if (latest) {
       setEditingRateId(latest.id)
       setRateType((latest.rate_type as RateType) ?? 'per_class')
@@ -833,7 +919,7 @@ function PayRatesTab({ staffId }: { staffId: number }) {
     mutationFn: () => {
       const payload = {
         rate_type: rateType,
-        amount,
+        amount: rateType === 'per_head' ? '0' : amount,
         per_head_rate: ['per_head', 'blended'].includes(rateType) ? perHeadRate || '0' : '0',
         effective_from: effectiveFrom,
         effective_to: effectiveTo || null,
@@ -842,11 +928,12 @@ function PayRatesTab({ staffId }: { staffId: number }) {
         ? updatePayRate(staffId, editingRateId, payload)
         : createPayRate(staffId, payload)
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'pay-rates'] })
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'pay-rates'] })
       toast.success('Pay rate saved')
+      onSaved()
     },
-    onError: () => toast.error('Failed to save pay rate'),
+    onError: (error) => toast.error(extractApiError(error, 'Failed to save pay rate')),
   })
 
   const { mutate: removeRate } = useMutation({
@@ -921,20 +1008,24 @@ function PayRatesTab({ staffId }: { staffId: number }) {
             </select>
           </FieldGroup>
 
-          <FieldGroup label={amountLabel[rateType]}>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00"
-                className={`${inputClass} pl-7`}
-              />
-            </div>
-          </FieldGroup>
+          {/* Per head pay is worked out from the per-head rate alone, so the
+              base box would only invite a number that gets ignored. */}
+          {rateType !== 'per_head' && (
+            <FieldGroup label={amountLabel[rateType]}>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="0.00"
+                  className={`${inputClass} pl-7`}
+                />
+              </div>
+            </FieldGroup>
+          )}
 
           {showPerHead && (
             <FieldGroup label="Per Head Rate ($)">
@@ -972,25 +1063,14 @@ function PayRatesTab({ staffId }: { staffId: number }) {
           </FieldGroup>
         </div>
 
-        <div className="flex items-center justify-between pt-1">
-          {editingRateId ? (
-            <button
-              onClick={() => removeRate(editingRateId)}
-              className="text-xs text-red-400 hover:text-red-600 flex items-center gap-1 transition-colors"
-            >
-              <Trash2 className="h-3.5 w-3.5" /> Remove rate
-            </button>
-          ) : (
-            <span />
-          )}
+        {editingRateId && (
           <button
-            onClick={() => saveRate()}
-            disabled={!amount || !effectiveFrom || isSaving}
-            className="text-xs font-medium bg-gray-900 text-white px-4 py-2 rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors"
+            onClick={() => removeRate(editingRateId)}
+            className="text-xs text-red-400 hover:text-red-600 flex items-center gap-1 transition-colors w-fit"
           >
-            {isSaving ? 'Saving...' : editingRateId ? 'Update Rate' : 'Save Rate'}
+            <Trash2 className="h-3.5 w-3.5" /> Remove rate
           </button>
-        </div>
+        )}
       </div>
 
       <div className="flex flex-col gap-2">
@@ -1027,7 +1107,13 @@ function PayRatesTab({ staffId }: { staffId: number }) {
                 )}
               </div>
               <div className="flex items-center gap-3">
-                <span className="font-semibold text-gray-900">${ov.amount}</span>
+                <span className="font-semibold text-gray-900">
+                  {ov.rate_type === 'per_head'
+                    ? `$${ov.per_head_rate} per head`
+                    : ov.rate_type === 'blended'
+                      ? `$${ov.amount} + $${ov.per_head_rate} per head`
+                      : `$${ov.amount}`}
+                </span>
                 <button
                   onClick={() => ov.id !== undefined && removeOverride(ov.id)}
                   className="text-gray-300 hover:text-red-400 transition-colors"
@@ -1097,13 +1183,25 @@ function PayRatesTab({ staffId }: { staffId: number }) {
           </div>
         )}
       </div>
+
+      <TabFooter
+        dirty={rateDirty}
+        isSaving={isSaving}
+        onSave={() => saveRate()}
+        disabled={!(rateType === 'per_head' ? perHeadRate : amount) || !effectiveFrom}
+        left={
+          overrideDirty ? (
+            <span className="text-xs text-amber-600">Add or cancel the class override first</span>
+          ) : undefined
+        }
+      />
     </div>
   )
 }
 
 // ─── Business & Invoice Tab ───────────────────────────────────────────────────
 
-function BusinessTab({ staffId }: { staffId: number }) {
+function BusinessTab({ staffId, onDirtyChange, onSaved }: { staffId: number } & TabSaveProps) {
   const queryClient = useQueryClient()
 
   const [businessName, setBusinessName] = useState('')
@@ -1147,13 +1245,26 @@ function BusinessTab({ staffId }: { staffId: number }) {
         },
         logoFile,
       ),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['staff', staffId, 'payment-details'] })
+    onSuccess: (saved) => {
+      // Cache what was stored, so the form compares against it straight away.
+      queryClient.setQueryData(['staff', staffId, 'payment-details'], saved)
       setLogoFile(null)
       toast.success('Payment details saved')
+      onSaved()
     },
-    onError: () => toast.error('Failed to save payment details'),
+    onError: (error) => toast.error(extractApiError(error, 'Failed to save payment details')),
   })
+
+  const dirty =
+    logoFile !== null ||
+    businessName !== (details?.business_name ?? '') ||
+    bankName !== (details?.bank_name ?? '') ||
+    accountName !== (details?.account_name ?? '') ||
+    accountNumber !== (details?.account_number ?? '') ||
+    sortCode !== (details?.sort_code ?? '') ||
+    paymentReference !== (details?.payment_reference ?? '') ||
+    additionalNotes !== (details?.additional_notes ?? '')
+  useReportDirty(dirty, onDirtyChange)
 
   if (isLoading) {
     return <p className="text-sm text-gray-400 py-8 text-center">Loading...</p>
@@ -1280,12 +1391,7 @@ function BusinessTab({ staffId }: { staffId: number }) {
         </FieldGroup>
       </div>
 
-      <div className="flex items-center justify-between pt-2 border-t border-gray-50">
-        <span />
-        <Button onClick={() => save()} isLoading={isSaving}>
-          Save Changes
-        </Button>
-      </div>
+      <TabFooter dirty={dirty} isSaving={isSaving} onSave={() => save()} />
     </div>
   )
 }
@@ -1299,6 +1405,11 @@ interface StaffDetailModalProps {
 
 export function StaffDetailModal({ staffId, onClose }: StaffDetailModalProps) {
   const [activeTab, setActiveTab] = useState<TabId>('info')
+  // Whether the open tab has edits that haven't been saved.
+  const [dirty, setDirty] = useState(false)
+  // A tab switch or close waiting on "discard unsaved changes?".
+  const [pendingLeave, setPendingLeave] = useState<(() => void) | null>(null)
+  const [justSaved, setJustSaved] = useState(false)
 
   const { data: staff, isLoading } = useQuery({
     queryKey: ['staff', staffId],
@@ -1309,7 +1420,30 @@ export function StaffDetailModal({ staffId, onClose }: StaffDetailModalProps) {
   // Reset to info tab when a different staff member is opened
   useEffect(() => {
     setActiveTab('info')
+    setDirty(false)
+    setPendingLeave(null)
   }, [staffId])
+
+  useEffect(() => {
+    if (!justSaved) return
+    const timer = setTimeout(() => setJustSaved(false), 3000)
+    return () => clearTimeout(timer)
+  }, [justSaved])
+
+  const handleDirtyChange = React.useCallback((value: boolean) => setDirty(value), [])
+  const handleSaved = React.useCallback(() => setJustSaved(true), [])
+
+  /** Run `leave` now, or once the user agrees to drop unsaved edits. */
+  function guard(leave: () => void) {
+    if (dirty) setPendingLeave(() => leave)
+    else leave()
+  }
+
+  function switchTab(tab: TabId) {
+    if (tab !== activeTab) guard(() => setActiveTab(tab))
+  }
+
+  const close = () => guard(onClose)
 
   // Lock body scroll while open
   useEffect(() => {
@@ -1338,7 +1472,7 @@ export function StaffDetailModal({ staffId, onClose }: StaffDetailModalProps) {
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-        onClick={onClose}
+        onClick={close}
       />
 
       {/* Modal panel */}
@@ -1381,7 +1515,7 @@ export function StaffDetailModal({ staffId, onClose }: StaffDetailModalProps) {
 
           {/* Close button */}
           <button
-            onClick={onClose}
+            onClick={close}
             aria-label="Close"
             className="shrink-0 rounded-lg p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
           >
@@ -1394,7 +1528,7 @@ export function StaffDetailModal({ staffId, onClose }: StaffDetailModalProps) {
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => switchTab(tab.id)}
               className={[
                 'px-3 py-3 text-sm font-medium whitespace-nowrap transition-colors',
                 activeTab === tab.id
@@ -1405,6 +1539,11 @@ export function StaffDetailModal({ staffId, onClose }: StaffDetailModalProps) {
               {tab.label}
             </button>
           ))}
+          {justSaved && (
+            <span className="ml-auto self-center pl-3 text-xs font-medium text-green-600 whitespace-nowrap" role="status">
+              ✓ Saved
+            </span>
+          )}
         </div>
 
         {/* Tab content */}
@@ -1423,18 +1562,43 @@ export function StaffDetailModal({ staffId, onClose }: StaffDetailModalProps) {
                 <InfoTab
                   key={`${staff.id}-${staff.updated_at ?? ''}`}
                   staff={staff}
-                  onSaved={onClose}
+                  onSaved={handleSaved}
+                  onDirtyChange={handleDirtyChange}
                   onDeleted={onClose}
                 />
               )}
-              {activeTab === 'availability' && <AvailabilityTab staffId={staff.id} />}
-              {activeTab === 'classes' && <ClassesTab staffId={staff.id} />}
-              {activeTab === 'pay-rates' && <PayRatesTab staffId={staff.id} />}
-              {activeTab === 'business' && <BusinessTab staffId={staff.id} />}
+              {activeTab === 'availability' && (
+                <AvailabilityTab staffId={staff.id} onSaved={handleSaved} onDirtyChange={handleDirtyChange} />
+              )}
+              {activeTab === 'classes' && (
+                <ClassesTab staffId={staff.id} onSaved={handleSaved} onDirtyChange={handleDirtyChange} />
+              )}
+              {activeTab === 'pay-rates' && (
+                <PayRatesTab staffId={staff.id} onSaved={handleSaved} onDirtyChange={handleDirtyChange} />
+              )}
+              {activeTab === 'business' && (
+                <BusinessTab staffId={staff.id} onSaved={handleSaved} onDirtyChange={handleDirtyChange} />
+              )}
             </>
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        isOpen={pendingLeave !== null}
+        onClose={() => setPendingLeave(null)}
+        onConfirm={() => {
+          const leave = pendingLeave
+          setPendingLeave(null)
+          setDirty(false)
+          leave?.()
+        }}
+        title="Discard unsaved changes?"
+        message={`You have changes on the ${tabs.find((t) => t.id === activeTab)?.label ?? 'current'} tab that haven't been saved. Leave without saving them?`}
+        confirmLabel="Discard"
+        cancelLabel="Keep editing"
+        variant="danger"
+      />
     </div>
   )
 }
