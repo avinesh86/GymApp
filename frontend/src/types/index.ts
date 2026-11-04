@@ -494,6 +494,30 @@ export interface ClassesReport {
   by_day_of_week: Array<{ day: string; avg_attendance: number }>
 }
 
+// ─── Report export ───────────────────────────────────────────────────────────
+
+export type ReportFrequency = 'daily' | 'weekly' | 'monthly'
+
+export type ReportSection = 'summary' | 'attendance' | 'classes' | 'instructors' | 'viability' | 'financial'
+
+export interface ReportScheduleInput {
+  name: string
+  frequency: ReportFrequency
+  /** Gym-local time it's emailed, "HH:MM". */
+  send_time: string
+  sections: ReportSection[]
+  recipients: string[]
+  is_active?: boolean
+}
+
+export interface ReportSchedule extends Required<ReportScheduleInput> {
+  id: number
+  /** First day of the last period emailed, ISO date. */
+  last_period_start: string | null
+  last_sent_at: string | null
+  created_by_name: string
+}
+
 // ─── Notifications ───────────────────────────────────────────────────────────
 
 export interface AppNotification {

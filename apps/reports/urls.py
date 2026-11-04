@@ -1,6 +1,8 @@
 from django.urls import path
+from rest_framework.routers import SimpleRouter
 
 from .class_filter import ReportClassFilterView
+from .export_views import ReportExportView, ReportScheduleViewSet
 from .views import (
     AttendanceReportView,
     ClassesReportView,
@@ -22,4 +24,9 @@ urlpatterns = [
     path("cover/", CoverReportView.as_view(), name="report-cover"),
     path("unrecorded/", UnrecordedAttendanceReportView.as_view(), name="report-unrecorded"),
     path("class-filter/", ReportClassFilterView.as_view(), name="report-class-filter"),
+    path("export/", ReportExportView.as_view(), name="report-export"),
 ]
+
+router = SimpleRouter()
+router.register("schedules", ReportScheduleViewSet, basename="report-schedules")
+urlpatterns += router.urls

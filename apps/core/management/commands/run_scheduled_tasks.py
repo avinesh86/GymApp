@@ -102,6 +102,14 @@ class Command(BaseCommand):
             "send_invoice_reminders",
         ))
 
+        # 8. Email scheduled reports (each period is sent once; on an hourly
+        #    runner a report goes out up to an hour after its send time)
+        results.append(self._run_task(
+            "Send scheduled reports",
+            "apps.reports.tasks",
+            "send_scheduled_reports",
+        ))
+
         self.stdout.write("")
         self.stdout.write("━" * 60)
         passed = sum(1 for ok, _ in results if ok)
