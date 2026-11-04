@@ -8,17 +8,11 @@ import { Modal } from '../../components/ui/Modal'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Select } from '../../components/ui/Select'
+import { useGymTimezone } from '../../hooks/useGymTimezone'
+import { gymToday } from '../../lib/gymTime'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Returns today's date as YYYY-MM-DD in the user's LOCAL timezone. */
-function localDateString(): string {
-  const now = new Date()
-  const year = now.getFullYear()
-  const month = String(now.getMonth() + 1).padStart(2, '0')
-  const day = String(now.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
 
 /**
  * Converts frontend day values (Mon=1…Sat=6, Sun=0) to Python's weekday()
@@ -49,12 +43,13 @@ interface AddClassModalProps {
 }
 
 export function AddClassModal({ isOpen, onClose, defaultDate, onCreated }: AddClassModalProps) {
+  const gymTz = useGymTimezone()
   const queryClient = useQueryClient()
 
   const [classTypeId, setClassTypeId] = useState('')
   const [instructorId, setInstructorId] = useState('')
   const [siteId, setSiteId] = useState('')
-  const [date, setDate] = useState(defaultDate ?? localDateString())
+  const [date, setDate] = useState(defaultDate ?? gymToday(gymTz))
   const [startTime, setStartTime] = useState('09:00')
   const [endTime, setEndTime] = useState('10:00')
   const [capacity, setCapacity] = useState('20')
@@ -95,7 +90,7 @@ export function AddClassModal({ isOpen, onClose, defaultDate, onCreated }: AddCl
     setClassTypeId('')
     setInstructorId('')
     setSiteId('')
-    setDate(defaultDate ?? localDateString())
+    setDate(defaultDate ?? gymToday(gymTz))
     setStartTime('09:00')
     setEndTime('10:00')
     setCapacity('20')

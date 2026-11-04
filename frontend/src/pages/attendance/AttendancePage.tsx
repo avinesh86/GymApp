@@ -9,11 +9,13 @@ import { PageHeader } from '../../components/shared/PageHeader'
 import { PageSpinner } from '../../components/ui/Spinner'
 import { EmptyState } from '../../components/ui/EmptyState'
 import { DATE_TABS, getDateRange, type DateTab } from './dateRanges'
+import { useGymTimezone } from '../../hooks/useGymTimezone'
 
 const QUICK_PICKS = [0, 5, 10, 15, 20, 25, 30]
 
 export function AttendancePage() {
   const queryClient = useQueryClient()
+  const timeZone = useGymTimezone()
   const [activeTab, setActiveTab] = useState<DateTab>('today')
   // Keyed by class, so a number typed on one tab is still there after a look
   // at another.
@@ -23,14 +25,14 @@ export function AttendancePage() {
   // awaiting list is capped at 100, so with a backlog a single fetch would
   // leave the older tabs short.
   const { data: awaitingRecords = [], isLoading } = useQuery({
-    queryKey: ['attendance', 'awaiting-list', activeTab],
-    queryFn: () => listAttendance({ awaiting: true, ...getDateRange(activeTab) }),
+    queryKey: ['attendance', 'awaiting-list', activeTab, timeZone],
+    queryFn: () => listAttendance({ awaiting: true, ...getDateRange(activeTab, new Date(), timeZone) }),
   })
 
   const countQueries = useQueries({
     queries: DATE_TABS.map((tab) => ({
-      queryKey: ['attendance', 'awaiting-count', tab.key],
-      queryFn: () => countAwaitingAttendance(getDateRange(tab.key)),
+      queryKey: ['attendance', 'awaiting-count', tab.key, timeZone],
+      queryFn: () => countAwaitingAttendance(getDateRange(tab.key, new Date(), timeZone)),
     })),
   })
   const tabCounts = Object.fromEntries(

@@ -9,6 +9,8 @@ import { FinancialTab } from './tabs/FinancialTab'
 import { ViabilityTab } from './tabs/ViabilityTab'
 import { AIInsightsTab } from './tabs/AIInsightsTab'
 import { PageHeader } from '../../components/shared/PageHeader'
+import { useGymTimezone } from '../../hooks/useGymTimezone'
+import { gymNow } from '../../lib/gymTime'
 
 type TabKey = 'attendance' | 'classes' | 'instructors' | 'financial' | 'viability' | 'ai_insights'
 
@@ -31,9 +33,10 @@ function SummaryCard({ label, value }: { label: string; value: string | number }
 }
 
 export function ReportsPage() {
+  const gymTz = useGymTimezone()
   const [activeTab, setActiveTab] = useState<TabKey>('attendance')
 
-  const now = new Date()
+  const now = gymNow(gymTz)
   const thisMonthFrom = format(startOfMonth(now), 'yyyy-MM-dd')
   const thisMonthTo = format(endOfMonth(now), 'yyyy-MM-dd')
 

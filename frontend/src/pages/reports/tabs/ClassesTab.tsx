@@ -20,6 +20,8 @@ import { PageSpinner } from '../../../components/ui/Spinner'
 import { ClearFiltersButton } from '../../../components/ui/ClearFiltersButton'
 import { ReportClassFilter } from '../ReportClassFilter'
 import type { ClassReportRow } from '../../../types'
+import { useGymTimezone } from '../../../hooks/useGymTimezone'
+import { gymNow } from '../../../lib/gymTime'
 
 type PeriodKey = 'this_month' | 'last_month' | 'custom'
 
@@ -36,12 +38,13 @@ const axisTick = { fontSize: 11, fill: '#6b7280' }
 const tooltipStyle = { borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: 12 }
 
 export function ClassesTab() {
+  const gymTz = useGymTimezone()
   const [period, setPeriod] = useState<PeriodKey>('this_month')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [selectedClassType, setSelectedClassType] = useState<number | undefined>(undefined)
 
-  const now = new Date()
+  const now = gymNow(gymTz)
 
   const dateRange = (() => {
     if (period === 'this_month') {

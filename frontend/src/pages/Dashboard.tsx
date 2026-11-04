@@ -13,6 +13,8 @@ import {
 } from 'lucide-react'
 import { format, isToday, parseISO } from 'date-fns'
 import { listEvents } from '../api/timetable'
+import { useGymTimezone } from '../hooks/useGymTimezone'
+import { gymNow, gymToday } from '../lib/gymTime'
 import { listAttendance } from '../api/attendance'
 import { listCoverRequests } from '../api/cover'
 import { listInvoices } from '../api/invoices'
@@ -29,19 +31,20 @@ function formatTime(time: string): string {
   return `${displayHours}:${String(minutes).padStart(2, '0')}${period}`
 }
 
-function todayIso(): string {
-  return format(new Date(), 'yyyy-MM-dd')
-}
-
-function isEventOngoing(event: TimetableEvent): boolean {
-  const now = new Date()
-  const today = todayIso()
-  if (event.date !== today) return false
+function isEventOngoing(event: TimetableEvent, timeZone: string): boolean {
+  // Real instants when we have them — no timezone involved at all.
+  if (event.start_datetime && event.end_datetime) {
+    const now = Date.now()
+    return now >= new Date(event.start_datetime).getTime() && now <= new Date(event.end_datetime).getTime()
+  }
+  // Otherwise the class's local times against the gym's clock.
+  const now = gymNow(timeZone)
+  if (event.date !== gymToday(timeZone)) return false
   const [sh, sm] = event.start_time.split(':').map(Number)
   const [eh, em] = event.end_time.split(':').map(Number)
-  const start = new Date()
+  const start = new Date(now)
   start.setHours(sh, sm, 0, 0)
-  const end = new Date()
+  const end = new Date(now)
   end.setHours(eh, em, 0, 0)
   return now >= start && now <= end
 }
@@ -92,7 +95,7 @@ interface ScheduleRowProps {
 
 function ScheduleRow({ event, awaitingIds }: ScheduleRowProps) {
   const awaiting = awaitingIds.has(event.id)
-  const ongoing = isEventOngoing(event)
+  const ongoing = isEventOngoing(event, useGymTimezone())
 
   return (
     <div
@@ -235,7 +238,8 @@ function SectionHeader({
 export function DashboardPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const today = todayIso()
+  // Today at the gym, not on the viewer's clock.
+  const today = gymToday(useGymTimezone())
 
   // Attendance-awaiting and pending-invoice widgets are manager/admin tools —
   // instructors aren't permitted to read those endpoints (they'd 403), so only

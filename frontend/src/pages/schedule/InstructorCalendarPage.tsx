@@ -20,6 +20,8 @@ import { useAuth } from '../../hooks/useAuth'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { PageSpinner } from '../../components/ui/Spinner'
 import { Badge } from '../../components/ui/Badge'
+import { useGymTimezone } from '../../hooks/useGymTimezone'
+import { gymNow } from '../../lib/gymTime'
 
 // ─── Status badge config ──────────────────────────────────────────────────────
 
@@ -183,7 +185,8 @@ interface DayColumnProps {
 }
 
 function DayColumn({ day, ownEvents, coverEvents }: DayColumnProps) {
-  const isToday = isSameDay(day, new Date())
+  const gymTz = useGymTimezone()
+  const isToday = isSameDay(day, gymNow(gymTz))
   const dayOwnEvents = eventsForDay(ownEvents, day)
   const dayCoverEvents = eventsForDay(coverEvents, day)
   const isEmpty = dayOwnEvents.length === 0 && dayCoverEvents.length === 0
@@ -229,10 +232,11 @@ function DayColumn({ day, ownEvents, coverEvents }: DayColumnProps) {
 // ─── InstructorCalendarPage ───────────────────────────────────────────────────
 
 export function InstructorCalendarPage() {
+  const gymTz = useGymTimezone()
   const { user } = useAuth()
 
   const [weekStart, setWeekStart] = useState(() =>
-    startOfWeek(new Date(), { weekStartsOn: 1 })
+    startOfWeek(gymNow(gymTz), { weekStartsOn: 1 })
   )
 
   const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 })
@@ -279,7 +283,7 @@ export function InstructorCalendarPage() {
   }
 
   function goToToday() {
-    setWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }))
+    setWeekStart(startOfWeek(gymNow(gymTz), { weekStartsOn: 1 }))
   }
 
   const weekLabel = `${format(weekStart, 'd MMM')} – ${format(weekEnd, 'd MMM yyyy')}`

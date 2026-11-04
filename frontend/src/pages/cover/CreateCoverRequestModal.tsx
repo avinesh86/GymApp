@@ -8,6 +8,8 @@ import { Button } from '../../components/ui/Button'
 import { Select } from '../../components/ui/Select'
 import { Input } from '../../components/ui/Input'
 import { format, addDays } from 'date-fns'
+import { gymNow, parseDateOnly } from '../../lib/gymTime'
+import { useGymTimezone } from '../../hooks/useGymTimezone'
 
 interface CreateCoverRequestModalProps {
   isOpen: boolean
@@ -17,6 +19,7 @@ interface CreateCoverRequestModalProps {
 type Mode = 'single' | 'absence'
 
 export function CreateCoverRequestModal({ isOpen, onClose }: CreateCoverRequestModalProps) {
+  const gymTz = useGymTimezone()
   const queryClient = useQueryClient()
   const [mode, setMode] = useState<Mode>('single')
 
@@ -27,9 +30,9 @@ export function CreateCoverRequestModal({ isOpen, onClose }: CreateCoverRequestM
   const [notes, setNotes] = useState('')
 
   // Prolonged-absence mode.
-  const today = format(new Date(), 'yyyy-MM-dd')
+  const today = format(gymNow(gymTz), 'yyyy-MM-dd')
   const [fromDate, setFromDate] = useState(today)
-  const [toDate, setToDate] = useState(format(addDays(new Date(), 7), 'yyyy-MM-dd'))
+  const [toDate, setToDate] = useState(format(addDays(gymNow(gymTz), 7), 'yyyy-MM-dd'))
   const [reason, setReason] = useState('')
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 
@@ -162,7 +165,7 @@ export function CreateCoverRequestModal({ isOpen, onClose }: CreateCoverRequestM
               onChange={(e) => setEventId(e.target.value)}
               options={events.map((ev) => ({
                 value: ev.id,
-                label: `${format(new Date(ev.date), 'd MMM')} – ${ev.class_type_name} (${ev.start_time})`,
+                label: `${format(parseDateOnly(ev.date), 'd MMM')} – ${ev.class_type_name} (${ev.start_time})`,
               }))}
               placeholder="Select class"
               required
@@ -242,7 +245,7 @@ export function CreateCoverRequestModal({ isOpen, onClose }: CreateCoverRequestM
                         onChange={() => toggleId(ev.id)}
                         className="h-4 w-4 rounded border-gray-300 text-cyan-500 focus:ring-cyan-400"
                       />
-                      {format(new Date(ev.date), 'EEE d MMM')} · {ev.class_type_name} ({ev.start_time})
+                      {format(parseDateOnly(ev.date), 'EEE d MMM')} · {ev.class_type_name} ({ev.start_time})
                     </label>
                   ))}
                 </div>

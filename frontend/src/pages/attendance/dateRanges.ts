@@ -1,4 +1,5 @@
-import { startOfDay, endOfDay, startOfWeek, subWeeks, subMilliseconds } from 'date-fns'
+import { startOfDay, endOfDay, startOfWeek, subWeeks } from 'date-fns'
+import { browserTimeZone, gymNow, gymWallToInstant } from '../../lib/gymTime'
 
 export type DateTab = 'today' | 'this_week' | 'last_week' | 'older'
 
@@ -26,18 +27,27 @@ export interface DateRange {
  * "This Week" is the week so far *before* today. It used to include today,
  * which counted today's classes twice in the total, and "Older" used to stop a
  * day short of last week, which left the Sunday before it in no tab at all.
+ *
+ * Days and weeks are the gym's (`timeZone`, from Settings), not the browser's.
  */
-export function getDateRange(tab: DateTab, now: Date = new Date()): DateRange {
-  const todayStart = startOfDay(now)
-  const weekStart = startOfWeek(now, { weekStartsOn: 1 })
-  const lastWeekStart = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 })
-  const justBefore = (date: Date) => subMilliseconds(date, 1).toISOString()
+export function getDateRange(
+  tab: DateTab,
+  now: Date = new Date(),
+  timeZone: string = browserTimeZone(),
+): DateRange {
+  // Calendar maths on the gym's wall clock, then back to real instants.
+  const wall = gymNow(timeZone, now)
+  const instant = (w: Date) => gymWallToInstant(w, timeZone)
+  const todayStart = instant(startOfDay(wall))
+  const weekStart = instant(startOfWeek(wall, { weekStartsOn: 1 }))
+  const lastWeekStart = instant(startOfWeek(subWeeks(wall, 1), { weekStartsOn: 1 }))
+  const justBefore = (date: Date) => new Date(date.getTime() - 1).toISOString()
 
   switch (tab) {
     case 'today':
       return {
         from_datetime: todayStart.toISOString(),
-        to_datetime: endOfDay(now).toISOString(),
+        to_datetime: instant(endOfDay(wall)).toISOString(),
       }
     case 'this_week':
       // On a Monday this is empty (it ends before it starts), which is right:
