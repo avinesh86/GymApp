@@ -179,7 +179,7 @@ class TimetableEventViewSet(TenantScopedMixin, ModelViewSet):
     def week(self, request):
         from_date_str = request.query_params.get("from")
         try:
-            from_date = date.fromisoformat(from_date_str) if from_date_str else date.today()
+            from_date = date.fromisoformat(from_date_str) if from_date_str else local_today(request.tenant)
         except ValueError:
             return Response({"detail": "Invalid date format. Use YYYY-MM-DD."}, status=400)
         events = get_week_events(request.tenant, from_date)

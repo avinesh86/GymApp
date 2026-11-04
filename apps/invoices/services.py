@@ -11,7 +11,14 @@ from django.utils import timezone
 
 from apps.attendance.models import AttendanceRecord
 from apps.core.audit import log_audit
-from apps.core.timezones import format_date, format_date_range, format_datetime, local_date, local_today
+from apps.core.timezones import (
+    format_date,
+    format_date_range,
+    format_datetime,
+    local_date,
+    local_day_bounds,
+    local_today,
+)
 from apps.staff.models import StaffPayRate, StaffPayRateOverride, StaffProfile
 from apps.timetable.models import TimetableEvent
 
@@ -52,12 +59,15 @@ def generate_invoice_for_instructor(
         status=Invoice.Status.DRAFT,
     )
 
+    # The period is the gym's local days: a 9am Auckland class on the 1st is
+    # 20:00 UTC the day before, and belongs in this period, not the last.
+    period_from, period_to = local_day_bounds(instructor.tenant, period_start, period_end)
     events = TimetableEvent.objects.filter(
         tenant=instructor.tenant,
         instructor=instructor,
         status=TimetableEvent.Status.COMPLETED,
-        start_datetime__date__gte=period_start,
-        start_datetime__date__lte=period_end,
+        start_datetime__gte=period_from,
+        start_datetime__lt=period_to,
         is_deleted=False,
     ).select_related("class_type", "site")
 

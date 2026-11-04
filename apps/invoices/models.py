@@ -8,8 +8,11 @@ from django.utils import timezone
 from apps.core.models import TenantAwareModel
 
 
-def _generate_invoice_number() -> str:
-    today = date.today().strftime("%Y%m%d")
+def _generate_invoice_number(tenant=None) -> str:
+    """INV-YYYYMMDD-XXXX, dated by the gym's today (the server's is UTC)."""
+    from apps.core.timezones import local_today
+
+    today = (local_today(tenant) if tenant is not None else date.today()).strftime("%Y%m%d")
     suffix = "".join(random.choices(string.ascii_uppercase, k=4))
     return f"INV-{today}-{suffix}"
 
@@ -40,7 +43,7 @@ class Invoice(TenantAwareModel):
     submitted_at = models.DateTimeField(null=True, blank=True)
     total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     notes = models.TextField(blank=True)
-    invoice_number = models.CharField(max_length=30, unique=True, default=_generate_invoice_number)
+    invoice_number = models.CharField(max_length=30, unique=True, blank=True)
     pdf_file = models.FileField(upload_to="invoices/pdfs/", null=True, blank=True)
 
     # Manager approval audit
@@ -76,6 +79,11 @@ class Invoice(TenantAwareModel):
 
     def __str__(self):
         return f"{self.invoice_number} — {self.instructor.name}"
+
+    def save(self, *args, **kwargs):
+        if not self.invoice_number:
+            self.invoice_number = _generate_invoice_number(self.tenant)
+        super().save(*args, **kwargs)
 
     def recalculate_total(self):
         from django.db.models import Sum
