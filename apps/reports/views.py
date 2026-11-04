@@ -8,7 +8,14 @@ from rest_framework.views import APIView
 
 from django.utils import timezone
 
-from apps.core.timezones import format_date, format_time, local_date, to_tenant_local
+from apps.core.timezones import (
+    format_date,
+    format_time,
+    local_date,
+    local_day_bounds,
+    local_today,
+    to_tenant_local,
+)
 from apps.attendance.models import AttendanceRecord
 from apps.core.permissions import IsGymManager, IsPayroll
 from apps.cover.models import CoverRequest
@@ -38,15 +45,27 @@ def monday_of_week(d):
 
 
 def parse_date_params(request):
-    """Parse from/to query params, defaulting to this month."""
+    """Parse from/to query params, defaulting to this month at the gym."""
     from_str = request.query_params.get("from")
     to_str = request.query_params.get("to")
     try:
-        from_date = date.fromisoformat(from_str) if from_str else date.today().replace(day=1)
-        to_date = date.fromisoformat(to_str) if to_str else date.today()
+        today = local_today(request.tenant)
+        from_date = date.fromisoformat(from_str) if from_str else today.replace(day=1)
+        to_date = date.fromisoformat(to_str) if to_str else today
     except ValueError:
         return None, None, Response({"detail": "Invalid date format. Use YYYY-MM-DD."}, status=400)
     return from_date, to_date, None
+
+
+def local_range(tenant, from_date, to_date, field="start_datetime"):
+    """Filter kwargs for ``field`` falling on ``from_date``..``to_date`` as the
+    gym's local calendar days.
+
+    ``field__date`` compares UTC dates, which puts a 9am Auckland class
+    (20:00 UTC the day before) on the previous day — or in the previous month.
+    """
+    start, end = local_day_bounds(tenant, from_date, to_date)
+    return {f"{field}__gte": start, f"{field}__lt": end}
 
 
 DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
@@ -84,8 +103,7 @@ class AttendanceReportView(APIView):
         event_qs = TimetableEvent.objects.filter(
             tenant=request.tenant,
             is_deleted=False,
-            start_datetime__date__gte=from_date,
-            start_datetime__date__lte=to_date,
+            **local_range(request.tenant, from_date, to_date),
         ).select_related("class_type", "site", "instructor", "attendance_record")
 
         if class_type_id:
@@ -284,8 +302,7 @@ class InstructorReliabilityReportView(APIView):
 
         date_filter = Q(
             events__is_deleted=False,
-            events__start_datetime__date__gte=from_date,
-            events__start_datetime__date__lte=to_date,
+            **local_range(request.tenant, from_date, to_date, "events__start_datetime"),
         )
 
         staff_qs = (
@@ -325,8 +342,7 @@ class InstructorReliabilityReportView(APIView):
                 tenant=request.tenant,
                 is_deleted=False,
                 timetable_event__instructor=staff,
-                timetable_event__start_datetime__date__gte=from_date,
-                timetable_event__start_datetime__date__lte=to_date,
+                **local_range(request.tenant, from_date, to_date, "timetable_event__start_datetime"),
             ).aggregate(avg=Avg("count"))
             avg_attendance = round(float(avg_qs["avg"] or 0), 1)
 
@@ -374,8 +390,7 @@ class InstructorChartsReportView(APIView):
             tenant=request.tenant,
             is_deleted=False,
             timetable_event__instructor_id=instructor_id,
-            timetable_event__start_datetime__date__gte=from_date,
-            timetable_event__start_datetime__date__lte=to_date,
+            **local_range(request.tenant, from_date, to_date, "timetable_event__start_datetime"),
         ).select_related("timetable_event__class_type")
 
         per_class = defaultdict(list)
@@ -452,10 +467,8 @@ class ClassesReportView(APIView):
                 tenant=request.tenant,
                 is_deleted=False,
                 class_type=class_type,
-                start_datetime__date__gte=from_date,
-                start_datetime__date__lte=to_date,
-                start_datetime__lt=now,
-            )
+                **local_range(request.tenant, from_date, to_date),
+            ).filter(start_datetime__lt=now)
 
             total_scheduled = all_events.count()
             if total_scheduled == 0:
@@ -470,8 +483,7 @@ class ClassesReportView(APIView):
                 tenant=request.tenant,
                 is_deleted=False,
                 timetable_event__class_type=class_type,
-                timetable_event__start_datetime__date__gte=from_date,
-                timetable_event__start_datetime__date__lte=to_date,
+                **local_range(request.tenant, from_date, to_date, "timetable_event__start_datetime"),
             )
 
             attended_counts = list(attended_records.values_list("count", flat=True))
@@ -512,8 +524,7 @@ class ClassesReportView(APIView):
         attendance_qs = AttendanceRecord.objects.filter(
             tenant=request.tenant,
             is_deleted=False,
-            timetable_event__start_datetime__date__gte=from_date,
-            timetable_event__start_datetime__date__lte=to_date,
+            **local_range(request.tenant, from_date, to_date, "timetable_event__start_datetime"),
         ).select_related("timetable_event")
         if class_type_filter:
             attendance_qs = attendance_qs.filter(
@@ -644,17 +655,29 @@ class ClassViabilityReportView(APIView):
         from_str = request.query_params.get("from")
         to_str = request.query_params.get("to")
 
-        date_filter: Q = Q()
+        # Either end may be left open. Bounds are the gym's local midnight.
+        range_start = range_end = None
         if from_str:
             try:
-                date_filter &= Q(timetable_event__start_datetime__date__gte=date.fromisoformat(from_str))
+                from_date = date.fromisoformat(from_str)
             except ValueError:
                 return Response({"detail": "Invalid 'from' date."}, status=400)
+            range_start, _ = local_day_bounds(request.tenant, from_date, from_date)
         if to_str:
             try:
-                date_filter &= Q(timetable_event__start_datetime__date__lte=date.fromisoformat(to_str))
+                to_date = date.fromisoformat(to_str)
             except ValueError:
                 return Response({"detail": "Invalid 'to' date."}, status=400)
+            _, range_end = local_day_bounds(request.tenant, to_date, to_date)
+
+        event_filter = Q(tenant=request.tenant, is_deleted=False)
+        date_filter: Q = Q()
+        if range_start:
+            event_filter &= Q(start_datetime__gte=range_start)
+            date_filter &= Q(timetable_event__start_datetime__gte=range_start)
+        if range_end:
+            event_filter &= Q(start_datetime__lt=range_end)
+            date_filter &= Q(timetable_event__start_datetime__lt=range_end)
 
         excluded = excluded_class_type_ids(request.tenant)
         class_types = ClassType.objects.filter(
@@ -706,11 +729,6 @@ class ClassViabilityReportView(APIView):
             })
 
         # Pending = past-or-scheduled events with no attendance recorded yet.
-        event_filter = Q(tenant=request.tenant, is_deleted=False)
-        if from_str:
-            event_filter &= Q(start_datetime__date__gte=date.fromisoformat(from_str))
-        if to_str:
-            event_filter &= Q(start_datetime__date__lte=date.fromisoformat(to_str))
         # Pending = classes that have happened with no count yet. Future
         # classes aren't pending anything.
         snapshot["pending"] = (
@@ -764,8 +782,7 @@ class CoverReportView(APIView):
         base_filter = dict(
             tenant=request.tenant,
             is_deleted=False,
-            created_at__date__gte=from_date,
-            created_at__date__lte=to_date,
+            **local_range(request.tenant, from_date, to_date, "created_at"),
         )
 
         by_status = (
@@ -822,10 +839,9 @@ class UnrecordedAttendanceReportView(APIView):
             TimetableEvent.objects.filter(
                 tenant=request.tenant,
                 is_deleted=False,
-                start_datetime__date__gte=from_date,
-                start_datetime__date__lte=to_date,
-                start_datetime__lt=timezone.now(),
+                **local_range(request.tenant, from_date, to_date),
             )
+            .filter(start_datetime__lt=timezone.now())
             .exclude(status=TimetableEvent.Status.CANCELLED)
             .exclude(class_type_id__in=excluded_class_type_ids(request.tenant))
             .select_related("class_type", "instructor", "site", "attendance_record", "tenant")
