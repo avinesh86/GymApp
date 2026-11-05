@@ -9,6 +9,15 @@ import { FinancialTab } from './tabs/FinancialTab'
 import { ViabilityTab } from './tabs/ViabilityTab'
 import { AIInsightsTab } from './tabs/AIInsightsTab'
 import { PageHeader } from '../../components/shared/PageHeader'
+import { Button } from '../../components/ui/Button'
+import { useAuth } from '../../hooks/useAuth'
+import { ExportReportModal } from './ExportReportModal'
+import { FileDown } from 'lucide-react'
+
+/** Roles the export API lets in (IsGymManager). */
+const CAN_EXPORT = ['owner', 'admin', 'gym_manager']
+import { useGymTimezone } from '../../hooks/useGymTimezone'
+import { gymNow } from '../../lib/gymTime'
 
 type TabKey = 'attendance' | 'classes' | 'instructors' | 'financial' | 'viability' | 'ai_insights'
 
@@ -31,9 +40,12 @@ function SummaryCard({ label, value }: { label: string; value: string | number }
 }
 
 export function ReportsPage() {
+  const gymTz = useGymTimezone()
   const [activeTab, setActiveTab] = useState<TabKey>('attendance')
+  const [exportOpen, setExportOpen] = useState(false)
+  const { user } = useAuth()
 
-  const now = new Date()
+  const now = gymNow(gymTz)
   const thisMonthFrom = format(startOfMonth(now), 'yyyy-MM-dd')
   const thisMonthTo = format(endOfMonth(now), 'yyyy-MM-dd')
 
@@ -68,7 +80,17 @@ export function ReportsPage() {
 
   return (
     <div>
-      <PageHeader title="Reports" />
+      <PageHeader
+        title="Reports"
+        actions={
+          user && CAN_EXPORT.includes(user.role) ? (
+            <Button leftIcon={<FileDown className="h-4 w-4" />} onClick={() => setExportOpen(true)}>
+              Export
+            </Button>
+          ) : undefined
+        }
+      />
+      <ExportReportModal isOpen={exportOpen} onClose={() => setExportOpen(false)} />
 
       {/* Stats summary row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">

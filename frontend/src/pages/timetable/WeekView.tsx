@@ -3,6 +3,8 @@ import { format, addDays, isSameDay } from 'date-fns'
 import { Clock, MapPin } from 'lucide-react'
 import type { TimetableEvent, TimetableEventStatus, TimetableTileStyle } from '../../types'
 import { DEFAULT_TILE_STYLE, tileColours } from './tileColours'
+import { useGymTimezone } from '../../hooks/useGymTimezone'
+import { gymNow } from '../../lib/gymTime'
 
 // ─── Status config ────────────────────────────────────────────────────────────
 
@@ -135,8 +137,9 @@ interface WeekViewProps {
 }
 
 export function WeekView({ weekStart, events, onEventClick, tileStyle = DEFAULT_TILE_STYLE }: WeekViewProps) {
+  const gymTz = useGymTimezone()
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
-  const today = new Date()
+  const today = gymNow(gymTz)
 
   return (
     <div className="grid grid-cols-7 gap-2 min-h-[500px]">

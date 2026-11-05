@@ -15,6 +15,8 @@ import { Pagination } from '../../components/ui/Pagination'
 import { Modal } from '../../components/ui/Modal'
 import { usePermission } from '../../hooks/usePermission'
 import { useAuth } from '../../hooks/useAuth'
+import { useGymTimezone } from '../../hooks/useGymTimezone'
+import { gymNow } from '../../lib/gymTime'
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value)
@@ -36,6 +38,7 @@ const STATUS_OPTIONS = [
 ]
 
 export function InvoicesPage() {
+  const gymTz = useGymTimezone()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { can } = usePermission()
@@ -49,8 +52,8 @@ export function InvoicesPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [page, setPage] = useState(1)
   const [showGenerate, setShowGenerate] = useState(false)
-  const [genStart, setGenStart] = useState(format(startOfMonth(new Date()), 'yyyy-MM-dd'))
-  const [genEnd, setGenEnd] = useState(format(endOfMonth(new Date()), 'yyyy-MM-dd'))
+  const [genStart, setGenStart] = useState(format(startOfMonth(gymNow(gymTz)), 'yyyy-MM-dd'))
+  const [genEnd, setGenEnd] = useState(format(endOfMonth(gymNow(gymTz)), 'yyyy-MM-dd'))
 
   const search = useDebounce(searchInput, 300)
 

@@ -92,8 +92,9 @@ class RecurringTimetableRuleViewSet(TenantScopedMixin, ModelViewSet):
     def generate(self, request, pk=None):
         """Immediately generate TimetableEvent rows for this rule.
 
-        Generates from the rule's valid_from (or today, whichever is later) up to
-        valid_to (or 12 weeks out if no end date was set).
+        Generates from the rule's valid_from up to valid_to (or 12 weeks out if
+        no end date was set). A valid_from in the past backfills classes that
+        already happened, so they show on the timetable and in reports.
         """
         from datetime import timedelta
 
@@ -101,10 +102,9 @@ class RecurringTimetableRuleViewSet(TenantScopedMixin, ModelViewSet):
 
         rule = self.get_object()
         today = local_today(request.tenant)
-        from_date = max(today, rule.valid_from)
         to_date = rule.valid_to or (today + timedelta(weeks=12))
 
-        created = generate_recurring_events(rule, from_date, to_date)
+        created = generate_recurring_events(rule, rule.valid_from, to_date)
         return Response({"created": len(created)}, status=status.HTTP_200_OK)
 
 
@@ -179,7 +179,7 @@ class TimetableEventViewSet(TenantScopedMixin, ModelViewSet):
     def week(self, request):
         from_date_str = request.query_params.get("from")
         try:
-            from_date = date.fromisoformat(from_date_str) if from_date_str else date.today()
+            from_date = date.fromisoformat(from_date_str) if from_date_str else local_today(request.tenant)
         except ValueError:
             return Response({"detail": "Invalid date format. Use YYYY-MM-DD."}, status=400)
         events = get_week_events(request.tenant, from_date)

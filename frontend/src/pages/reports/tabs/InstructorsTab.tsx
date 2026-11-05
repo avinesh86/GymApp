@@ -19,6 +19,8 @@ import { Table } from '../../../components/ui/Table'
 import { PageSpinner } from '../../../components/ui/Spinner'
 import { ClearFiltersButton } from '../../../components/ui/ClearFiltersButton'
 import type { InstructorReliabilityReport } from '../../../types'
+import { useGymTimezone } from '../../../hooks/useGymTimezone'
+import { gymNow } from '../../../lib/gymTime'
 
 type PeriodKey = 'this_month' | 'last_month' | 'custom'
 
@@ -39,12 +41,13 @@ function ChartCard({ title, children }: { title: string; children: React.ReactNo
 }
 
 export function InstructorsTab() {
+  const gymTz = useGymTimezone()
   const [period, setPeriod] = useState<PeriodKey>('this_month')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [selectedInstructor, setSelectedInstructor] = useState<number | undefined>(undefined)
 
-  const now = new Date()
+  const now = gymNow(gymTz)
 
   const dateRange = (() => {
     if (period === 'this_month') {

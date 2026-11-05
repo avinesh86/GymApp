@@ -166,6 +166,15 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      # WeasyPrint needs these to make PDFs (the report export is clicked
+      # through in the UI tests).
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libpango-1.0-0 libpangocairo-1.0-0 libgdk-pixbuf-2.0-0 \
+            libcairo2 libffi-dev shared-mime-info
+
       - name: Install Python dependencies
         run: pip install -r requirements/ci.txt
 

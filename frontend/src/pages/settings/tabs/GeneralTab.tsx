@@ -61,6 +61,8 @@ export function GeneralTab() {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenant', 'settings'] })
+      // Every date and "today" on the site follows the gym's timezone.
+      queryClient.invalidateQueries({ queryKey: ['tenant', 'locale'] })
       toast.success('Settings saved')
     },
     onError: () => toast.error('Failed to save settings'),

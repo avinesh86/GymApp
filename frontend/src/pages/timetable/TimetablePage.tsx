@@ -25,6 +25,8 @@ import { PageHeader } from '../../components/shared/PageHeader'
 import { PageSpinner } from '../../components/ui/Spinner'
 import { RoleGuard } from '../../components/shared/RoleGuard'
 import { SetupGuard } from '../../components/shared/SetupGuard'
+import { useGymTimezone } from '../../hooks/useGymTimezone'
+import { gymNow } from '../../lib/gymTime'
 
 // ─── Debounce hook ────────────────────────────────────────────────────────────
 
@@ -68,9 +70,10 @@ function ViabilityLegend() {
 }
 
 export function TimetablePage() {
+  const gymTz = useGymTimezone()
   const [viewMode, setViewMode] = useState<ViewMode>('week')
   const [currentWeekStart, setCurrentWeekStart] = useState(() =>
-    startOfWeek(new Date(), { weekStartsOn: 1 })
+    startOfWeek(gymNow(gymTz), { weekStartsOn: 1 })
   )
   const [selectedEvent, setSelectedEvent] = useState<TimetableEvent | null>(null)
   const [showAddModal, setShowAddModal] = useState(false)
@@ -99,7 +102,7 @@ export function TimetablePage() {
   }
 
   const weekEnd = endOfWeek(currentWeekStart, { weekStartsOn: 1 })
-  const isCurrentWeek = isSameWeek(currentWeekStart, new Date(), { weekStartsOn: 1 })
+  const isCurrentWeek = isSameWeek(currentWeekStart, gymNow(gymTz), { weekStartsOn: 1 })
 
   // Week view events
   const { data: weekEvents = [], isLoading: weekLoading } = useQuery({
@@ -175,13 +178,13 @@ export function TimetablePage() {
   }
 
   function goToToday() {
-    setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }))
+    setCurrentWeekStart(startOfWeek(gymNow(gymTz), { weekStartsOn: 1 }))
     setListPage(1)
   }
 
   function goToDateWeek(dateStr: string) {
-    // dateStr is YYYY-MM-DD (UTC date from API). Parse as local midnight so
-    // startOfWeek calculates in the user's timezone, not UTC.
+    // dateStr is YYYY-MM-DD, the class's day at the gym. Parse as local
+    // midnight so startOfWeek works on that calendar day.
     const eventDate = parseISO(dateStr + 'T00:00:00')
     setCurrentWeekStart(startOfWeek(eventDate, { weekStartsOn: 1 }))
     setListPage(1)

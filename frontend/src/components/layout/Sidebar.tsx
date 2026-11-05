@@ -15,10 +15,13 @@ import {
   Menu,
   X,
   User,
+  Building2,
+  Wrench,
 } from 'lucide-react'
 import { usePermission } from '../../hooks/usePermission'
 import { useAuth } from '../../hooks/useAuth'
 import { useTenantBranding } from '../../hooks/useTenant'
+import { useFacilitiesConfig } from '../../hooks/useFacilitiesConfig'
 
 import type { Permission } from '../../hooks/usePermission'
 
@@ -33,6 +36,8 @@ interface NavItem {
   icon: React.ReactNode
   permission?: Permission  // undefined = always shown to authenticated users
   roles?: UserRole[]       // undefined = no role restriction
+  // Shown only while that part of Facilities is switched on in Settings.
+  feature?: 'facilities' | 'fault_board'
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -45,6 +50,8 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/invoices',         label: 'Invoices',        icon: <FileText className="h-5 w-5" />,        permission: 'invoices' },
   { to: '/attendance',       label: 'Attendance',      icon: <ClipboardList className="h-5 w-5" />,   permission: 'attendance' },
   { to: '/reports',          label: 'Reports',         icon: <BarChart2 className="h-5 w-5" />,       permission: 'reports' },
+  { to: '/facilities',       label: 'Facilities',      icon: <Building2 className="h-5 w-5" />,      permission: 'facilities', feature: 'facilities' },
+  { to: '/faults',           label: 'Maintenance',     icon: <Wrench className="h-5 w-5" />,         feature: 'fault_board' },
   { to: '/imports',          label: 'CSV Import',      icon: <Upload className="h-5 w-5" />,          permission: 'imports' },
   { to: '/settings',         label: 'Settings',        icon: <Settings className="h-5 w-5" />,        permission: 'settings' },
 ]
@@ -63,6 +70,7 @@ export function Sidebar() {
   const { user, logout } = useAuth()
   const { data: branding } = useTenantBranding()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const { data: facilities } = useFacilitiesConfig()
 
   const appName = branding?.app_name ?? 'Northern Arena'
 
@@ -79,6 +87,10 @@ export function Sidebar() {
         {NAV_ITEMS.filter((item) => {
           if (item.permission && !can(item.permission)) return false
           if (item.roles && (!user || !item.roles.includes(user.role))) return false
+          if (item.feature === 'facilities' && !(facilities?.equipment_enabled || facilities?.maintenance_enabled)) return false
+          // Staff who can't open Facilities only. Managers work faults from
+          // Facilities → Maintenance, so a second menu item would be clutter.
+          if (item.feature === 'fault_board' && (!facilities?.fault_reporting_enabled || facilities.can_manage)) return false
           return true
         }).map((item) => (
           <NavLink

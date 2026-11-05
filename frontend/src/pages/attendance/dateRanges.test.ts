@@ -53,3 +53,43 @@ describe('attendance tab date ranges', () => {
     expect(tabsShowing(new Date(2026, 9, 11, 9, 0), monday)).toEqual(['last_week'])
   })
 })
+
+describe("attendance tab date ranges in the gym's timezone", () => {
+  // 9:30am Mon 1 Dec 2025 in Auckland; still Sunday 30 Nov in UTC and in
+  // most browsers outside NZ.
+  const NOW = new Date('2025-11-30T20:30:00Z')
+  const AUCKLAND = 'Pacific/Auckland'
+
+  it("starts Today at the gym's midnight", () => {
+    expect(getDateRange('today', NOW, AUCKLAND)).toEqual({
+      from_datetime: '2025-11-30T11:00:00.000Z',
+      to_datetime: '2025-12-01T10:59:59.999Z',
+    })
+  })
+
+  it("puts a 6am class today under Today, whatever the viewer's clock says", () => {
+    const sixAm = '2025-11-30T17:00:00.000Z' // 6am 1 Dec in Auckland
+    const { from_datetime, to_datetime } = getDateRange('today', NOW, AUCKLAND)
+    expect(sixAm >= from_datetime! && sixAm <= to_datetime!).toBe(true)
+  })
+
+  it("starts Last Week on the gym's Monday", () => {
+    expect(getDateRange('last_week', NOW, AUCKLAND).from_datetime).toBe('2025-11-23T11:00:00.000Z')
+  })
+})
+
+describe('attendance tab date ranges follow the gym, not the browser', () => {
+  // Same moment, two gyms: only the gym's own timezone can satisfy both.
+  const NOW = new Date('2025-11-30T20:30:00Z')
+
+  it('starts Today at Los Angeles midnight for a Los Angeles gym', () => {
+    expect(getDateRange('today', NOW, 'America/Los_Angeles')).toEqual({
+      from_datetime: '2025-11-30T08:00:00.000Z',
+      to_datetime: '2025-12-01T07:59:59.999Z',
+    })
+  })
+
+  it('starts Today at Auckland midnight for an Auckland gym', () => {
+    expect(getDateRange('today', NOW, 'Pacific/Auckland').from_datetime).toBe('2025-11-30T11:00:00.000Z')
+  })
+})

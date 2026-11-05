@@ -8,6 +8,10 @@ import type {
   ClassesReport,
   UnrecordedReport,
   PaginatedResponse,
+  ReportFrequency,
+  ReportSection,
+  ReportSchedule,
+  ReportScheduleInput,
 } from '../types'
 
 function unwrapList<T>(data: T[] | PaginatedResponse<T>): T[] {
@@ -108,5 +112,42 @@ export async function saveReportClassFilter(excluded: number[]): Promise<{ exclu
   const response = await apiClient.put<{ excluded_class_types: number[] }>('reports/class-filter/', {
     excluded_class_types: excluded,
   })
+  return response.data
+}
+
+// ─── Export & scheduled emails ───────────────────────────────────────────────
+
+/** The report as a PDF for the day, week or month containing `date`. */
+export async function exportReport(data: {
+  frequency: ReportFrequency
+  date: string
+  sections: ReportSection[]
+}): Promise<Blob> {
+  const response = await apiClient.post('reports/export/', data, { responseType: 'blob' })
+  return response.data
+}
+
+export async function listReportSchedules(): Promise<ReportSchedule[]> {
+  const response = await apiClient.get<ReportSchedule[] | PaginatedResponse<ReportSchedule>>('reports/schedules/')
+  return unwrapList(response.data)
+}
+
+export async function createReportSchedule(data: ReportScheduleInput): Promise<ReportSchedule> {
+  const response = await apiClient.post<ReportSchedule>('reports/schedules/', data)
+  return response.data
+}
+
+export async function updateReportSchedule(id: number, data: Partial<ReportScheduleInput>): Promise<ReportSchedule> {
+  const response = await apiClient.patch<ReportSchedule>(`reports/schedules/${id}/`, data)
+  return response.data
+}
+
+export async function deleteReportSchedule(id: number): Promise<void> {
+  await apiClient.delete(`reports/schedules/${id}/`)
+}
+
+/** Email the schedule's most recent full period now. */
+export async function sendReportScheduleNow(id: number): Promise<{ detail: string }> {
+  const response = await apiClient.post<{ detail: string }>(`reports/schedules/${id}/send-now/`)
   return response.data
 }

@@ -1,9 +1,10 @@
 import logging
-from datetime import date, timedelta
+from datetime import timedelta
 
 from celery import shared_task
 from django.utils import timezone
 
+from apps.core.timezones import local_day_bounds, local_today
 from apps.tenants.models import Tenant
 
 from .models import RecurringTimetableRule, TimetableEvent
@@ -18,9 +19,6 @@ def generate_upcoming_recurring_events():
     Runs daily.  Generates timetable events for the next 4 weeks for every
     active recurring rule across all active tenants.
     """
-    from_date = date.today()
-    to_date = from_date + timedelta(weeks=4)
-
     rules = (
         RecurringTimetableRule.objects.filter(is_active=True, tenant__is_active=True)
         .select_related("tenant", "class_type", "site", "instructor")
@@ -28,6 +26,9 @@ def generate_upcoming_recurring_events():
 
     total_created = 0
     for rule in rules:
+        # From the gym's today: in UTC it can still be yesterday there.
+        from_date = local_today(rule.tenant)
+        to_date = from_date + timedelta(weeks=4)
         try:
             created = generate_recurring_events(rule, from_date, to_date)
             total_created += len(created)
@@ -43,16 +44,18 @@ def check_unfilled_classes():
     """
     Runs daily.  Flags upcoming events that have no instructor assigned.
     """
-    today = date.today()
-    count = (
-        TimetableEvent.objects.filter(
+    count = 0
+    for tenant in Tenant.objects.filter(is_active=True).select_related("settings"):
+        # Upcoming from the start of the gym's today, not UTC's.
+        today = local_today(tenant)
+        day_start, _ = local_day_bounds(tenant, today, today)
+        count += TimetableEvent.objects.filter(
+            tenant=tenant,
             is_deleted=False,
             instructor__isnull=True,
-            start_datetime__date__gte=today,
+            start_datetime__gte=day_start,
             status=TimetableEvent.Status.SCHEDULED,
-        )
-        .update(status=TimetableEvent.Status.UNFILLED)
-    )
+        ).update(status=TimetableEvent.Status.UNFILLED)
     logger.info("check_unfilled_classes: flagged %d events as unfilled", count)
     return count
 

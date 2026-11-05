@@ -86,6 +86,11 @@ class TenantBranding(models.Model):
         return f"Branding for {self.tenant.name}"
 
 
+def default_facilities_alert_roles():
+    """Owner, admin and gym manager hear about new faults unless a gym chooses otherwise."""
+    return ["owner", "admin", "gym_manager"]
+
+
 class TenantSettings(models.Model):
     class InvoiceFrequency(models.TextChoices):
         WEEKLY = "weekly", "Weekly"
@@ -140,6 +145,18 @@ class TenantSettings(models.Model):
     # and remembered until someone changes it. Stored as exclusions so a new
     # class type shows up in reports without anyone ticking it.
     report_excluded_class_types = models.JSONField(default=list, blank=True)
+    # ── Facilities ──
+    # Each part can be switched off for a gym that already does it in another
+    # system, so nobody has to keep two records of the same thing.
+    facilities_equipment_enabled = models.BooleanField(default=True)
+    facilities_maintenance_enabled = models.BooleanField(default=True)
+    # The "Report a fault" button and the fault status board for all staff.
+    # Faults land in maintenance tracking, so this only works while that is on.
+    fault_reporting_enabled = models.BooleanField(default=True)
+    # Who is told about new faults: in the app (notification bell + dashboard),
+    # and by email only if facilities_alert_email is on. Never WhatsApp.
+    facilities_alert_roles = models.JSONField(default=default_facilities_alert_roles, blank=True)
+    facilities_alert_email = models.BooleanField(default=False)
     # Outgoing email configuration for notifications
     notification_from_email = models.EmailField(blank=True, default="")
     notification_from_name = models.CharField(max_length=100, blank=True, default="")

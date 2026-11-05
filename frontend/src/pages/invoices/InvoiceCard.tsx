@@ -3,6 +3,7 @@ import { FileText, ChevronRight } from 'lucide-react'
 import { format } from 'date-fns'
 import type { Invoice, InvoiceStatus } from '../../types'
 import { Badge } from '../../components/ui/Badge'
+import { parseDateOnly } from '../../lib/gymTime'
 
 const STATUS_CONFIG: Record<InvoiceStatus, { label: string; variant: 'blue' | 'green' | 'grey' | 'red' | 'orange' | 'purple' }> = {
   draft:            { label: 'Draft',             variant: 'grey' },
@@ -42,8 +43,8 @@ export function InvoiceCard({ invoice, onClick }: InvoiceCardProps) {
           </div>
 
           <p className="text-xs text-gray-400 mt-2">
-            {format(new Date(invoice.period_start), 'd MMM')} –{' '}
-            {format(new Date(invoice.period_end), 'd MMM yyyy')}
+            {format(parseDateOnly(invoice.period_start), 'd MMM')} –{' '}
+            {format(parseDateOnly(invoice.period_end), 'd MMM yyyy')}
           </p>
         </div>
       </div>

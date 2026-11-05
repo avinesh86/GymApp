@@ -24,6 +24,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { Badge } from '../../components/ui/Badge'
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog'
 import { SeriesScopeDialog, type ChangeScope } from './SeriesScopeDialog'
+import { parseDateOnly } from '../../lib/gymTime'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -788,7 +789,7 @@ export function ClassDetailModal({ event, onClose }: ClassDetailModalProps) {
 
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-sm text-gray-500">
-              {format(new Date(event.date), 'EEEE, MMMM d, yyyy')}
+              {format(parseDateOnly(event.date), 'EEEE, MMMM d, yyyy')}
             </span>
             <Badge variant={statusConfig.variant} dot>
               {statusConfig.label}
