@@ -515,6 +515,7 @@ The beat service runs scheduled tasks. Default schedules:
 | Auto-generate invoices | Per tenant frequency |
 | Send invoice reminders | Weekly Monday 09:00 |
 | Send pending notifications | Every 5 minutes |
+| Send scheduled report emails | Every 15 minutes (each schedule sends at its own gym-local time; registered by a migration) |
 
 Configure schedules via the Django admin or directly in `django_celery_beat` tables.
 
