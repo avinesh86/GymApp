@@ -7,6 +7,7 @@ import { AccessTab } from './tabs/AccessTab'
 import { TimetableTab } from './tabs/TimetableTab'
 import { LocationsTab } from './tabs/LocationsTab'
 import { InvoicesTab } from './tabs/InvoicesTab'
+import { FacilitiesTab } from './tabs/FacilitiesTab'
 import { RoleAccessTab } from './RoleAccessTab'
 import { PageHeader } from '../../components/shared/PageHeader'
 
@@ -19,6 +20,7 @@ type TabKey =
   | 'timetable'
   | 'locations'
   | 'invoices'
+  | 'facilities'
   | 'role_access'
 
 const TABS: { key: TabKey; label: string }[] = [
@@ -30,6 +32,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'timetable',     label: 'Timetable' },
   { key: 'locations',     label: 'Locations' },
   { key: 'invoices',      label: 'Invoices' },
+  { key: 'facilities',    label: 'Facilities' },
   { key: 'role_access',   label: 'Access Control' },
 ]
 
@@ -42,6 +45,7 @@ const TAB_COMPONENTS: Record<TabKey, React.ReactNode> = {
   timetable:     <TimetableTab />,
   locations:     <LocationsTab />,
   invoices:      <InvoicesTab />,
+  facilities:    <FacilitiesTab />,
   role_access:   <RoleAccessTab />,
 }
 

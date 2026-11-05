@@ -20,6 +20,9 @@ from apps.users.models import Membership, User
 
 DEFAULT_EMAIL = "e2e-owner@example.com"
 DEFAULT_PASSWORD = "e2e-password-123"
+# A second, instructor-level login (same password) for journeys that must be
+# checked from an instructor's seat, such as reporting an equipment fault.
+INSTRUCTOR_EMAIL = "e2e-instructor@example.com"
 
 
 class Command(BaseCommand):
@@ -107,6 +110,8 @@ class Command(BaseCommand):
                 defaults={"role": UserRole.OWNER, "is_active": True},
             )
 
+            self._ensure_instructor(tenant, options["password"])
+
         if options["reset"]:
             self._clear_previous_runs(tenant)
 
@@ -115,6 +120,22 @@ class Command(BaseCommand):
                 f"{'Created' if created else 'Reset'} {user.email} as owner of "
                 f"'{tenant.slug}' (host {domain})"
             )
+        )
+
+    def _ensure_instructor(self, tenant, password):
+        """A login with no StaffProfile, so it never appears as a cover
+        candidate or on the staff list the other tests count."""
+        user, _ = User.objects.get_or_create(
+            email=INSTRUCTOR_EMAIL,
+            defaults={"tenant": tenant, "first_name": "E2E", "last_name": "Instructor"},
+        )
+        user.tenant = tenant
+        user.role = UserRole.INSTRUCTOR
+        user.is_active = True
+        user.set_password(password)
+        user.save()
+        Membership.objects.update_or_create(
+            user=user, tenant=tenant, defaults={"role": UserRole.INSTRUCTOR, "is_active": True}
         )
 
     def _clear_previous_runs(self, tenant):
@@ -160,6 +181,23 @@ class Command(BaseCommand):
         sites = Site.objects.filter(tenant=tenant, name__startswith="E2E ")
         counts["locations"] = sites.count()
         sites.delete()
+
+        # Facilities: equipment and faults the tests made, and the switches put
+        # back on so the menu items the tests click are there.
+        from apps.facilities.models import Equipment, FaultReport
+        from apps.tenants.models import TenantSettings
+
+        faults = FaultReport.objects.filter(tenant=tenant, title__startswith="E2E ")
+        counts["faults"] = faults.count()
+        faults.delete()
+        equipment = Equipment.objects.filter(tenant=tenant, name__startswith="E2E ")
+        counts["equipment"] = equipment.count()
+        equipment.delete()
+        TenantSettings.objects.filter(tenant=tenant).update(
+            facilities_equipment_enabled=True,
+            facilities_maintenance_enabled=True,
+            fault_reporting_enabled=True,
+        )
 
         removed = ", ".join(f"{n} {label}" for label, n in counts.items() if n)
         self.stdout.write(f"  Cleared from earlier runs: {removed or 'nothing'}")

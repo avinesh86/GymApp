@@ -19,6 +19,7 @@ import { listInvoices } from '../api/invoices'
 import { PageSpinner } from '../components/ui/Spinner'
 import { Badge } from '../components/ui/Badge'
 import type { TimetableEvent, CoverRequest, Invoice } from '../types'
+import { FacilitiesDashboardCard } from './facilities/FacilitiesDashboardCard'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -330,6 +331,8 @@ export function DashboardPage() {
           onClick={() => navigate('/invoices')}
         />
       </div>
+
+      <FacilitiesDashboardCard />
 
       {/* Two-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 mb-6">

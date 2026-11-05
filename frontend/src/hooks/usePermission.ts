@@ -11,6 +11,7 @@ export type Permission =
   | 'reports'
   | 'imports'
   | 'settings'
+  | 'facilities'
 
 export const ALL_PERMISSIONS: Permission[] = [
   'dashboard',
@@ -22,15 +23,16 @@ export const ALL_PERMISSIONS: Permission[] = [
   'reports',
   'imports',
   'settings',
+  'facilities',
 ]
 
 // Default permissions per role — these are used when no localStorage override exists.
 export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, Permission[] | ['*']> = {
   owner:            ['*'],
-  admin:            ['dashboard', 'timetable', 'staff', 'cover', 'invoices', 'attendance', 'reports', 'imports', 'settings'],
+  admin:            ['dashboard', 'timetable', 'staff', 'cover', 'invoices', 'attendance', 'reports', 'imports', 'settings', 'facilities'],
   gym_manager:      ['*'],
-  payroll:          ['dashboard', 'invoices', 'reports'],
-  team_leader:      ['dashboard', 'timetable', 'cover', 'attendance'],
+  payroll:          ['dashboard', 'invoices', 'reports', 'facilities'],
+  team_leader:      ['dashboard', 'timetable', 'cover', 'attendance', 'facilities'],
   instructor:       ['dashboard', 'timetable', 'attendance', 'invoices'],
   class_count_admin: ['dashboard', 'attendance'],
 }

@@ -37,6 +37,12 @@ def send_pending_notifications():
 
 def _dispatch_notification(notification):
     """Dispatches a notification via configured channels for the recipient."""
+    from .models import Notification
+
+    # Facilities alerts are emailed (if at all) when they are raised, under the
+    # gym's own Facilities email switch, and must never reach WhatsApp.
+    if notification.notification_type == Notification.NotificationType.FACILITIES:
+        return
     from apps.staff.models import StaffProfile
 
     try:
