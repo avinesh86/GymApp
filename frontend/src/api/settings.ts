@@ -7,6 +7,12 @@ function unwrapList<T>(data: T[] | PaginatedResponse<T>): T[] {
 
 // ─── Tenant Settings ──────────────────────────────────────────────────────────
 
+/** The gym's timezone (IANA name) — readable by everyone signed in to the gym. */
+export async function getGymLocale(): Promise<{ timezone: string }> {
+  const response = await apiClient.get<{ timezone: string }>('tenants/locale/')
+  return response.data
+}
+
 /** The gym's timetable tile style — readable by everyone who sees the timetable. */
 export async function getTimetableDisplay(): Promise<{ tile_style: TimetableTileStyle }> {
   const response = await apiClient.get<{ tile_style: TimetableTileStyle }>('tenants/timetable-display/')

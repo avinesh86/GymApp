@@ -15,6 +15,8 @@ import { Card } from '../../components/ui/Card'
 import { PageSpinner } from '../../components/ui/Spinner'
 import { Modal } from '../../components/ui/Modal'
 import { useAuth } from '../../hooks/useAuth'
+import { formatInGym, gymNow, parseDateOnly } from '../../lib/gymTime'
+import { useGymTimezone } from '../../hooks/useGymTimezone'
 
 const STATUS_CONFIG: Record<InvoiceStatus, { label: string; variant: 'blue' | 'green' | 'grey' | 'red' | 'orange' | 'purple' }> = {
   draft:            { label: 'Draft',             variant: 'grey' },
@@ -27,6 +29,7 @@ const STATUS_CONFIG: Record<InvoiceStatus, { label: string; variant: 'blue' | 'g
 }
 
 export function InvoiceDetailPage() {
+  const gymTz = useGymTimezone()
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -36,7 +39,7 @@ export function InvoiceDetailPage() {
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [rejectNotes, setRejectNotes] = useState('')
   const [showPaidModal, setShowPaidModal] = useState(false)
-  const [paymentDate, setPaymentDate] = useState(format(new Date(), 'yyyy-MM-dd'))
+  const [paymentDate, setPaymentDate] = useState(format(gymNow(gymTz), 'yyyy-MM-dd'))
   const [paymentReference, setPaymentReference] = useState('')
 
   const invoiceId = Number(id)
@@ -127,8 +130,8 @@ export function InvoiceDetailPage() {
             <h1 className="text-lg font-bold text-gray-900">{invoice.invoice_number}</h1>
             <p className="text-sm text-gray-500 mt-0.5">{invoice.instructor_name}</p>
             <p className="text-xs text-gray-400 mt-1">
-              {format(new Date(invoice.period_start), 'd MMM')} –{' '}
-              {format(new Date(invoice.period_end), 'd MMM yyyy')}
+              {format(parseDateOnly(invoice.period_start), 'd MMM')} –{' '}
+              {format(parseDateOnly(invoice.period_end), 'd MMM yyyy')}
             </p>
           </div>
           <div className="flex flex-col items-end gap-3">
@@ -220,7 +223,7 @@ export function InvoiceDetailPage() {
             <tbody>
               {(invoice.line_items ?? []).map((item) => (
                 <tr key={item.id} className="border-b border-gray-50">
-                  <td className="px-4 py-2 text-gray-600">{item.event_date ? format(new Date(item.event_date), 'd MMM') : '—'}</td>
+                  <td className="px-4 py-2 text-gray-600">{item.event_date ? format(parseDateOnly(item.event_date), 'd MMM') : '—'}</td>
                   <td className="px-4 py-2 font-medium text-gray-900">
                     {item.class_name}
                     {item.has_bonus && <span className="ml-1.5 text-xs text-green-600">+bonus</span>}
@@ -261,7 +264,7 @@ export function InvoiceDetailPage() {
                     <p className="text-xs text-gray-500 mt-0.5">{event.notes}</p>
                   )}
                   <p className="text-xs text-gray-400 mt-0.5">
-                    {event.timestamp_display || format(new Date(event.timestamp), 'd MMM yyyy, h:mma')}
+                    {event.timestamp_display || formatInGym(event.timestamp, gymTz, 'd MMM yyyy, h:mma')}
                   </p>
                 </div>
               </li>

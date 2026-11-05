@@ -5,6 +5,7 @@ import type { TimetableEvent } from '../../types'
 import { Table } from '../../components/ui/Table'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
+import { parseDateOnly } from '../../lib/gymTime'
 
 interface ListViewProps {
   events: TimetableEvent[]
@@ -57,7 +58,7 @@ export function ListView({
       header: 'Date',
       render: (event: TimetableEvent) => (
         <span className="text-sm text-gray-700">
-          {format(new Date(event.date), 'EEE, d MMM yyyy')}
+          {format(parseDateOnly(event.date), 'EEE, d MMM yyyy')}
         </span>
       ),
     },

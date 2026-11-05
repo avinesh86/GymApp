@@ -4,8 +4,11 @@ import { AlertCircle, X } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 import { useSetupStatus } from '../../hooks/useSetupStatus'
 import { useAuth } from '../../hooks/useAuth'
+import { useGymTimezone } from '../../hooks/useGymTimezone'
+import { formatInGym } from '../../lib/gymTime'
 
 export function SetupBanner() {
+  const gymTz = useGymTimezone()
   const { setup_completed, trial_ends_at, subscription_status } = useSetupStatus()
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -50,7 +53,7 @@ export function SetupBanner() {
         <div className="bg-cyan-50 border-b border-cyan-200 px-4 py-2 flex items-center justify-between gap-4">
           <p className="text-sm text-cyan-800">
             🎉 <strong>{daysLeft} days</strong> left in your free trial — ends{' '}
-            {format(trialEnd, 'd MMM yyyy')}.
+            {formatInGym(trialEnd, gymTz, 'd MMM yyyy')}.
           </p>
           <button
             onClick={() => setDismissed(true)}

@@ -17,6 +17,8 @@ import { Card } from '../../../components/ui/Card'
 import { PageSpinner } from '../../../components/ui/Spinner'
 import { ClearFiltersButton } from '../../../components/ui/ClearFiltersButton'
 import type { InstructorPayrollSummary } from '../../../types'
+import { useGymTimezone } from '../../../hooks/useGymTimezone'
+import { gymNow } from '../../../lib/gymTime'
 
 type PeriodKey = 'this_month' | 'last_month' | 'custom'
 
@@ -30,12 +32,13 @@ function StatBox({ label, value }: { label: string; value: string }) {
 }
 
 export function FinancialTab() {
+  const gymTz = useGymTimezone()
   const [period, setPeriod] = useState<PeriodKey>('this_month')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [selectedInstructor, setSelectedInstructor] = useState<number | undefined>(undefined)
 
-  const now = new Date()
+  const now = gymNow(gymTz)
 
   const dateRange = (() => {
     if (period === 'this_month') {

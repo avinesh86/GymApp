@@ -41,6 +41,7 @@ import {
   bandForStartTime,
   type AvailabilityBandKey,
 } from './availabilityBands'
+import { parseDateOnly } from '../../lib/gymTime'
 
 const ROLE_LABELS: Record<string, string> = {
   owner: 'Owner', admin: 'Admin', gym_manager: 'Gym Manager',
@@ -319,7 +320,7 @@ export function StaffDetailPage() {
               {payRates.map((rate) => (
                 <tr key={rate.id} className="border-b border-gray-50">
                   <td className="px-4 py-2 font-medium text-gray-900">${rate.rate_per_hour ?? rate.amount}</td>
-                  <td className="px-4 py-2 text-gray-600">{rate.effective_from ? format(new Date(rate.effective_from), 'd MMM yyyy') : '—'}</td>
+                  <td className="px-4 py-2 text-gray-600">{rate.effective_from ? format(parseDateOnly(rate.effective_from), 'd MMM yyyy') : '—'}</td>
                   <td className="px-4 py-2 text-gray-600">All classes</td>
                   <td className="px-4 py-2">
                     <button onClick={() => removeRate(rate.id)} className="text-gray-400 hover:text-red-500 transition-colors">
@@ -374,8 +375,8 @@ export function StaffDetailPage() {
                 <div>
                   <p className="text-sm font-medium text-gray-900">{qual.name}</p>
                   <p className="text-xs text-gray-400 mt-0.5">
-                    {(qual.issued_at || qual.issued_date) ? `Issued ${format(new Date(qual.issued_at ?? qual.issued_date!), 'd MMM yyyy')}` : ''}
-                    {(qual.expires_at || qual.expiry_date) && ` · Expires ${format(new Date(qual.expires_at ?? qual.expiry_date!), 'd MMM yyyy')}`}
+                    {(qual.issued_at || qual.issued_date) ? `Issued ${format(parseDateOnly(qual.issued_at ?? qual.issued_date!), 'd MMM yyyy')}` : ''}
+                    {(qual.expires_at || qual.expiry_date) && ` · Expires ${format(parseDateOnly(qual.expires_at ?? qual.expiry_date!), 'd MMM yyyy')}`}
                   </p>
                 </div>
                 <button onClick={() => removeQual(qual.id)} className="text-gray-400 hover:text-red-500 transition-colors">
