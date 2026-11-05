@@ -3,6 +3,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
 import { SetupBanner } from './SetupBanner'
+import { GymTimezoneGate } from './GymTimezoneGate'
 
 const PAGE_TITLES: Record<string, string> = {
   '/dashboard':     'Dashboard',
@@ -29,7 +30,9 @@ export function AppLayout() {
         <SetupBanner />
 
         <main className="flex-1 overflow-y-auto p-6 bg-[#F0F2F5]">
-          <Outlet />
+          <GymTimezoneGate>
+            <Outlet />
+          </GymTimezoneGate>
         </main>
       </div>
     </div>

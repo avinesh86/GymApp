@@ -26,6 +26,8 @@ import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Modal } from '../../components/ui/Modal'
+import { useGymTimezone } from '../../hooks/useGymTimezone'
+import { gymNow } from '../../lib/gymTime'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -180,11 +182,12 @@ function EventCard({ event, staffId, onAbsenceRequest }: EventCardProps) {
 // ─── My Schedule Page ─────────────────────────────────────────────────────────
 
 export function MySchedulePage() {
+  const gymTz = useGymTimezone()
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
   const [weekStart, setWeekStart] = useState(() =>
-    startOfWeek(new Date(), { weekStartsOn: 1 })
+    startOfWeek(gymNow(gymTz), { weekStartsOn: 1 })
   )
   const [activeTab, setActiveTab] = useState<TabKey>('upcoming')
   const [absenceEvent, setAbsenceEvent] = useState<TimetableEvent | null>(null)
@@ -214,8 +217,8 @@ export function MySchedulePage() {
   })
 
   // Past: 4 weeks back from start of this week
-  const pastFrom = subWeeks(startOfWeek(new Date(), { weekStartsOn: 1 }), 4)
-  const pastTo   = subWeeks(startOfWeek(new Date(), { weekStartsOn: 1 }), 0)
+  const pastFrom = subWeeks(startOfWeek(gymNow(gymTz), { weekStartsOn: 1 }), 4)
+  const pastTo   = subWeeks(startOfWeek(gymNow(gymTz), { weekStartsOn: 1 }), 0)
 
   const { data: pastEvents = [], isLoading: isLoadingPast } = useQuery({
     queryKey: ['schedule-events', 'past', staffId],
@@ -228,7 +231,7 @@ export function MySchedulePage() {
     enabled: !!staffId && activeTab === 'past',
   })
 
-  const today = startOfDay(new Date())
+  const today = startOfDay(gymNow(gymTz))
 
   const filteredUpcoming = upcomingEvents.filter(
     (event) => !isBefore(parseISO(event.date), today)

@@ -17,6 +17,8 @@ import { Card } from '../../../components/ui/Card'
 import { PageSpinner } from '../../../components/ui/Spinner'
 import { ClearFiltersButton } from '../../../components/ui/ClearFiltersButton'
 import type { InstructorPayrollSummary } from '../../../types'
+import { useGymTimezone } from '../../../hooks/useGymTimezone'
+import { gymNow } from '../../../lib/gymTime'
 
 type PeriodKey = 'this_month' | 'last_month' | 'custom'
 
@@ -30,12 +32,13 @@ function StatBox({ label, value }: { label: string; value: string }) {
 }
 
 export function FinancialTab() {
+  const gymTz = useGymTimezone()
   const [period, setPeriod] = useState<PeriodKey>('this_month')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const [selectedInstructor, setSelectedInstructor] = useState<number | undefined>(undefined)
 
-  const now = new Date()
+  const now = gymNow(gymTz)
 
   const dateRange = (() => {
     if (period === 'this_month') {
@@ -54,7 +57,7 @@ export function FinancialTab() {
   })
   const instructorOptions = staffPage?.results ?? []
 
-  const { data: report, isLoading } = useQuery({
+  const { data: report, isLoading, isError, error, refetch } = useQuery({
     queryKey: ['reports', 'payroll', dateRange.from, dateRange.to, selectedInstructor],
     queryFn: () => getPayrollReport(dateRange.from, dateRange.to, selectedInstructor),
     enabled: !!(dateRange.from && dateRange.to),
@@ -106,7 +109,25 @@ export function FinancialTab() {
         <ClearFiltersButton active={selectedInstructor !== undefined} onClear={() => setSelectedInstructor(undefined)} />
       </div>
 
-      {isLoading || !report ? (
+      {/* A failed or not-yet-enabled query has no report either, so check
+          those first rather than spinning forever. */}
+      {!(dateRange.from && dateRange.to) ? (
+        <p className="py-12 text-center text-sm text-gray-500">Pick a from and to date to see payroll.</p>
+      ) : isError ? (
+        <div className="py-12 text-center">
+          <p className="text-sm text-gray-700">Couldn't load the payroll report.</p>
+          <p className="mt-1 text-xs text-gray-400">
+            {(error as { response?: { status?: number; data?: { detail?: string } } })?.response?.data?.detail
+              ?? `Error ${(error as { response?: { status?: number } })?.response?.status ?? ''}`.trim()}
+          </p>
+          <button
+            onClick={() => refetch()}
+            className="mt-3 px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+          >
+            Try again
+          </button>
+        </div>
+      ) : isLoading || !report ? (
         <PageSpinner />
       ) : (
         <>

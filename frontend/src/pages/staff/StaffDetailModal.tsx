@@ -44,6 +44,8 @@ import {
   bandForStartTime,
   type AvailabilityBand,
 } from './availabilityBands'
+import { useGymTimezone } from '../../hooks/useGymTimezone'
+import { gymNow } from '../../lib/gymTime'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -628,6 +630,7 @@ export function ClassesTab({
   onDirtyChange = noop,
   onSaved = noop,
 }: { staffId: number } & Partial<TabSaveProps>) {
+  const gymTz = useGymTimezone()
   const queryClient = useQueryClient()
 
   const { data: capabilities = [], isLoading: capsLoading } = useQuery({
@@ -649,7 +652,7 @@ export function ClassesTab({
   // rows without a rate draft show the saved rate.
   const [tickedDraft, setTickedDraft] = useState<Set<number> | null>(null)
   const [drafts, setDrafts] = useState<Record<number, RateDraft>>({})
-  const [startsFrom, setStartsFrom] = useState(() => format(new Date(), 'yyyy-MM-dd'))
+  const [startsFrom, setStartsFrom] = useState(() => format(gymNow(gymTz), 'yyyy-MM-dd'))
 
   const savedTicks = new Set(capabilities.map((c) => c.class_type))
   const capabilityByClassType = new Map(capabilities.map((c) => [c.class_type, c.id]))

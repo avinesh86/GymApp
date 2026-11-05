@@ -32,6 +32,8 @@ import { Card } from '../../../components/ui/Card'
 import { ClearFiltersButton } from '../../../components/ui/ClearFiltersButton'
 import { ReportClassFilter } from '../ReportClassFilter'
 import { UnrecordedSection } from '../UnrecordedSection'
+import { useGymTimezone } from '../../../hooks/useGymTimezone'
+import { gymNow } from '../../../lib/gymTime'
 
 type PeriodKey = 'this_month' | 'last_month' | 'custom'
 
@@ -115,6 +117,7 @@ function exportCsv(rows: Array<{
 }
 
 export function AttendanceTab() {
+  const gymTz = useGymTimezone()
   const [period, setPeriod] = useState<PeriodKey>('this_month')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
@@ -124,7 +127,7 @@ export function AttendanceTab() {
   const [calendarWeekOffset, setCalendarWeekOffset] = useState<number | null>(null)
   const [logPage, setLogPage] = useState(1)
 
-  const now = new Date()
+  const now = gymNow(gymTz)
 
   const dateRange = (() => {
     if (period === 'this_month') {

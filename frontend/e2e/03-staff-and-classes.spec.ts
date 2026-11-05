@@ -111,9 +111,14 @@ test.describe.serial('staff and the timetable', () => {
 
     // Tomorrow: upcoming, so it is a candidate for cover rather than for
     // attendance.
+    // The local calendar date: toISOString() is UTC's, a day behind for the
+    // first half of an Auckland day.
     const tomorrow = new Date()
     tomorrow.setDate(tomorrow.getDate() + 1)
-    await page.getByLabel('Date').fill(tomorrow.toISOString().slice(0, 10))
+    const pad = (n: number) => String(n).padStart(2, '0')
+    await page.getByLabel('Date').fill(
+      `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`,
+    )
 
     await page.getByRole('button', { name: /^Add Class$/ }).last().click()
 

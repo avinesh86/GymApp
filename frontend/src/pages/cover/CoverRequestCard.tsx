@@ -4,6 +4,7 @@ import { format, isPast, parseISO } from 'date-fns'
 import type { CoverRequest } from '../../types'
 import { Badge } from '../../components/ui/Badge'
 import { Button } from '../../components/ui/Button'
+import { parseDateOnly } from '../../lib/gymTime'
 
 const URGENCY_CONFIG = {
   low:      { label: 'Low Urgency',    variant: 'yellow' as const },
@@ -51,7 +52,7 @@ export function CoverRequestCard({ request, onViewDetails, onApprove, onDeny, on
         <div>
           <p className="font-semibold text-gray-900">{event.class_type_name}</p>
           <p className="text-xs text-gray-400 mt-0.5">
-            {format(new Date(event.date), 'EEE, d MMM yyyy')}
+            {format(parseDateOnly(event.date), 'EEE, d MMM yyyy')}
           </p>
         </div>
         <div className="flex items-center gap-1.5 flex-wrap justify-end">

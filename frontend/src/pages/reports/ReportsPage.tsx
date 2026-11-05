@@ -16,6 +16,8 @@ import { FileDown } from 'lucide-react'
 
 /** Roles the export API lets in (IsGymManager). */
 const CAN_EXPORT = ['owner', 'admin', 'gym_manager']
+import { useGymTimezone } from '../../hooks/useGymTimezone'
+import { gymNow } from '../../lib/gymTime'
 
 type TabKey = 'attendance' | 'classes' | 'instructors' | 'financial' | 'viability' | 'ai_insights'
 
@@ -38,11 +40,12 @@ function SummaryCard({ label, value }: { label: string; value: string | number }
 }
 
 export function ReportsPage() {
+  const gymTz = useGymTimezone()
   const [activeTab, setActiveTab] = useState<TabKey>('attendance')
   const [exportOpen, setExportOpen] = useState(false)
   const { user } = useAuth()
 
-  const now = new Date()
+  const now = gymNow(gymTz)
   const thisMonthFrom = format(startOfMonth(now), 'yyyy-MM-dd')
   const thisMonthTo = format(endOfMonth(now), 'yyyy-MM-dd')
 

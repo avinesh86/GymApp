@@ -60,6 +60,27 @@ describe('FinancialTab — filter by instructor + date (F9)', () => {
     )
   })
 
+  it('shows an error with a retry instead of spinning when the report fails', async () => {
+    vi.mocked(getPayrollReport).mockRejectedValue(new Error('500'))
+    renderTab()
+
+    expect(await screen.findByText(/couldn't load the payroll report/i)).toBeInTheDocument()
+
+    vi.mocked(getPayrollReport).mockResolvedValue(REPORT as never)
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(await screen.findByText('$800.0')).toBeInTheDocument()
+  })
+
+  it('asks for dates when Custom has none yet', async () => {
+    renderTab()
+    await screen.findByLabelText('Filter by instructor')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Custom' }))
+
+    expect(screen.getByText(/pick a from and to date/i)).toBeInTheDocument()
+  })
+
   it('exposes a custom date range', async () => {
     renderTab()
     await screen.findByLabelText('Filter by instructor')

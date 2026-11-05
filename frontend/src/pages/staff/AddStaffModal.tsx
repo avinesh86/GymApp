@@ -9,6 +9,8 @@ import { Modal } from '../../components/ui/Modal'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Select } from '../../components/ui/Select'
+import { useGymTimezone } from '../../hooks/useGymTimezone'
+import { gymToday } from '../../lib/gymTime'
 
 const ROLE_OPTIONS = [
   { value: 'instructor',        label: 'Instructor' },
@@ -25,6 +27,7 @@ interface AddStaffModalProps {
 }
 
 export function AddStaffModal({ isOpen, onClose }: AddStaffModalProps) {
+  const gymTz = useGymTimezone()
   const queryClient = useQueryClient()
   const { user } = useAuth()
   // Adding a staff member creates their login with this role. Owners, gym
@@ -64,7 +67,7 @@ export function AddStaffModal({ isOpen, onClose }: AddStaffModalProps) {
           await createPayRate(created.id, {
             amount: payRate,
             rate_type: 'per_class',
-            effective_from: new Date().toISOString().split('T')[0],
+            effective_from: gymToday(gymTz),
           })
         } catch {
           // Non-fatal — staff is created, rate can be added later

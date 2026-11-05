@@ -73,10 +73,10 @@ class StaffQualification(TenantAwareModel):
 
     @property
     def is_expired(self):
-        from django.utils import timezone
+        from apps.core.timezones import local_today
         if self.expires_at is None:
             return False
-        return self.expires_at < timezone.now().date()
+        return self.expires_at < local_today(self.tenant)
 
 
 class StaffClassTypeCapability(TenantAwareModel):
