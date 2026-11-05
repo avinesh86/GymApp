@@ -3,7 +3,7 @@ from datetime import date, timedelta
 
 from celery import shared_task
 
-from apps.core.timezones import format_date_range
+from apps.core.timezones import format_date_range, local_today
 
 logger = logging.getLogger(__name__)
 
@@ -18,13 +18,15 @@ def auto_generate_invoices():
     from apps.tenants.models import Tenant, TenantSettings
     from .services import generate_invoice_for_instructor
 
-    today = date.today()
-
     for tenant in Tenant.objects.filter(is_active=True):
         try:
             settings = TenantSettings.objects.get(tenant=tenant)
         except TenantSettings.DoesNotExist:
             continue
+
+        # The gym's today, not the server's (UTC): early on the 1st in
+        # Auckland it is still the previous month in UTC.
+        today = local_today(tenant)
 
         anchor = getattr(settings, "pay_period_anchor_date", None) or date(2024, 1, 1)
         period_start, period_end = _calculate_period(today, settings.invoice_frequency, anchor)

@@ -116,6 +116,21 @@ class TimetableDisplayView(APIView):
         return Response({"tile_style": settings_obj.timetable_tile_style})
 
 
+class GymLocaleView(APIView):
+    """GET the gym's timezone — for everyone signed in to the gym.
+
+    The frontend shows every date and time, and works out "today" and "this
+    week", in this zone rather than the viewer's browser's.
+    """
+
+    permission_classes = [TenantPermission]
+
+    def get(self, request):
+        from apps.core.timezones import tenant_timezone
+
+        return Response({"timezone": tenant_timezone(request.tenant).key})
+
+
 class SiteViewSet(ModelViewSet):
     serializer_class = SiteSerializer
     permission_classes = [IsAdmin]
