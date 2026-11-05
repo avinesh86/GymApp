@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
-import { Plus } from 'lucide-react'
+import { History, Plus } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { createEquipment, deleteEquipment, listEquipment, updateEquipment } from '../../api/facilities'
 import { Button } from '../../components/ui/Button'
 import { Badge } from '../../components/ui/Badge'
@@ -12,6 +13,7 @@ import { Table } from '../../components/ui/Table'
 import { PageSpinner } from '../../components/ui/Spinner'
 import { useFacilitiesConfig } from '../../hooks/useFacilitiesConfig'
 import { CATEGORY_LABELS, EQUIPMENT_STATUS, options } from './labels'
+import { EquipmentQr } from './EquipmentQr'
 import type { Equipment } from '../../types'
 
 type Draft = Partial<Equipment>
@@ -73,13 +75,23 @@ export function EquipmentTab({ site }: { site: number | '' }) {
         </div>
       )}
 
-      <EquipmentModal draft={editing} onClose={() => setEditing(null)} />
+      <EquipmentModal draft={editing} onClose={() => setEditing(null)} onCreated={setEditing} />
     </div>
   )
 }
 
-function EquipmentModal({ draft, onClose }: { draft: Draft | null; onClose: () => void }) {
+function EquipmentModal({
+  draft,
+  onClose,
+  onCreated,
+}: {
+  draft: Draft | null
+  onClose: () => void
+  /** A new machine stays open after saving, now showing its QR label. */
+  onCreated: (equipment: Equipment) => void
+}) {
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   const { data: config } = useFacilitiesConfig()
   const [form, setForm] = useState<Draft>(EMPTY)
 
@@ -108,7 +120,12 @@ function EquipmentModal({ draft, onClose }: { draft: Draft | null; onClose: () =
 
   const save = useMutation({
     mutationFn: () => (isNew ? createEquipment(payload()) : updateEquipment(draft!.id!, payload())),
-    onSuccess: () => done(isNew ? 'Equipment added' : 'Equipment saved'),
+    onSuccess: (saved) => {
+      if (!isNew) return done('Equipment saved')
+      toast.success('Equipment added — its QR label is ready to print')
+      queryClient.invalidateQueries({ queryKey: ['facilities'] })
+      onCreated(saved)
+    },
     onError: () => toast.error('Could not save the equipment'),
   })
   const remove = useMutation({
@@ -141,6 +158,20 @@ function EquipmentModal({ draft, onClose }: { draft: Draft | null; onClose: () =
         </div>
       }
     >
+      {!isNew && draft?.id && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3 mb-4">
+          <EquipmentQr id={draft.id} name={form.name ?? ''} assetTag={form.asset_tag ?? ''} />
+          <Button
+            size="sm"
+            variant="secondary"
+            className="sm:ml-auto"
+            leftIcon={<History className="h-4 w-4" />}
+            onClick={() => navigate(`/equipment/${draft.id}`)}
+          >
+            Service history
+          </Button>
+        </div>
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Input label="Name" value={form.name ?? ''} onChange={(e) => set('name', e.target.value)} />
         <Select

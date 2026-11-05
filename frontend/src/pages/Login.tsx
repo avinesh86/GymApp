@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { login, isGymSelection, type Gym } from '../api/auth'
 import { useAuth } from '../hooks/useAuth'
@@ -15,8 +15,19 @@ function WaveIcon() {
   )
 }
 
+/** Where to go after signing in: the page they were sent here from, if it is
+ * one of ours (a same-site path, never another site). */
+export function afterLoginPath(state: unknown): string {
+  const from = (state as { from?: unknown } | null)?.from
+  if (typeof from === 'string' && from.startsWith('/') && !from.startsWith('//') && !from.startsWith('/login')) {
+    return from
+  }
+  return '/dashboard'
+}
+
 export function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { login: storeLogin } = useAuth()
 
   const [email, setEmail] = useState('')
@@ -37,7 +48,7 @@ export function LoginPage() {
         return
       }
       storeLogin({ access: response.access, refresh: response.refresh }, response.user)
-      navigate('/dashboard', { replace: true })
+      navigate(afterLoginPath(location.state), { replace: true })
     } catch {
       setError('Invalid email or password. Please try again.')
       toast.error('Login failed')

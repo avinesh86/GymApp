@@ -22,6 +22,7 @@ import { PageSpinner } from '../components/ui/Spinner'
 import { Badge } from '../components/ui/Badge'
 import type { TimetableEvent, CoverRequest, Invoice } from '../types'
 import { FacilitiesDashboardCard } from './facilities/FacilitiesDashboardCard'
+import { ChecksDueCard } from './facilities/ChecksDueCard'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -336,6 +337,7 @@ export function DashboardPage() {
         />
       </div>
 
+      <ChecksDueCard />
       <FacilitiesDashboardCard />
 
       {/* Two-column layout */}

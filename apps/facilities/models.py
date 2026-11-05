@@ -105,3 +105,122 @@ class FaultReport(TenantAwareModel):
     @property
     def is_open(self) -> bool:
         return self.status in self.OPEN_STATUSES
+
+
+# ─── Checklists ──────────────────────────────────────────────────────────────
+
+
+class ChecklistTemplate(TenantAwareModel):
+    """A repeating check, e.g. "Opening check, daily by 6am"."""
+
+    class Category(models.TextChoices):
+        OPENING = "opening", "Opening"
+        CLOSING = "closing", "Closing"
+        CLEANING = "cleaning", "Cleaning"
+        SAFETY = "safety", "Safety"
+        POOL = "pool", "Pool / spa"
+        EQUIPMENT = "equipment", "Equipment check"
+        OTHER = "other", "Other"
+
+    class Frequency(models.TextChoices):
+        DAILY = "daily", "Daily"
+        WEEKLY = "weekly", "Weekly"
+        MONTHLY = "monthly", "Monthly"
+        QUARTERLY = "quarterly", "Quarterly"
+        YEARLY = "yearly", "Yearly"
+        EVERY_N_DAYS = "every_n_days", "Every few days"
+
+    site = models.ForeignKey(
+        "tenants.Site", null=True, blank=True, on_delete=models.SET_NULL, related_name="checklists"
+    )
+    name = models.CharField(max_length=200)
+    category = models.CharField(max_length=20, choices=Category.choices, default=Category.OTHER)
+    description = models.TextField(blank=True)
+    # A check on one machine — its results appear in that machine's history.
+    equipment = models.ForeignKey(
+        Equipment, null=True, blank=True, on_delete=models.SET_NULL, related_name="checklists"
+    )
+    frequency = models.CharField(max_length=20, choices=Frequency.choices, default=Frequency.DAILY)
+    # Weekly: which days, 0 = Monday … 6 = Sunday.
+    weekdays = models.JSONField(default=list, blank=True)
+    # Every few days: how many.
+    interval_days = models.PositiveSmallIntegerField(default=2)
+    # The first due day. Monthly, quarterly and yearly checks fall on this
+    # day of the month (or the month's last day when it is shorter).
+    start_date = models.DateField()
+    # Gym-local time it should be done by.
+    due_time = models.TimeField()
+    # Roles (from the gym's checklist roles) that do it; empty = all of them.
+    assigned_roles = models.JSONField(default=list, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "facilities_checklist_template"
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class ChecklistItem(models.Model):
+    template = models.ForeignKey(ChecklistTemplate, on_delete=models.CASCADE, related_name="items")
+    order = models.PositiveSmallIntegerField(default=0)
+    text = models.CharField(max_length=300)
+    # The machine this line is about, so a fail raises a fault against it.
+    equipment = models.ForeignKey(
+        Equipment, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+
+    class Meta:
+        db_table = "facilities_checklist_item"
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        return self.text
+
+
+class ChecklistRun(TenantAwareModel):
+    """One due occurrence of a checklist, and how it was done."""
+
+    template = models.ForeignKey(ChecklistTemplate, on_delete=models.CASCADE, related_name="runs")
+    site = models.ForeignKey(
+        "tenants.Site", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    due_date = models.DateField(db_index=True)  # gym-local day
+    due_at = models.DateTimeField(db_index=True)  # UTC
+    completed_at = models.DateTimeField(null=True, blank=True)
+    completed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    notes = models.TextField(blank=True)
+    # Set once the overdue alert has gone, so it goes once.
+    overdue_alerted_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "facilities_checklist_run"
+        ordering = ["-due_at"]
+        constraints = [
+            models.UniqueConstraint(fields=["template", "due_date"], name="one_run_per_checklist_per_day")
+        ]
+
+    def __str__(self):
+        return f"{self.template} — {self.due_date}"
+
+
+class ChecklistAnswer(models.Model):
+    run = models.ForeignKey(ChecklistRun, on_delete=models.CASCADE, related_name="answers")
+    item = models.ForeignKey(ChecklistItem, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    # Kept as it was asked, in case the template changes later.
+    item_text = models.CharField(max_length=300)
+    equipment = models.ForeignKey(
+        Equipment, null=True, blank=True, on_delete=models.SET_NULL, related_name="checklist_answers"
+    )
+    passed = models.BooleanField()
+    note = models.CharField(max_length=500, blank=True)
+    photo = models.ImageField(upload_to="facilities/checklists/", null=True, blank=True)
+    # The fault raised when this item failed.
+    fault = models.ForeignKey(FaultReport, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+
+    class Meta:
+        db_table = "facilities_checklist_answer"
+        ordering = ["id"]

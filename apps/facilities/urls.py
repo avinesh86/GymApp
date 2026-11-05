@@ -2,6 +2,10 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
+    ChecklistAnswerPhotoView,
+    ChecklistRunViewSet,
+    ChecklistTemplateViewSet,
+    EquipmentScanView,
     EquipmentViewSet,
     FacilitiesConfigView,
     FacilitiesSummaryView,
@@ -13,9 +17,17 @@ router = DefaultRouter()
 router.register("equipment", EquipmentViewSet, basename="facilities-equipment")
 router.register("faults", FaultReportViewSet, basename="facilities-faults")
 router.register("fault-board", FaultBoardViewSet, basename="facilities-fault-board")
+router.register("checklists", ChecklistTemplateViewSet, basename="facilities-checklists")
+router.register("checklist-runs", ChecklistRunViewSet, basename="facilities-checklist-runs")
 
 urlpatterns = [
     path("config/", FacilitiesConfigView.as_view(), name="facilities-config"),
     path("summary/", FacilitiesSummaryView.as_view(), name="facilities-summary"),
+    path("equipment/<int:pk>/scan/", EquipmentScanView.as_view(), name="facilities-equipment-scan"),
+    path(
+        "checklist-answers/<int:pk>/photo/",
+        ChecklistAnswerPhotoView.as_view(),
+        name="facilities-checklist-photo",
+    ),
     path("", include(router.urls)),
 ]

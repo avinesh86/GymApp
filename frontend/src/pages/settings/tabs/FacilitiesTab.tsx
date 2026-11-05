@@ -56,6 +56,14 @@ function Switch({
   )
 }
 
+const HOURS = Array.from({ length: 25 }, (_, h) => h)
+
+function hourLabel(h: number) {
+  if (h === 0 || h === 24) return 'midnight'
+  if (h === 12) return 'noon'
+  return String(h % 12) + (h < 12 ? 'am' : 'pm')
+}
+
 export function FacilitiesTab() {
   const queryClient = useQueryClient()
   const { data: settings } = useQuery({ queryKey: ['tenant', 'settings'], queryFn: getTenantSettings })
@@ -65,6 +73,10 @@ export function FacilitiesTab() {
   const [reporting, setReporting] = useState(true)
   const [alertRoles, setAlertRoles] = useState<UserRole[]>([])
   const [alertEmail, setAlertEmail] = useState(false)
+  const [checklists, setChecklists] = useState(true)
+  const [checklistRoles, setChecklistRoles] = useState<UserRole[]>([])
+  const [alertStart, setAlertStart] = useState(9)
+  const [alertEnd, setAlertEnd] = useState(17)
 
   useEffect(() => {
     if (!settings) return
@@ -73,6 +85,10 @@ export function FacilitiesTab() {
     setReporting(settings.fault_reporting_enabled ?? true)
     setAlertRoles(settings.facilities_alert_roles ?? ['owner', 'admin', 'gym_manager'])
     setAlertEmail(settings.facilities_alert_email ?? false)
+    setChecklists(settings.facilities_checklists_enabled ?? true)
+    setChecklistRoles(settings.checklist_roles ?? ['owner', 'admin', 'gym_manager', 'team_leader'])
+    setAlertStart(settings.facilities_alert_start_hour ?? 9)
+    setAlertEnd(settings.facilities_alert_end_hour ?? 17)
   }, [settings])
 
   const { mutate: save, isPending } = useMutation({
@@ -83,6 +99,10 @@ export function FacilitiesTab() {
         fault_reporting_enabled: reporting,
         facilities_alert_roles: alertRoles,
         facilities_alert_email: alertEmail,
+        facilities_checklists_enabled: checklists,
+        checklist_roles: checklistRoles,
+        facilities_alert_start_hour: alertStart,
+        facilities_alert_end_hour: alertEnd,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenant', 'settings'] })
@@ -94,6 +114,9 @@ export function FacilitiesTab() {
 
   const toggleRole = (role: UserRole) =>
     setAlertRoles((roles) => (roles.includes(role) ? roles.filter((r) => r !== role) : [...roles, role]))
+  const toggleChecklistRole = (role: UserRole) =>
+    setChecklistRoles((roles) => (roles.includes(role) ? roles.filter((r) => r !== role) : [...roles, role]))
+  const hoursValid = alertStart < alertEnd
 
   return (
     <div className="max-w-xl flex flex-col gap-6">
@@ -125,7 +148,36 @@ export function FacilitiesTab() {
           disabled={!maintenance}
           onChange={setReporting}
         />
+        <Switch
+          label="Checklists"
+          description="Scheduled checks (opening, cleaning, safety) done by the roles below."
+          checked={checklists}
+          onChange={setChecklists}
+        />
       </Card>
+
+      {checklists && (
+        <Card>
+          <h3 className="text-sm font-semibold text-gray-900 mb-1">Who does checklists</h3>
+          <p className="text-xs text-gray-500 mb-3">
+            These roles see checks due on their dashboard and can complete them. Instructors and PTs never see checklists.
+          </p>
+          <fieldset className="flex flex-wrap gap-x-5 gap-y-2">
+            <legend className="sr-only">Roles that do checklists</legend>
+            {ALERT_ROLES.map(({ role, label }) => (
+              <label key={role} className="flex items-center gap-2 text-sm text-gray-800">
+                <input
+                  type="checkbox"
+                  className="accent-cyan-500"
+                  checked={checklistRoles.includes(role)}
+                  onChange={() => toggleChecklistRole(role)}
+                />
+                {label}
+              </label>
+            ))}
+          </fieldset>
+        </Card>
+      )}
 
       <Card>
         <h3 className="text-sm font-semibold text-gray-900 mb-1">Who hears about new faults</h3>
@@ -152,9 +204,46 @@ export function FacilitiesTab() {
           checked={alertEmail}
           onChange={setAlertEmail}
         />
+        {checklists && (
+          <div className="pt-3 border-t border-gray-50">
+            <p className="text-sm font-medium text-gray-900">Overdue check alerts</p>
+            <p className="text-xs text-gray-400 mt-0.5 mb-2">
+              Sent only between these hours (gym time). A check that goes overdue overnight is alerted when the window opens.
+            </p>
+            <div className="flex items-center gap-2 text-sm">
+              <label className="flex items-center gap-2">
+                From
+                <select
+                  aria-label="Alerts from"
+                  value={alertStart}
+                  onChange={(e) => setAlertStart(Number(e.target.value))}
+                  className="rounded-lg border border-gray-300 px-2 py-1.5 bg-white"
+                >
+                  {HOURS.slice(0, 24).map((h) => (
+                    <option key={h} value={h}>{hourLabel(h)}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex items-center gap-2">
+                to
+                <select
+                  aria-label="Alerts until"
+                  value={alertEnd}
+                  onChange={(e) => setAlertEnd(Number(e.target.value))}
+                  className="rounded-lg border border-gray-300 px-2 py-1.5 bg-white"
+                >
+                  {HOURS.slice(1).map((h) => (
+                    <option key={h} value={h}>{hourLabel(h)}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            {!hoursValid && <p className="text-xs text-red-600 mt-1">The start has to be before the end.</p>}
+          </div>
+        )}
       </Card>
 
-      <Button onClick={() => save()} isLoading={isPending} className="w-fit">
+      <Button onClick={() => save()} isLoading={isPending} disabled={!hoursValid} className="w-fit">
         Save Facilities Settings
       </Button>
     </div>
