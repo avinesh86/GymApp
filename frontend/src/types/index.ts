@@ -67,6 +67,11 @@ export interface TenantSettings {
   week_start_day?: number
   default_timetable_view?: 'week' | 'list'
   timetable_tile_style?: TimetableTileStyle
+  facilities_equipment_enabled?: boolean
+  facilities_maintenance_enabled?: boolean
+  fault_reporting_enabled?: boolean
+  facilities_alert_roles?: UserRole[]
+  facilities_alert_email?: boolean
 }
 
 /** How strongly a class's own colour shows on its timetable tile. */
@@ -609,4 +614,114 @@ export interface SetupStatus {
   has_class_type: boolean
   trial_ends_at: string | null
   subscription_status: string
+}
+
+// ─── Facilities ──────────────────────────────────────────────────────────────
+
+export interface FacilitiesConfig {
+  equipment_enabled: boolean
+  maintenance_enabled: boolean
+  /** Already false when maintenance tracking is off. */
+  fault_reporting_enabled: boolean
+  can_manage: boolean
+  is_alert_recipient: boolean
+  sites: { id: number; name: string }[]
+}
+
+export type EquipmentCategory =
+  | 'cardio' | 'strength' | 'free_weights' | 'functional' | 'studio' | 'pool' | 'building' | 'other'
+
+export type EquipmentStatus = 'in_service' | 'out_of_order' | 'retired'
+
+export interface Equipment {
+  id: number
+  site: number | null
+  site_name: string
+  name: string
+  category: EquipmentCategory
+  location: string
+  manufacturer: string
+  model_number: string
+  serial_number: string
+  asset_tag: string
+  supplier: string
+  purchase_date: string | null
+  purchase_cost: string | null
+  warranty_expires: string | null
+  status: EquipmentStatus
+  notes: string
+  photo: string | null
+  open_fault_count: number
+  created_at: string
+  updated_at: string
+}
+
+export type FaultSeverity = 'low' | 'medium' | 'out_of_use'
+export type FaultStatus = 'reported' | 'in_progress' | 'waiting_parts' | 'resolved'
+
+/** The full record, for the facilities team. */
+export interface FaultReport {
+  id: number
+  site: number | null
+  site_name: string
+  equipment: number | null
+  equipment_name: string
+  title: string
+  description: string
+  location: string
+  severity: FaultSeverity
+  status: FaultStatus
+  status_note: string
+  internal_notes: string
+  assigned_to: string
+  repair_cost: string | null
+  reported_by_name: string
+  resolved_at: string | null
+  resolved_by_name: string
+  created_at: string
+  updated_at: string
+}
+
+/** What every staff member sees on the fault board. */
+export interface FaultBoardItem {
+  id: number
+  site: number | null
+  site_name: string
+  equipment: number | null
+  equipment_name: string
+  title: string
+  description: string
+  location: string
+  severity: FaultSeverity
+  status: FaultStatus
+  status_note: string
+  /** Who logged it — the signed-in user at the time. */
+  reported_by_name: string
+  resolved_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface EquipmentOption {
+  id: number
+  name: string
+  location: string
+  site: number | null
+  site_name: string
+  status: EquipmentStatus
+}
+
+export interface FacilitiesSummary {
+  open_faults: number
+  out_of_use: number
+  latest: {
+    id: number
+    title: string
+    equipment_name: string
+    location: string
+    site_name: string
+    severity: FaultSeverity
+    status: FaultStatus
+    created_at: string
+  }[]
 }

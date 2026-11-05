@@ -56,6 +56,11 @@ class TenantSettingsSerializer(serializers.ModelSerializer):
             "week_start_day",
             "default_timetable_view",
             "timetable_tile_style",
+            "facilities_equipment_enabled",
+            "facilities_maintenance_enabled",
+            "fault_reporting_enabled",
+            "facilities_alert_roles",
+            "facilities_alert_email",
             "notification_from_email",
             "notification_from_name",
             "notification_email_password",
@@ -66,6 +71,18 @@ class TenantSettingsSerializer(serializers.ModelSerializer):
 
     def get_notification_email_password_set(self, obj: TenantSettings) -> bool:
         return bool(obj._notification_email_password)
+
+    def validate_facilities_alert_roles(self, value):
+        from apps.users.constants import UserRole
+
+        if not isinstance(value, list) or any(r not in UserRole._VALID for r in value):
+            raise serializers.ValidationError("Choose from the existing staff roles.")
+        # Instructors and class counters never see the Facilities page, so an
+        # alert pointing them at it would lead nowhere.
+        allowed = {UserRole.OWNER, UserRole.ADMIN, UserRole.GYM_MANAGER, UserRole.TEAM_LEADER, UserRole.PAYROLL}
+        if any(r not in allowed for r in value):
+            raise serializers.ValidationError("Only roles that can open Facilities can receive its alerts.")
+        return list(dict.fromkeys(value))
 
     def get_email_sending_managed(self, obj: TenantSettings) -> bool:
         """Whether the server sends mail on the gym's behalf.

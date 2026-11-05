@@ -14,6 +14,8 @@ class Notification(TenantAwareModel):
         CLASS_CANCELLED = "class_cancelled", "Class Cancelled"
         CLASS_REMINDER = "class_reminder", "Class Reminder"
         SYSTEM = "system", "System"
+        # In the app (and email when the gym turns it on) — never WhatsApp.
+        FACILITIES = "facilities", "Facilities"
 
     recipient = models.ForeignKey(
         "users.User",

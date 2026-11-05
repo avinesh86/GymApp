@@ -21,6 +21,8 @@ import { AttendancePage } from './pages/attendance/AttendancePage'
 import { ReportsPage } from './pages/reports/ReportsPage'
 import { CSVImportPage } from './pages/imports/CSVImportPage'
 import { SettingsPage } from './pages/settings/SettingsPage'
+import { FacilitiesPage } from './pages/facilities/FacilitiesPage'
+import { FaultBoardPage } from './pages/facilities/FaultBoardPage'
 import { MySchedulePage } from './pages/schedule/MySchedulePage'
 import { InstructorCalendarPage } from './pages/schedule/InstructorCalendarPage'
 import { ProfilePage } from './pages/profile/ProfilePage'
@@ -115,7 +117,7 @@ function PermissionRoute({
   permission,
   children,
 }: {
-  permission: 'dashboard' | 'timetable' | 'staff' | 'cover' | 'invoices' | 'attendance' | 'reports' | 'imports' | 'settings'
+  permission: 'dashboard' | 'timetable' | 'staff' | 'cover' | 'invoices' | 'attendance' | 'reports' | 'imports' | 'settings' | 'facilities'
   children: React.ReactNode
 }) {
   const { can } = usePermission()
@@ -253,6 +255,17 @@ export default function App() {
                 </PermissionRoute>
               }
             />
+
+            <Route
+              path="/facilities"
+              element={
+                <PermissionRoute permission="facilities">
+                  <FacilitiesPage />
+                </PermissionRoute>
+              }
+            />
+
+            <Route path="/faults" element={<FaultBoardPage />} />
 
             <Route
               path="/settings"

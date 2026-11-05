@@ -22,6 +22,7 @@ const FEATURES: FeatureRow[] = [
   { permission: 'attendance',    label: 'Attendance Entry' },
   { permission: 'reports',       label: 'Reports' },
   { permission: 'imports',       label: 'CSV Import' },
+  { permission: 'facilities',    label: 'Facilities' },
   { permission: 'settings',      label: 'Settings' },
 ]
 

@@ -11,6 +11,7 @@ type Permission =
   | 'reports'
   | 'imports'
   | 'settings'
+  | 'facilities'
 
 interface RoleGuardProps {
   permission: Permission

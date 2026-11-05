@@ -38,6 +38,7 @@ test.describe.serial('signing in and getting around', () => {
     ['Attendance', 'Attendance Entry'],
     ['Reports', 'Reports'],
     ['CSV Import', 'CSV Import'],
+    ['Facilities', 'Facilities'],
     ['Settings', 'Settings'],
   ]
 
