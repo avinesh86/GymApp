@@ -213,6 +213,13 @@ echo "▸ Applying migrations..."
 MIGRATIONS_APPLIED="yes"
 $COMPOSE run --rm -T web python manage.py migrate --noinput
 
+# A migration can be recorded as applied without its SQL having run (faked,
+# or a database copied from another server). That passes every check above
+# and then 500s on the first query, so compare the models with the live tables.
+echo ""
+echo "▸ Checking the database schema matches the models..."
+$COMPOSE run --rm -T web python manage.py check_db_schema
+
 # ─── 6. Restart services ─────────────────────────────────────────────────────
 echo ""
 echo "▸ Restarting backend services..."
