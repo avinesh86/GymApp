@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import { getTenantSettings, updateTenantSettings } from '../../../api/settings'
 import { Button } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
+import { PageSpinner } from '../../../components/ui/Spinner'
 import type { UserRole } from '../../../types'
 
 const ALERT_ROLES: { role: UserRole; label: string }[] = [
@@ -117,6 +118,10 @@ export function FacilitiesTab() {
   const toggleChecklistRole = (role: UserRole) =>
     setChecklistRoles((roles) => (roles.includes(role) ? roles.filter((r) => r !== role) : [...roles, role]))
   const hoursValid = alertStart < alertEnd
+
+  // Until the gym's settings arrive the switches hold placeholder defaults;
+  // showing them would let Save write those over the real settings.
+  if (!settings) return <PageSpinner />
 
   return (
     <div className="max-w-xl flex flex-col gap-6">
