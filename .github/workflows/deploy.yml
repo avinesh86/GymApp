@@ -32,9 +32,13 @@ jobs:
     name: Deploy to production
     runs-on: ubuntu-latest
     # workflow_run fires on failure too — only deploy the successful ones.
+    # And only CI runs for a push to main: a pull request whose head branch is
+    # main (the main → test sync PR) runs CI on the same commit with
+    # head_branch "main" as well, which used to deploy (and release) twice.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
 
     environment:
       name: production
