@@ -33,3 +33,22 @@ class MaintenanceEnabled(_FeatureOn):
 class FaultReportingEnabled(_FeatureOn):
     flag = "fault_reporting_enabled"
     message = "Fault reporting is turned off in Settings."
+
+
+class ChecklistsEnabled(_FeatureOn):
+    flag = "checklists_enabled"
+    message = "Checklists are turned off in Settings."
+
+
+class CanManageChecklists(TenantPermission):
+    """Owner, admin and gym manager set checklists up; others with
+    Facilities access can see them."""
+
+    message = "Only the owner, admins and gym managers can change checklists."
+
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return request.user.role in FACILITIES_ROLES
+        return request.user.role in ("owner", "admin", "gym_manager")

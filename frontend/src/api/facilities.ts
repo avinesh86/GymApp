@@ -1,6 +1,10 @@
 import apiClient from './client'
 import type {
+  ChecklistRun,
+  ChecklistTemplate,
   Equipment,
+  EquipmentHistory,
+  EquipmentScan,
   EquipmentOption,
   FacilitiesConfig,
   FacilitiesSummary,
@@ -105,4 +109,84 @@ export async function reportFault(data: NewFault): Promise<FaultBoardItem> {
 export async function listReportableEquipment(): Promise<EquipmentOption[]> {
   const response = await apiClient.get<EquipmentOption[]>('facilities/fault-board/equipment/')
   return response.data
+}
+
+// ─── Equipment QR scan and history ────────────────────────────────────────────
+
+export async function scanEquipment(id: number): Promise<EquipmentScan> {
+  const response = await apiClient.get<EquipmentScan>(`facilities/equipment/${id}/scan/`)
+  return response.data
+}
+
+export async function getEquipmentHistory(id: number): Promise<EquipmentHistory> {
+  const response = await apiClient.get<EquipmentHistory>(`facilities/equipment/${id}/history/`)
+  return response.data
+}
+
+// ─── Checklists ───────────────────────────────────────────────────────────────
+
+export async function listChecklists(filters: SiteFilter = {}): Promise<ChecklistTemplate[]> {
+  const response = await apiClient.get<ChecklistTemplate[] | PaginatedResponse<ChecklistTemplate>>(
+    'facilities/checklists/',
+    { params: { page_size: 200, ...siteParams(filters) } }
+  )
+  return unwrapList(response.data)
+}
+
+export type ChecklistInput = Omit<ChecklistTemplate, 'id' | 'site_name' | 'equipment_name'>
+
+export async function createChecklist(data: ChecklistInput): Promise<ChecklistTemplate> {
+  const response = await apiClient.post<ChecklistTemplate>('facilities/checklists/', data)
+  return response.data
+}
+
+export async function updateChecklist(id: number, data: Partial<ChecklistInput>): Promise<ChecklistTemplate> {
+  const response = await apiClient.patch<ChecklistTemplate>(`facilities/checklists/${id}/`, data)
+  return response.data
+}
+
+export async function deleteChecklist(id: number): Promise<void> {
+  await apiClient.delete(`facilities/checklists/${id}/`)
+}
+
+/** Checks due now for the signed-in person: today's and overdue ones. */
+export async function listMyChecks(): Promise<ChecklistRun[]> {
+  const response = await apiClient.get<ChecklistRun[]>('facilities/checklist-runs/mine/')
+  return response.data
+}
+
+export async function listChecklistRuns(
+  filters: SiteFilter & { state?: 'open' | 'overdue' | 'done'; template?: number; from?: string; to?: string } = {}
+): Promise<ChecklistRun[]> {
+  const response = await apiClient.get<ChecklistRun[] | PaginatedResponse<ChecklistRun>>(
+    'facilities/checklist-runs/',
+    { params: { page_size: 100, ...siteParams(filters) } }
+  )
+  return unwrapList(response.data)
+}
+
+export interface CheckAnswerInput {
+  item: number
+  passed: boolean
+  note?: string
+}
+
+export async function completeChecklistRun(
+  id: number,
+  answers: CheckAnswerInput[],
+  notes = ''
+): Promise<ChecklistRun> {
+  const response = await apiClient.post<ChecklistRun>(`facilities/checklist-runs/${id}/complete/`, {
+    answers,
+    notes,
+  })
+  return response.data
+}
+
+export async function uploadCheckPhoto(answerId: number, file: File): Promise<void> {
+  const body = new FormData()
+  body.append('photo', file)
+  await apiClient.post(`facilities/checklist-answers/${answerId}/photo/`, body, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
 }

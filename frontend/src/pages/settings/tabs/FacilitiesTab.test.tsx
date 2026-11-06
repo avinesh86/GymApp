@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { FacilitiesTab } from './FacilitiesTab'
@@ -20,6 +20,9 @@ function renderTab() {
   )
 }
 
+const alerted = () => within(screen.getByRole('group', { name: 'Roles alerted about new faults' }))
+const doers = () => within(screen.getByRole('group', { name: 'Roles that do checklists' }))
+
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(getTenantSettings).mockResolvedValue({
@@ -28,6 +31,10 @@ beforeEach(() => {
     fault_reporting_enabled: true,
     facilities_alert_roles: ['owner', 'admin', 'gym_manager'],
     facilities_alert_email: false,
+    facilities_checklists_enabled: true,
+    checklist_roles: ['owner', 'admin', 'gym_manager', 'team_leader'],
+    facilities_alert_start_hour: 9,
+    facilities_alert_end_hour: 17,
   } as never)
   vi.mocked(updateTenantSettings).mockResolvedValue({} as never)
 })
@@ -35,8 +42,8 @@ beforeEach(() => {
 describe('Settings → Facilities', () => {
   it('shows the saved switches and alert roles', async () => {
     renderTab()
-    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Gym Manager' })).toBeChecked())
-    expect(screen.getByRole('checkbox', { name: 'Team Leader' })).not.toBeChecked()
+    await waitFor(() => expect(alerted().getByRole('checkbox', { name: 'Gym Manager' })).toBeChecked())
+    expect(alerted().getByRole('checkbox', { name: 'Team Leader' })).not.toBeChecked()
     expect(screen.getByRole('switch', { name: 'Report a fault button' })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByRole('switch', { name: 'Also send alerts by email' })).toHaveAttribute('aria-checked', 'false')
     expect(screen.getByText(/never sent to WhatsApp/)).toBeInTheDocument()
@@ -54,11 +61,11 @@ describe('Settings → Facilities', () => {
 
   it('saves the switches, roles and email choice', async () => {
     renderTab()
-    await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Owner' })).toBeChecked())
+    await waitFor(() => expect(alerted().getByRole('checkbox', { name: 'Owner' })).toBeChecked())
 
     await userEvent.click(screen.getByRole('switch', { name: 'Report a fault button' }))
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Admin' }))
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Team Leader' }))
+    await userEvent.click(alerted().getByRole('checkbox', { name: 'Admin' }))
+    await userEvent.click(alerted().getByRole('checkbox', { name: 'Team Leader' }))
     await userEvent.click(screen.getByRole('switch', { name: 'Also send alerts by email' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save Facilities Settings' }))
 
@@ -69,7 +76,41 @@ describe('Settings → Facilities', () => {
         fault_reporting_enabled: false,
         facilities_alert_roles: ['owner', 'gym_manager', 'team_leader'],
         facilities_alert_email: true,
+        facilities_checklists_enabled: true,
+        checklist_roles: ['owner', 'admin', 'gym_manager', 'team_leader'],
+        facilities_alert_start_hour: 9,
+        facilities_alert_end_hour: 17,
       }),
     )
+  })
+
+  it('checklist roles and alert hours are saved', async () => {
+    renderTab()
+    await waitFor(() => expect(doers().getByRole('checkbox', { name: 'Team Leader' })).toBeChecked())
+    expect(doers().getByRole('checkbox', { name: 'Payroll' })).not.toBeChecked()
+    expect(screen.getByText(/Instructors and PTs never see checklists/)).toBeInTheDocument()
+
+    await userEvent.click(doers().getByRole('checkbox', { name: 'Payroll' }))
+    await userEvent.selectOptions(screen.getByLabelText('Alerts from'), '8')
+    await userEvent.selectOptions(screen.getByLabelText('Alerts until'), '18')
+    await userEvent.click(screen.getByRole('button', { name: 'Save Facilities Settings' }))
+
+    await waitFor(() =>
+      expect(updateTenantSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          checklist_roles: ['owner', 'admin', 'gym_manager', 'team_leader', 'payroll'],
+          facilities_alert_start_hour: 8,
+          facilities_alert_end_hour: 18,
+        }),
+      ),
+    )
+  })
+
+  it('will not save alert hours that end before they start', async () => {
+    renderTab()
+    await waitFor(() => expect(screen.getByLabelText('Alerts from')).toHaveValue('9'))
+    await userEvent.selectOptions(screen.getByLabelText('Alerts from'), '18')
+    expect(screen.getByText('The start has to be before the end.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save Facilities Settings' })).toBeDisabled()
   })
 })
