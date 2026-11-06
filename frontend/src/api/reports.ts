@@ -1,4 +1,4 @@
-import apiClient from './client'
+import apiClient, { LONG_REQUEST_TIMEOUT_MS } from './client'
 import type {
   AttendanceReport,
   InstructorReliabilityReport,
@@ -123,7 +123,10 @@ export async function exportReport(data: {
   date: string
   sections: ReportSection[]
 }): Promise<Blob> {
-  const response = await apiClient.post('reports/export/', data, { responseType: 'blob' })
+  const response = await apiClient.post('reports/export/', data, {
+    responseType: 'blob',
+    timeout: LONG_REQUEST_TIMEOUT_MS,
+  })
   return response.data
 }
 

@@ -1,4 +1,4 @@
-import apiClient from './client'
+import apiClient, { LONG_REQUEST_TIMEOUT_MS } from './client'
 import type { ImportJob, ImportType } from '../types'
 
 export async function createImportJob(
@@ -11,6 +11,7 @@ export async function createImportJob(
 
   const response = await apiClient.post<ImportJob>('imports/', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: LONG_REQUEST_TIMEOUT_MS,
   })
   return response.data
 }

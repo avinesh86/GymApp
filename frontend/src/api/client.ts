@@ -3,8 +3,20 @@ import { useAuthStore } from '../store/auth'
 
 const BASE_URL = '/api/v1/'
 
+/**
+ * How long a request may take before it's given up as failed. Without a limit
+ * a request that never answers leaves the page waiting (a spinner, a Save
+ * button stuck on "saving") until the browser itself gives up, which can take
+ * minutes. With one, it fails like any network error and the page can say
+ * "Check your connection and try again".
+ */
+export const REQUEST_TIMEOUT_MS = 30_000
+/** For uploads and generated PDFs, which can genuinely take longer. */
+export const LONG_REQUEST_TIMEOUT_MS = 120_000
+
 export const apiClient = axios.create({
   baseURL: BASE_URL,
+  timeout: REQUEST_TIMEOUT_MS,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -77,9 +89,11 @@ apiClient.interceptors.response.use(
     isRefreshing = true
 
     try {
-      const response = await axios.post(`${BASE_URL}auth/token/refresh/`, {
-        refresh: refreshToken,
-      })
+      const response = await axios.post(
+        `${BASE_URL}auth/token/refresh/`,
+        { refresh: refreshToken },
+        { timeout: REQUEST_TIMEOUT_MS },
+      )
 
       const newAccessToken: string = response.data.access
       const newRefreshToken: string | undefined = response.data.refresh
