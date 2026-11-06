@@ -53,7 +53,7 @@ function Toggle({
 export function InvoicesTab() {
   const query = useQuery({ queryKey: ['tenant', 'settings'], queryFn: getTenantSettings })
   return (
-    <WhenLoaded query={query} what="the invoice settings">
+    <WhenLoaded query={query} savesKey={['tenant', 'settings']} what="the invoice settings">
       {(settings) => <InvoicesForm settings={settings} />}
     </WhenLoaded>
   )
@@ -66,6 +66,7 @@ function InvoicesForm({ settings }: { settings: TenantSettings }) {
   const [approvalRequired, setApprovalRequired] = useState(settings.payroll_approval_required)
 
   const { mutate: save, isPending } = useMutation({
+    mutationKey: ['tenant', 'settings'],
     mutationFn: () =>
       updateTenantSettings({
         invoice_frequency: frequency as never,

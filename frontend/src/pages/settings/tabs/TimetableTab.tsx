@@ -44,7 +44,7 @@ function TilePreview({ style }: { style: TimetableTileStyle }) {
 export function TimetableTab() {
   const query = useQuery({ queryKey: ['tenant', 'settings'], queryFn: getTenantSettings })
   return (
-    <WhenLoaded query={query} what="the timetable settings">
+    <WhenLoaded query={query} savesKey={['tenant', 'settings']} what="the timetable settings">
       {(settings) => <TimetableForm settings={settings} />}
     </WhenLoaded>
   )
@@ -57,6 +57,7 @@ function TimetableForm({ settings }: { settings: TenantSettings }) {
   const [tileStyle, setTileStyle] = useState<TimetableTileStyle>(settings.timetable_tile_style ?? 'tint')
 
   const { mutate: save, isPending } = useMutation({
+    mutationKey: ['tenant', 'settings'],
     mutationFn: () =>
       updateTenantSettings({
         week_start_day: Number(weekStart),

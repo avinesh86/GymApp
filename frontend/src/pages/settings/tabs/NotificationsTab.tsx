@@ -50,26 +50,33 @@ export function NotificationsTab() {
   // so nothing can be saved over the gym's real settings before they arrive.
   const settingsQuery = useQuery({ queryKey: ['tenant', 'settings'], queryFn: getTenantSettings })
   const waQuery = useQuery({ queryKey: ['tenant', 'whatsapp-account'], queryFn: getWhatsAppAccount })
+  // The WhatsApp card waits for the cards above to appear (or fail), so it
+  // doesn't jump down the page while someone is typing in it.
+  const settingsSettled =
+    settingsQuery.isError ||
+    (settingsQuery.data !== undefined && !(settingsQuery.isStale && !settingsQuery.isFetchedAfterMount))
 
   return (
     <div className="max-w-lg space-y-6">
-      <WhenLoaded query={settingsQuery} what="the notification settings">
+      <WhenLoaded query={settingsQuery} savesKey={['tenant', 'settings']} what="the notification channels and email settings">
         {(settings) => <ChannelsAndEmailForm settings={settings} />}
       </WhenLoaded>
 
       {/* ── WhatsApp Business ────────────────────────────────────────────── */}
-      <Card>
-        <h3 className="text-sm font-semibold text-gray-900 mb-1">WhatsApp Business</h3>
-        <p className="text-xs text-gray-400 mb-4">
-          Messages are sent via the Meta Business Cloud API from your WhatsApp Business number.{' '}
-          <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" target="_blank" rel="noreferrer" className="text-cyan-600 hover:underline">
-            Setup guide →
-          </a>
-        </p>
-        <WhenLoaded query={waQuery} what="the WhatsApp settings">
-          {(account) => <WhatsAppForm account={account} />}
-        </WhenLoaded>
-      </Card>
+      {settingsSettled && (
+        <Card>
+          <h3 className="text-sm font-semibold text-gray-900 mb-1">WhatsApp Business</h3>
+          <p className="text-xs text-gray-400 mb-4">
+            Messages are sent via the Meta Business Cloud API from your WhatsApp Business number.{' '}
+            <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" target="_blank" rel="noreferrer" className="text-cyan-600 hover:underline">
+              Setup guide →
+            </a>
+          </p>
+          <WhenLoaded query={waQuery} savesKey={['tenant', 'whatsapp-account']} what="the WhatsApp settings">
+            {(account) => <WhatsAppForm account={account} />}
+          </WhenLoaded>
+        </Card>
+      )}
     </div>
   )
 }
@@ -97,6 +104,7 @@ function ChannelsAndEmailForm({ settings }: { settings: TenantSettings }) {
 
   // ── Auto-save channel toggles ────────────────────────────────────────────────
   const { mutate: saveToggle } = useMutation({
+    mutationKey: ['tenant', 'settings'],
     mutationFn: (patch: Partial<Record<string, boolean>>) => updateTenantSettings(patch),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tenant', 'settings'] }),
     onError: () => toast.error('Failed to save setting'),
@@ -104,11 +112,13 @@ function ChannelsAndEmailForm({ settings }: { settings: TenantSettings }) {
 
   function handleToggle(field: string, value: boolean, setter: (v: boolean) => void) {
     setter(value)
-    saveToggle({ [field]: value })
+    // Switch it back if the save fails, so the screen matches what's saved.
+    saveToggle({ [field]: value }, { onError: () => setter(!value) })
   }
 
   // ── Save email settings ──────────────────────────────────────────────────────
   const { mutate: saveEmail, isPending: savingEmail } = useMutation({
+    mutationKey: ['tenant', 'settings'],
     mutationFn: () => {
       const payload: Record<string, unknown> = {
         notification_from_email: fromEmail,
@@ -238,6 +248,7 @@ function WhatsAppForm({ account }: { account: WhatsAppAccount }) {
   const waTokenSet = account.access_token_set ?? false
 
   const { mutate: saveWhatsApp, isPending: savingWhatsApp } = useMutation({
+    mutationKey: ['tenant', 'whatsapp-account'],
     mutationFn: () => {
       const payload: Record<string, unknown> = {
         business_phone_number: waBusinessNumber,

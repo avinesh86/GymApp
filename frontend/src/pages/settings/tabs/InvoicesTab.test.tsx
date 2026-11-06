@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { InvoicesTab } from './InvoicesTab'
 import { getTenantSettings, updateTenantSettings } from '../../../api/settings'
@@ -75,5 +76,40 @@ describe('Settings → Invoices', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(await screen.findByLabelText('Invoice Frequency')).toHaveValue('fortnightly')
+  })
+
+  it('shows the saved values on coming back to the tab while a save was still going', async () => {
+    // Coming back before the save finished used to show the cached copy from
+    // before it, and the next Save would put the old values back.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } })
+    function SwitchTabs() {
+      const [open, setOpen] = useState(true)
+      return (
+        <>
+          <button onClick={() => setOpen((o) => !o)}>Switch tab</button>
+          {open && <InvoicesTab />}
+        </>
+      )
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <SwitchTabs />
+      </QueryClientProvider>,
+    )
+    expect(await screen.findByLabelText('Invoice Frequency')).toHaveValue('fortnightly')
+
+    let finishSave: (value: unknown) => void = () => {}
+    vi.mocked(updateTenantSettings).mockReturnValue(new Promise((resolve) => (finishSave = resolve)) as never)
+    await userEvent.selectOptions(screen.getByLabelText('Invoice Frequency'), 'weekly')
+    await userEvent.click(screen.getByRole('button', { name: 'Save Invoice Settings' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Switch tab' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Switch tab' }))
+    expect(screen.queryByLabelText('Invoice Frequency')).not.toBeInTheDocument()
+
+    vi.mocked(getTenantSettings).mockResolvedValue({ ...SETTINGS, invoice_frequency: 'weekly' } as never)
+    finishSave({})
+
+    expect(await screen.findByLabelText('Invoice Frequency')).toHaveValue('weekly')
   })
 })

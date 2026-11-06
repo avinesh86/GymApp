@@ -122,4 +122,24 @@ describe('Settings → General', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(await screen.findByLabelText('App Name')).toHaveValue('Harbour Gym')
   })
+
+  it('waits for a fresh copy rather than showing an out-of-date cached timezone', async () => {
+    // Saving the old copy would undo a change made since, e.g. by another admin.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } })
+    client.setQueryData(['tenant', 'settings'], { currency_symbol: '£', timezone: 'UTC' }, { updatedAt: Date.now() - 60_000 })
+    client.setQueryData(['tenant', 'branding'], BRANDING) // fresh: only the settings are out of date
+    const settings = pending<unknown>()
+    vi.mocked(getTenantSettings).mockReturnValue(settings.promise as never)
+    render(
+      <QueryClientProvider client={client}>
+        <GeneralTab />
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => expect(getTenantSettings).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: 'Save Timezone' })).not.toBeInTheDocument()
+
+    settings.finish(SETTINGS)
+    expect(await screen.findByLabelText('Timezone')).toHaveValue('Pacific/Auckland')
+  })
 })

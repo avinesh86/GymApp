@@ -148,7 +148,7 @@ describe('Settings → Notifications', () => {
     vi.mocked(getTenantSettings).mockRejectedValueOnce(new Error('offline'))
     renderTab()
 
-    expect(await screen.findByText("Couldn't load the notification settings")).toBeInTheDocument()
+    expect(await screen.findByText("Couldn't load the notification channels and email settings")).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save Email Settings' })).not.toBeInTheDocument()
     expect(screen.queryAllByRole('switch')).toHaveLength(0)
 
@@ -167,5 +167,30 @@ describe('Settings → Notifications', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
     expect(await screen.findByLabelText('Business Phone Number')).toHaveValue('+64221234567')
+  })
+
+  it("keeps the WhatsApp card back until the cards above it have loaded, so it doesn't jump", async () => {
+    const settings = pending<unknown>()
+    vi.mocked(getTenantSettings).mockReturnValue(settings.promise as never)
+    renderTab()
+
+    await waitFor(() => expect(getWhatsAppAccount).toHaveBeenCalled())
+    // Loaded already, but held back.
+    await new Promise((r) => setTimeout(r, 20))
+    expect(screen.queryByText('WhatsApp Business')).not.toBeInTheDocument()
+
+    settings.finish(SETTINGS)
+    expect(await screen.findByLabelText('Business Phone Number')).toHaveValue('+64221234567')
+  })
+
+  it('switches a channel back if saving it fails', async () => {
+    vi.mocked(updateTenantSettings).mockRejectedValueOnce(new Error('offline'))
+    renderTab()
+    await waitFor(() => expect(channelSwitches()).toEqual(['false', 'true', 'true', 'true']))
+
+    await userEvent.click(screen.getAllByRole('switch')[0])
+
+    await waitFor(() => expect(updateTenantSettings).toHaveBeenCalledWith({ email_enabled: true }))
+    await waitFor(() => expect(channelSwitches()).toEqual(['false', 'true', 'true', 'true']))
   })
 })

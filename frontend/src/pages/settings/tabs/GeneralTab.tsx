@@ -32,9 +32,9 @@ export function GeneralTab() {
   const settingsQuery = useQuery({ queryKey: ['tenant', 'settings'], queryFn: getTenantSettings })
   const brandingQuery = useQuery({ queryKey: ['tenant', 'branding'], queryFn: getTenantBranding })
   return (
-    <WhenLoaded query={settingsQuery} what="the general settings">
+    <WhenLoaded query={settingsQuery} savesKey={['tenant', 'settings']} what="the general settings">
       {(settings) => (
-        <WhenLoaded query={brandingQuery} what="the general settings">
+        <WhenLoaded query={brandingQuery} savesKey={['tenant', 'branding']} what="the general settings">
           {(branding) => <GeneralForm settings={settings} branding={branding} />}
         </WhenLoaded>
       )}
@@ -55,6 +55,7 @@ function GeneralForm({ settings, branding }: { settings: TenantSettings; brandin
   const [timezone, setTimezone] = useState(settings.timezone)
 
   const { mutate: saveSettings, isPending: savingSettings } = useMutation({
+    mutationKey: ['tenant', 'settings'],
     mutationFn: () =>
       updateTenantSettings({
         currency_symbol: currency === 'custom' ? customCurrency : currency,
@@ -70,6 +71,7 @@ function GeneralForm({ settings, branding }: { settings: TenantSettings; brandin
   })
 
   const { mutate: saveBranding, isPending: savingBranding } = useMutation({
+    mutationKey: ['tenant', 'branding'],
     mutationFn: () => updateTenantBranding({ app_name: appName }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenant', 'branding'] })
