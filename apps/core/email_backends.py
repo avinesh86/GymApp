@@ -16,7 +16,10 @@ rejected. Notably that rules out sending as @gmail.com, which is why the
 per-tenant Gmail App Password is no longer the transport.
 """
 
+import base64
 import logging
+import mimetypes
+from email.mime.base import MIMEBase
 
 import requests
 from django.conf import settings
@@ -128,7 +131,34 @@ def _build_payload(email_message) -> dict:
     if headers:
         payload["headers"] = headers
 
+    attachments = [_attachment(a) for a in email_message.attachments or []]
+    if attachments:
+        payload["attachments"] = attachments
+
     return payload
+
+
+def _attachment(attachment) -> dict:
+    """One Django attachment as Resend wants it: base64 content and a name.
+
+    Django keeps attachments as (filename, content, mimetype) — a tuple, or a
+    named tuple from Django 5.2 — or, rarely, as a ready-built MIME part.
+    """
+    if isinstance(attachment, MIMEBase):
+        filename = attachment.get_filename() or "attachment"
+        content = attachment.get_payload(decode=True) or b""
+        mimetype = attachment.get_content_type()
+    else:
+        filename, content, mimetype = attachment
+        if isinstance(content, str):
+            content = content.encode("utf-8")
+        mimetype = mimetype or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+
+    return {
+        "filename": filename,
+        "content": base64.b64encode(content).decode("ascii"),
+        "content_type": mimetype,
+    }
 
 
 def _split_bodies(email_message) -> tuple[str, str]:
