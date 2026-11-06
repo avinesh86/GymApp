@@ -268,6 +268,8 @@ to deploy a specific version.
 | Deploy rolls back but the site looks fine | Health check was refused with "DisallowedHost" | Check `ALLOWED_HOSTS` in the server's `.env` (see `README.md` → Deploying) |
 | Times or dates off by several hours | Timezone: the database stores UTC, the gym is not UTC | Ask Claude to check the gym's timezone handling on that page |
 | CI fails on "Check for missing migrations" | A model changed without a migration | Ask Claude to create the migration |
+| One page 500s for everyone, even with no data (e.g. Invoices), other pages fine | Production's table is missing a column: a migration is recorded as applied but its SQL never ran | Run `python manage.py check_db_schema` on the server; it names the missing columns. Back up, then re-apply that migration. The **Production Schema Check** workflow runs this every morning and fails when it happens |
+| CI fails on "MySQL Schema Check" | A migration doesn't work on MySQL, or leaves the tables different from the models | Ask Claude to fix the migration; the Python Tests job uses SQLite and can miss this |
 | Frontend change not showing after deploy | Browser cached the old version | Hard refresh (Ctrl+Shift+R / Cmd+Shift+R) |
 
 ---

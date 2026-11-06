@@ -1,0 +1,46 @@
+name: Production Schema Check
+
+# Production's database can drift from the models without any code change: a
+# migration recorded as applied whose SQL never ran, or a manual edit. When it
+# does, every query on the affected table 500s (this is how invoices broke).
+# This compares the live tables with the models every morning and fails —
+# which emails the repo owner — the moment a column or table is missing.
+#
+# Read-only: check_db_schema only inspects the schema; it never changes it.
+on:
+  schedule:
+    - cron: "17 18 * * *" # 07:17 NZDT / 06:17 NZST
+  workflow_dispatch:
+
+concurrency:
+  group: production-schema-check
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Check production schema
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+
+    steps:
+      - name: Compare live tables with the models over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          command_timeout: 5m
+          script: |
+            set -e
+            cd ${{ secrets.DEPLOY_PATH }}
+            docker compose -f docker-compose.prod.yml exec -T web \
+              python manage.py check_db_schema
+
+      - name: Explain a failure
+        if: failure()
+        run: |
+          echo "::error::Production's database does not match the models (see the SSH step)."
+          echo "::error::On the server: back up the database, run 'python manage.py showmigrations'"
+          echo "::error::for the listed app, then re-apply the missing migration or add the columns."
