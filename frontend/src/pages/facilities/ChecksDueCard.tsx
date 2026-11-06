@@ -11,7 +11,9 @@ import { CheckModal } from './CheckModal'
 import { RUN_STATUS } from './labels'
 import type { ChecklistRun } from '../../types'
 
-/** Checks due today (and any overdue) for people who do checklists. */
+/** Checks due today (and any overdue) for people who do checklists. Hidden
+ * until the gym has set up a checklist, so it never just says "All checks
+ * done" to a gym that has none. */
 export function ChecksDueCard() {
   const navigate = useNavigate()
   const { data: config } = useFacilitiesConfig()
@@ -19,10 +21,10 @@ export function ChecksDueCard() {
   const { data: runs = [] } = useQuery({
     queryKey: ['facilities', 'my-checks'],
     queryFn: listMyChecks,
-    enabled: !!config?.can_do_checklists,
+    enabled: !!config?.can_do_checklists && !!config?.has_checklists,
   })
 
-  if (!config?.can_do_checklists) return null
+  if (!config?.can_do_checklists || !config?.has_checklists) return null
   const overdue = runs.filter((r) => r.status === 'overdue').length
 
   return (

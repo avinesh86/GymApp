@@ -693,3 +693,39 @@ def test_phone_camera_jpeg_with_extra_images_is_accepted(tenant, team_leader_use
 def test_non_ascii_digit_template_filter_is_ignored_not_a_500(tenant, owner_user):
     response = _client(owner_user).get("/api/v1/facilities/checklist-runs/?template=\u00b2")
     assert response.status_code == 200
+
+
+# ─── Release review: scheduling and the dashboard card ──────────────────────
+
+
+@pytest.mark.django_db
+def test_checklist_job_is_registered_with_the_scheduler_every_15_minutes():
+    """Beat reads its jobs from the database: without this row no check
+    would ever fall due and no overdue alert would go out."""
+    from django_celery_beat.models import PeriodicTask
+
+    from apps.facilities import tasks
+
+    task = PeriodicTask.objects.get(task="facilities.run_checklists")
+    assert (task.interval.every, task.interval.period) == (15, "minutes")
+    assert task.enabled
+    assert tasks.run_checklists.name == task.task  # the name the worker knows
+
+
+def test_dashboard_card_waits_until_the_gym_has_a_checklist(tenant, owner_user):
+    config_url = "/api/v1/facilities/config/"
+    client = _client(owner_user)
+    assert client.get(config_url).data["has_checklists"] is False
+
+    t = _template(tenant)
+    assert client.get(config_url).data["has_checklists"] is True
+
+    ChecklistTemplate.objects.filter(pk=t.pk).update(is_active=False)
+    assert client.get(config_url).data["has_checklists"] is False
+
+
+def test_dashboard_card_stays_hidden_when_checklists_are_switched_off(tenant, owner_user):
+    _template(tenant)
+    _settings(tenant, facilities_checklists_enabled=False)
+
+    assert _client(owner_user).get("/api/v1/facilities/config/").data["has_checklists"] is False

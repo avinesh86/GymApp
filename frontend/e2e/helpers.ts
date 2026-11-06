@@ -28,9 +28,13 @@ export const named = (label: string) => `E2E ${label} ${RUN_ID}`
 export async function signIn(page: Page, who = OWNER) {
   await page.goto('/')
 
-  // Already signed in from a previous test in the same file.
+  // Already signed in from a previous test in the same file? The app first
+  // restores a saved session behind a spinner, so wait until it shows either
+  // the menu or the sign-in form; checking straight away can see neither.
   const sidebar = page.getByRole('link', { name: 'Dashboard' })
-  if (await sidebar.isVisible().catch(() => false)) return
+  const emailField = page.getByLabel('Email address')
+  await expect(sidebar.or(emailField).first()).toBeVisible()
+  if (await sidebar.isVisible()) return
 
   await page.getByLabel('Email address').fill(who.email)
   await page.getByLabel('Password').fill(who.password)

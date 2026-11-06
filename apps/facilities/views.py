@@ -70,6 +70,10 @@ class FacilitiesConfigView(APIView):
             and can_manage
             and request.user.role in checklist_roles(request.tenant),
             "can_manage_checklists": request.user.role in ("owner", "admin", "gym_manager"),
+            # The dashboard's checks card waits until the gym has a checklist,
+            # so gyms that haven't set any up don't see "All checks done".
+            "has_checklists": config.checklists_enabled
+            and ChecklistTemplate.objects.filter(tenant=request.tenant, is_active=True, is_deleted=False).exists(),
             "can_manage": can_manage,
             "is_alert_recipient": request.user.role in config.alert_roles,
             "sites": [{"id": s.id, "name": s.name} for s in sites],

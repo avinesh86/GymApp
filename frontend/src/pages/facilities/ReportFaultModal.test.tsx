@@ -56,6 +56,7 @@ beforeEach(() => {
     fault_reporting_enabled: true,
     checklists_enabled: true,
     can_do_checklists: false,
+    has_checklists: false,
     can_manage_checklists: false,
     can_manage: false,
     is_alert_recipient: false,
