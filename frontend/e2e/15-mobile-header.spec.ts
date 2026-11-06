@@ -58,7 +58,10 @@ for (const width of [320, 375, 390]) {
       await expect(menuButton(page)).toHaveAttribute('aria-expanded', 'false')
       await menuButton(page).click()
       await page.getByRole('link', { name: 'My Profile' }).click()
+      // Not pinned to the text: today it's a hardcoded "Northern Arena" for
+      // every gym, which is a separate bug to fix.
       await expect(pageTitle(page)).not.toHaveText('Dashboard')
+      await expect(pageTitle(page)).toHaveText(/\S/)
       await expectMenuButtonClearOfTitle(page, width)
 
       // The button opens the menu, says so, and the menu's close button is
