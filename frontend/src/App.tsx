@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/reac
 import { useRef } from 'react'
 import { Toaster } from 'react-hot-toast'
 import axios from 'axios'
+import { REQUEST_TIMEOUT_MS } from './api/client'
 import { useAuthStore } from './store/auth'
 import { useAuth } from './hooks/useAuth'
 import { usePermission } from './hooks/usePermission'
@@ -71,14 +72,18 @@ function UserInitializer() {
           logout()
           return
         }
+        // Without a limit, a request that hangs here leaves the whole app
+        // on its loading screen.
         const refreshRes = await axios.post<{ access: string; refresh: string }>(
           '/api/v1/auth/token/refresh/',
-          { refresh: refreshToken }
+          { refresh: refreshToken },
+          { timeout: REQUEST_TIMEOUT_MS },
         )
         const newAccess = refreshRes.data.access
         const newRefresh = refreshRes.data.refresh ?? refreshToken
         const userRes = await axios.get<AuthUser>('/api/v1/users/me/', {
           headers: { Authorization: `Bearer ${newAccess}` },
+          timeout: REQUEST_TIMEOUT_MS,
         })
         login({ access: newAccess, refresh: newRefresh }, userRes.data)
       } catch {

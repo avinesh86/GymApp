@@ -1,4 +1,4 @@
-import apiClient, { LONG_REQUEST_TIMEOUT_MS } from './client'
+import apiClient from './client'
 import type {
   ChecklistRun,
   ChecklistTemplate,
@@ -193,6 +193,5 @@ export async function uploadCheckPhoto(answerId: number, file: File): Promise<vo
   body.append('photo', file)
   await apiClient.post(`facilities/checklist-answers/${answerId}/photo/`, body, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: LONG_REQUEST_TIMEOUT_MS,
   })
 }

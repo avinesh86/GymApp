@@ -1,4 +1,4 @@
-import apiClient, { LONG_REQUEST_TIMEOUT_MS } from './client'
+import apiClient from './client'
 import type {
   PaginatedResponse,
   StaffMember,
@@ -169,7 +169,6 @@ export async function createOrUpdatePaymentDetails(
     formData.append('business_logo', logo)
     const response = await apiClient.put<PaymentDetails>(url, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: LONG_REQUEST_TIMEOUT_MS,
     })
     return response.data
   }
