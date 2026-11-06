@@ -142,4 +142,27 @@ describe('Settings → General', () => {
     settings.finish(SETTINGS)
     expect(await screen.findByLabelText('Timezone')).toHaveValue('Pacific/Auckland')
   })
+
+  it("warns instead of saving over someone else's timezone change, and can load theirs", async () => {
+    renderTab()
+    expect(await screen.findByLabelText('Timezone')).toHaveValue('Pacific/Auckland')
+    vi.mocked(getTenantSettings).mockResolvedValue({ ...SETTINGS, timezone: 'Australia/Sydney' } as never)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Timezone' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Timezone (now: Australia/Sydney)')
+    expect(updateTenantSettings).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Load their changes' }))
+    expect(await screen.findByLabelText('Timezone')).toHaveValue('Australia/Sydney')
+  })
+
+  it("warns instead of saving over someone else's app name", async () => {
+    renderTab()
+    expect(await screen.findByLabelText('App Name')).toHaveValue('Harbour Gym')
+    vi.mocked(getTenantBranding).mockResolvedValue({ ...BRANDING, app_name: 'Harbour Fitness' } as never)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save App Name' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('App Name (now: Harbour Fitness)')
+    expect(updateTenantBranding).not.toHaveBeenCalled()
+  })
 })

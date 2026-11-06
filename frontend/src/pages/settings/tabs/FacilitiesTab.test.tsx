@@ -56,9 +56,12 @@ describe('Settings → Facilities', () => {
 
   it("keeps an open form and the person's other changes while a save refreshes the data", async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } })
-    client.setQueryData(['tenant', 'settings'], await vi.mocked(getTenantSettings)())
+    const saved = await vi.mocked(getTenantSettings)()
+    client.setQueryData(['tenant', 'settings'], saved)
     renderTab(client)
-    vi.mocked(getTenantSettings).mockReturnValue(new Promise(() => {}) as never)
+    // Save first checks nobody else changed the settings, then the save's
+    // refresh of the data never finishes.
+    vi.mocked(getTenantSettings).mockResolvedValueOnce(saved).mockReturnValue(new Promise(() => {}) as never)
 
     await userEvent.click(screen.getByRole('switch', { name: 'Also send alerts by email' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save Facilities Settings' }))
@@ -203,5 +206,19 @@ describe('Settings → Facilities', () => {
     await userEvent.selectOptions(screen.getByLabelText('Alerts from'), '18')
     expect(screen.getByText('The start has to be before the end.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save Facilities Settings' })).toBeDisabled()
+  })
+
+  it("warns instead of saving over someone else's change, and can load theirs", async () => {
+    renderTab()
+    await waitFor(() => expect(alerted().getByRole('checkbox', { name: 'Gym Manager' })).toBeChecked())
+    const saved = await vi.mocked(getTenantSettings)()
+    vi.mocked(getTenantSettings).mockResolvedValue({ ...(saved as object), facilities_alert_roles: ['owner'] } as never)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Facilities Settings' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Who hears about new faults (now: Owner)')
+    expect(updateTenantSettings).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Load their changes' }))
+    await waitFor(() => expect(alerted().getByRole('checkbox', { name: 'Gym Manager' })).not.toBeChecked())
   })
 })

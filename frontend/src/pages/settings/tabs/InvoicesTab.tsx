@@ -7,6 +7,7 @@ import { Select } from '../../../components/ui/Select'
 import { Card } from '../../../components/ui/Card'
 import type { TenantSettings } from '../../../types'
 import { WhenLoaded } from './WhenLoaded'
+import { SaveConflictWarning, useSaveConflictCheck, type ConflictField } from './SaveConflict'
 
 const FREQUENCY_OPTIONS = [
   { value: 'weekly',       label: 'Weekly' },
@@ -54,31 +55,49 @@ export function InvoicesTab() {
   const query = useQuery({ queryKey: ['tenant', 'settings'], queryFn: getTenantSettings })
   return (
     <WhenLoaded query={query} savesKey={['tenant', 'settings']} what="the invoice settings">
-      {(settings) => <InvoicesForm settings={settings} />}
+      {(settings, reload) => <InvoicesForm settings={settings} reload={reload} />}
     </WhenLoaded>
   )
 }
 
-function InvoicesForm({ settings }: { settings: TenantSettings }) {
+const FIELDS: ConflictField<TenantSettings>[] = [
+  {
+    key: 'invoice_frequency',
+    label: 'Invoice Frequency',
+    show: (v) => FREQUENCY_OPTIONS.find((o) => o.value === v)?.label ?? String(v),
+  },
+  { key: 'pay_period_anchor_date', label: 'Pay Period Start Date' },
+  { key: 'payroll_approval_required', label: 'Payroll Approval Required', show: (v) => (v ? 'Yes' : 'No') },
+]
+
+function InvoicesForm({ settings, reload }: { settings: TenantSettings; reload: () => void }) {
   const queryClient = useQueryClient()
+  const guard = useSaveConflictCheck({
+    data: settings,
+    queryKey: ['tenant', 'settings'],
+    queryFn: getTenantSettings,
+    fields: FIELDS,
+  })
   const [frequency, setFrequency] = useState<string>(settings.invoice_frequency)
   const [anchorDate, setAnchorDate] = useState(settings.pay_period_anchor_date ?? '')
   const [approvalRequired, setApprovalRequired] = useState(settings.payroll_approval_required)
 
-  const { mutate: save, isPending } = useMutation({
+  const { mutate, isPending } = useMutation({
     mutationKey: ['tenant', 'settings'],
-    mutationFn: () =>
-      updateTenantSettings({
-        invoice_frequency: frequency as never,
-        ...(anchorDate ? { pay_period_anchor_date: anchorDate } : {}),
-        payroll_approval_required: approvalRequired,
-      }),
-    onSuccess: () => {
+    mutationFn: (payload: Partial<TenantSettings>) => updateTenantSettings(payload),
+    onSuccess: (_saved, payload) => {
+      guard.markSaved(payload)
       queryClient.invalidateQueries({ queryKey: ['tenant', 'settings'] })
       toast.success('Invoice settings saved')
     },
     onError: () => toast.error('Failed to save invoice settings'),
   })
+  const save = () =>
+    mutate({
+      invoice_frequency: frequency as TenantSettings['invoice_frequency'],
+      ...(anchorDate ? { pay_period_anchor_date: anchorDate } : {}),
+      payroll_approval_required: approvalRequired,
+    })
 
   return (
     <div className="max-w-md">
@@ -116,7 +135,18 @@ function InvoicesForm({ settings }: { settings: TenantSettings }) {
             />
           </div>
 
-          <Button onClick={() => save()} isLoading={isPending} className="w-fit">
+          {guard.conflict && (
+            <SaveConflictWarning
+              conflict={guard.conflict}
+              onLoadTheirs={reload}
+              onSaveMine={() => guard.saveAnyway(save)}
+            />
+          )}
+          <Button
+            onClick={() => void guard.saveIfUnchanged(save)}
+            isLoading={isPending || guard.checking}
+            className="w-fit"
+          >
             Save Invoice Settings
           </Button>
         </div>

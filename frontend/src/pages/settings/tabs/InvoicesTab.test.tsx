@@ -112,4 +112,64 @@ describe('Settings → Invoices', () => {
 
     expect(await screen.findByLabelText('Invoice Frequency')).toHaveValue('weekly')
   })
+
+  describe('when someone else changed the settings since the form opened', () => {
+    const THEIRS = { ...SETTINGS, invoice_frequency: 'weekly' }
+
+    it("warns instead of saving over their change, and names what changed", async () => {
+      renderTab()
+      expect(await screen.findByLabelText('Invoice Frequency')).toHaveValue('fortnightly')
+      vi.mocked(getTenantSettings).mockResolvedValue(THEIRS as never)
+
+      await userEvent.click(screen.getByLabelText('Pay period start date'))
+      await userEvent.click(screen.getByRole('button', { name: 'Save Invoice Settings' }))
+
+      const warning = await screen.findByRole('alert')
+      expect(warning).toHaveTextContent('changed by someone else')
+      expect(warning).toHaveTextContent('Invoice Frequency (now: Weekly)')
+      expect(updateTenantSettings).not.toHaveBeenCalled()
+    })
+
+    it('"Load their changes" shows their values in the form', async () => {
+      renderTab()
+      expect(await screen.findByLabelText('Invoice Frequency')).toHaveValue('fortnightly')
+      vi.mocked(getTenantSettings).mockResolvedValue(THEIRS as never)
+      await userEvent.click(screen.getByRole('button', { name: 'Save Invoice Settings' }))
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Load their changes' }))
+
+      expect(await screen.findByLabelText('Invoice Frequency')).toHaveValue('weekly')
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+      expect(updateTenantSettings).not.toHaveBeenCalled()
+    })
+
+    it('"Save mine anyway" saves this form\'s values', async () => {
+      renderTab()
+      expect(await screen.findByLabelText('Invoice Frequency')).toHaveValue('fortnightly')
+      vi.mocked(getTenantSettings).mockResolvedValue(THEIRS as never)
+      await userEvent.click(screen.getByRole('button', { name: 'Save Invoice Settings' }))
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Save mine anyway' }))
+
+      await waitFor(() =>
+        expect(updateTenantSettings).toHaveBeenCalledWith(expect.objectContaining({ invoice_frequency: 'fortnightly' })),
+      )
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+  })
+
+  it("doesn't warn about its own earlier save", async () => {
+    renderTab()
+    expect(await screen.findByLabelText('Invoice Frequency')).toHaveValue('fortnightly')
+
+    await userEvent.selectOptions(screen.getByLabelText('Invoice Frequency'), 'monthly')
+    await userEvent.click(screen.getByRole('button', { name: 'Save Invoice Settings' }))
+    await waitFor(() => expect(updateTenantSettings).toHaveBeenCalledTimes(1))
+    // The server now holds what this form saved.
+    vi.mocked(getTenantSettings).mockResolvedValue({ ...SETTINGS, invoice_frequency: 'monthly' } as never)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Invoice Settings' }))
+    await waitFor(() => expect(updateTenantSettings).toHaveBeenCalledTimes(2))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
 })

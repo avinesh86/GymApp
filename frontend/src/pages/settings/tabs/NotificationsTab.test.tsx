@@ -209,4 +209,29 @@ describe('Settings → Notifications', () => {
     await waitFor(() => expect(updateTenantSettings).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(channelSwitches()).toEqual(['false', 'true', 'true', 'true']))
   })
+
+  it("warns instead of saving over someone else's email settings, and can load theirs", async () => {
+    renderTab()
+    expect(await screen.findByLabelText('Sender Name')).toHaveValue('Harbour Gym')
+    vi.mocked(getTenantSettings).mockResolvedValue({ ...SETTINGS, notification_from_name: 'Harbour Fitness' } as never)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Email Settings' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sender Name (now: Harbour Fitness)')
+    expect(updateTenantSettings).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Load their changes' }))
+    expect(await screen.findByLabelText('Sender Name')).toHaveValue('Harbour Fitness')
+  })
+
+  it("warns instead of saving over someone else's WhatsApp settings, without showing the secret token", async () => {
+    renderTab()
+    expect(await screen.findByLabelText('Business Phone Number')).toHaveValue('+64221234567')
+    vi.mocked(getWhatsAppAccount).mockResolvedValue({ ...WA_ACCOUNT, webhook_verify_token: 'their-new-secret' } as never)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save WhatsApp Settings' }))
+    const warning = await screen.findByRole('alert')
+    expect(warning).toHaveTextContent('Webhook Verify Token (now: changed)')
+    expect(warning).not.toHaveTextContent('their-new-secret')
+    expect(updateWhatsAppAccount).not.toHaveBeenCalled()
+  })
 })

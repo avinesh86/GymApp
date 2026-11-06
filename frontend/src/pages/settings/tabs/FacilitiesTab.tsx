@@ -6,6 +6,7 @@ import { Button } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import type { TenantSettings, UserRole } from '../../../types'
 import { WhenLoaded } from './WhenLoaded'
+import { SaveConflictWarning, useSaveConflictCheck, type ConflictField } from './SaveConflict'
 
 const ALERT_ROLES: { role: UserRole; label: string }[] = [
   { role: 'owner', label: 'Owner' },
@@ -72,13 +73,36 @@ export function FacilitiesTab() {
   const query = useQuery({ queryKey: ['tenant', 'settings'], queryFn: getTenantSettings })
   return (
     <WhenLoaded query={query} savesKey={['tenant', 'settings']} what="the Facilities settings">
-      {(settings) => <FacilitiesForm settings={settings} />}
+      {(settings, reload) => <FacilitiesForm settings={settings} reload={reload} />}
     </WhenLoaded>
   )
 }
 
-function FacilitiesForm({ settings }: { settings: TenantSettings }) {
+const roleNames = (v: unknown) =>
+  Array.isArray(v) && v.length
+    ? v.map((role) => ALERT_ROLES.find((r) => r.role === role)?.label ?? role).join(', ')
+    : '(none)'
+
+const FIELDS: ConflictField<TenantSettings>[] = [
+  { key: 'facilities_equipment_enabled', label: 'Equipment inventory' },
+  { key: 'facilities_maintenance_enabled', label: 'Maintenance tracking' },
+  { key: 'fault_reporting_enabled', label: 'Report a fault button' },
+  { key: 'facilities_checklists_enabled', label: 'Checklists' },
+  { key: 'checklist_roles', label: 'Who does checklists', show: roleNames },
+  { key: 'facilities_alert_roles', label: 'Who hears about new faults', show: roleNames },
+  { key: 'facilities_alert_email', label: 'Also send alerts by email' },
+  { key: 'facilities_alert_start_hour', label: 'Overdue alerts from', show: (v) => hourLabel(Number(v)) },
+  { key: 'facilities_alert_end_hour', label: 'Overdue alerts until', show: (v) => hourLabel(Number(v)) },
+]
+
+function FacilitiesForm({ settings, reload }: { settings: TenantSettings; reload: () => void }) {
   const queryClient = useQueryClient()
+  const guard = useSaveConflictCheck({
+    data: settings,
+    queryKey: ['tenant', 'settings'],
+    queryFn: getTenantSettings,
+    fields: FIELDS,
+  })
   // Starts from the saved settings and keeps the person's edits after that:
   // a background refetch doesn't reset switches they've changed but not saved.
   const [equipment, setEquipment] = useState(settings.facilities_equipment_enabled ?? true)
@@ -95,27 +119,29 @@ function FacilitiesForm({ settings }: { settings: TenantSettings }) {
   const [alertStart, setAlertStart] = useState(settings.facilities_alert_start_hour ?? 9)
   const [alertEnd, setAlertEnd] = useState(settings.facilities_alert_end_hour ?? 17)
 
-  const { mutate: save, isPending } = useMutation({
+  const { mutate, isPending } = useMutation({
     mutationKey: ['tenant', 'settings'],
-    mutationFn: () =>
-      updateTenantSettings({
-        facilities_equipment_enabled: equipment,
-        facilities_maintenance_enabled: maintenance,
-        fault_reporting_enabled: reporting,
-        facilities_alert_roles: alertRoles,
-        facilities_alert_email: alertEmail,
-        facilities_checklists_enabled: checklists,
-        checklist_roles: checklistRoles,
-        facilities_alert_start_hour: alertStart,
-        facilities_alert_end_hour: alertEnd,
-      }),
-    onSuccess: () => {
+    mutationFn: (payload: Partial<TenantSettings>) => updateTenantSettings(payload),
+    onSuccess: (_saved, payload) => {
+      guard.markSaved(payload)
       queryClient.invalidateQueries({ queryKey: ['tenant', 'settings'] })
       queryClient.invalidateQueries({ queryKey: ['facilities'] })
       toast.success('Facilities settings saved')
     },
     onError: () => toast.error('Failed to save settings'),
   })
+  const save = () =>
+    mutate({
+      facilities_equipment_enabled: equipment,
+      facilities_maintenance_enabled: maintenance,
+      fault_reporting_enabled: reporting,
+      facilities_alert_roles: alertRoles,
+      facilities_alert_email: alertEmail,
+      facilities_checklists_enabled: checklists,
+      checklist_roles: checklistRoles,
+      facilities_alert_start_hour: alertStart,
+      facilities_alert_end_hour: alertEnd,
+    })
 
   const toggleRole = (role: UserRole) =>
     setAlertRoles((roles) => (roles.includes(role) ? roles.filter((r) => r !== role) : [...roles, role]))
@@ -248,7 +274,19 @@ function FacilitiesForm({ settings }: { settings: TenantSettings }) {
         )}
       </Card>
 
-      <Button onClick={() => save()} isLoading={isPending} disabled={!hoursValid} className="w-fit">
+      {guard.conflict && (
+        <SaveConflictWarning
+          conflict={guard.conflict}
+          onLoadTheirs={reload}
+          onSaveMine={() => guard.saveAnyway(save)}
+        />
+      )}
+      <Button
+        onClick={() => void guard.saveIfUnchanged(save)}
+        isLoading={isPending || guard.checking}
+        disabled={!hoursValid}
+        className="w-fit"
+      >
         Save Facilities Settings
       </Button>
     </div>

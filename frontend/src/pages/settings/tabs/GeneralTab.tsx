@@ -8,6 +8,7 @@ import { Select } from '../../../components/ui/Select'
 import { Card } from '../../../components/ui/Card'
 import type { TenantBranding, TenantSettings } from '../../../types'
 import { WhenLoaded } from './WhenLoaded'
+import { SaveConflictWarning, useSaveConflictCheck, type ConflictField } from './SaveConflict'
 
 const CURRENCY_OPTIONS = [
   { value: '$',   label: '$ — US Dollar' },
@@ -33,9 +34,9 @@ export function GeneralTab() {
   const brandingQuery = useQuery({ queryKey: ['tenant', 'branding'], queryFn: getTenantBranding })
   return (
     <WhenLoaded query={settingsQuery} savesKey={['tenant', 'settings']} what="the general settings">
-      {(settings) => (
+      {(settings, reload) => (
         <WhenLoaded query={brandingQuery} savesKey={['tenant', 'branding']} what="the general settings">
-          {(branding) => <GeneralForm settings={settings} branding={branding} />}
+          {(branding) => <GeneralForm settings={settings} branding={branding} reload={reload} />}
         </WhenLoaded>
       )}
     </WhenLoaded>
@@ -46,22 +47,45 @@ function isKnownCurrency(symbol: string) {
   return CURRENCY_OPTIONS.some((o) => o.value === symbol && o.value !== 'custom')
 }
 
-function GeneralForm({ settings, branding }: { settings: TenantSettings; branding: TenantBranding }) {
+const SETTINGS_FIELDS: ConflictField<TenantSettings>[] = [
+  { key: 'currency_symbol', label: 'Currency Symbol' },
+  { key: 'timezone', label: 'Timezone' },
+]
+const BRANDING_FIELDS: ConflictField<TenantBranding>[] = [{ key: 'app_name', label: 'App Name' }]
+
+function GeneralForm({
+  settings,
+  branding,
+  reload,
+}: {
+  settings: TenantSettings
+  branding: TenantBranding
+  reload: () => void
+}) {
   const queryClient = useQueryClient()
+  const settingsGuard = useSaveConflictCheck({
+    data: settings,
+    queryKey: ['tenant', 'settings'],
+    queryFn: getTenantSettings,
+    fields: SETTINGS_FIELDS,
+  })
+  const brandingGuard = useSaveConflictCheck({
+    data: branding,
+    queryKey: ['tenant', 'branding'],
+    queryFn: getTenantBranding,
+    fields: BRANDING_FIELDS,
+  })
   const savedCurrencyKnown = isKnownCurrency(settings.currency_symbol)
   const [currency, setCurrency] = useState(savedCurrencyKnown ? settings.currency_symbol : 'custom')
   const [customCurrency, setCustomCurrency] = useState(savedCurrencyKnown ? '' : settings.currency_symbol)
   const [appName, setAppName] = useState(branding.app_name)
   const [timezone, setTimezone] = useState(settings.timezone)
 
-  const { mutate: saveSettings, isPending: savingSettings } = useMutation({
+  const { mutate: mutateSettings, isPending: savingSettings } = useMutation({
     mutationKey: ['tenant', 'settings'],
-    mutationFn: () =>
-      updateTenantSettings({
-        currency_symbol: currency === 'custom' ? customCurrency : currency,
-        timezone,
-      }),
-    onSuccess: () => {
+    mutationFn: (payload: Partial<TenantSettings>) => updateTenantSettings(payload),
+    onSuccess: (_saved, payload) => {
+      settingsGuard.markSaved(payload)
       queryClient.invalidateQueries({ queryKey: ['tenant', 'settings'] })
       // Every date and "today" on the site follows the gym's timezone.
       queryClient.invalidateQueries({ queryKey: ['tenant', 'locale'] })
@@ -70,15 +94,31 @@ function GeneralForm({ settings, branding }: { settings: TenantSettings; brandin
     onError: () => toast.error('Failed to save settings'),
   })
 
-  const { mutate: saveBranding, isPending: savingBranding } = useMutation({
+  const saveSettings = () =>
+    mutateSettings({ currency_symbol: currency === 'custom' ? customCurrency : currency, timezone })
+
+  const { mutate: mutateBranding, isPending: savingBranding } = useMutation({
     mutationKey: ['tenant', 'branding'],
-    mutationFn: () => updateTenantBranding({ app_name: appName }),
-    onSuccess: () => {
+    mutationFn: (payload: Partial<TenantBranding>) => updateTenantBranding(payload),
+    onSuccess: (_saved, payload) => {
+      brandingGuard.markSaved(payload)
       queryClient.invalidateQueries({ queryKey: ['tenant', 'branding'] })
       toast.success('App name updated')
     },
     onError: () => toast.error('Failed to update app name'),
   })
+  const saveBranding = () => mutateBranding({ app_name: appName })
+
+  // Currency and Timezone share one save, so a conflict shows under whichever
+  // button was pressed.
+  const [settingsSavedFrom, setSettingsSavedFrom] = useState<'currency' | 'timezone'>('currency')
+  const settingsWarning = settingsGuard.conflict && (
+    <SaveConflictWarning
+      conflict={settingsGuard.conflict}
+      onLoadTheirs={reload}
+      onSaveMine={() => settingsGuard.saveAnyway(saveSettings)}
+    />
+  )
 
   return (
     <div className="flex flex-col gap-6 max-w-lg">
@@ -107,7 +147,15 @@ function GeneralForm({ settings, branding }: { settings: TenantSettings; brandin
               {currency === 'custom' ? customCurrency : currency}1,234.56
             </p>
           </div>
-          <Button onClick={() => saveSettings()} isLoading={savingSettings} className="w-fit">
+          {settingsSavedFrom === 'currency' && settingsWarning}
+          <Button
+            onClick={() => {
+              setSettingsSavedFrom('currency')
+              void settingsGuard.saveIfUnchanged(saveSettings)
+            }}
+            isLoading={savingSettings || settingsGuard.checking}
+            className="w-fit"
+          >
             Save Currency
           </Button>
         </div>
@@ -123,7 +171,18 @@ function GeneralForm({ settings, branding }: { settings: TenantSettings; brandin
             onChange={(e) => setAppName(e.target.value)}
             placeholder="FitOps"
           />
-          <Button onClick={() => saveBranding()} isLoading={savingBranding} className="w-fit">
+          {brandingGuard.conflict && (
+            <SaveConflictWarning
+              conflict={brandingGuard.conflict}
+              onLoadTheirs={reload}
+              onSaveMine={() => brandingGuard.saveAnyway(saveBranding)}
+            />
+          )}
+          <Button
+            onClick={() => void brandingGuard.saveIfUnchanged(saveBranding)}
+            isLoading={savingBranding || brandingGuard.checking}
+            className="w-fit"
+          >
             Save App Name
           </Button>
         </div>
@@ -139,7 +198,15 @@ function GeneralForm({ settings, branding }: { settings: TenantSettings; brandin
             onChange={(e) => setTimezone(e.target.value)}
             options={TIMEZONES.map((tz) => ({ value: tz, label: tz }))}
           />
-          <Button onClick={() => saveSettings()} isLoading={savingSettings} className="w-fit">
+          {settingsSavedFrom === 'timezone' && settingsWarning}
+          <Button
+            onClick={() => {
+              setSettingsSavedFrom('timezone')
+              void settingsGuard.saveIfUnchanged(saveSettings)
+            }}
+            isLoading={savingSettings || settingsGuard.checking}
+            className="w-fit"
+          >
             Save Timezone
           </Button>
         </div>

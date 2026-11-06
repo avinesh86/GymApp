@@ -67,9 +67,11 @@ export function WhenLoaded<T>({
   savesKey: QueryKey
   /** Completes "Couldn't load …", e.g. "the invoice settings". */
   what: string
-  children: (data: T) => React.ReactNode
+  /** `reload` remounts the form from the latest data ("Load their changes"). */
+  children: (data: T, reload: () => void) => React.ReactNode
 }) {
   const state = useLoadState(query, savesKey)
+  const [version, setVersion] = useState(0)
   if (state === 'error') {
     const forbidden = isAxiosError(query.error) && query.error.response?.status === 403
     return (
@@ -81,5 +83,5 @@ export function WhenLoaded<T>({
     )
   }
   if (state === 'waiting' || query.data === undefined) return <PageSpinner />
-  return <>{children(query.data)}</>
+  return <React.Fragment key={version}>{children(query.data, () => setVersion((v) => v + 1))}</React.Fragment>
 }

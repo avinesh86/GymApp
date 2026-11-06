@@ -7,6 +7,7 @@ import { Card } from '../../../components/ui/Card'
 import { Input } from '../../../components/ui/Input'
 import type { TenantSettings, WhatsAppAccount } from '../../../types'
 import { WhenLoaded, useLoadState } from './WhenLoaded'
+import { SaveConflictWarning, useSaveConflictCheck, type ConflictField } from './SaveConflict'
 
 function Toggle({
   label,
@@ -57,7 +58,7 @@ export function NotificationsTab() {
   return (
     <div className="max-w-lg space-y-6">
       <WhenLoaded query={settingsQuery} savesKey={['tenant', 'settings']} what="the notification channels and email settings">
-        {(settings) => <ChannelsAndEmailForm settings={settings} />}
+        {(settings, reload) => <ChannelsAndEmailForm settings={settings} reload={reload} />}
       </WhenLoaded>
 
       {/* ── WhatsApp Business ────────────────────────────────────────────── */}
@@ -71,7 +72,7 @@ export function NotificationsTab() {
             </a>
           </p>
           <WhenLoaded query={waQuery} savesKey={['tenant', 'whatsapp-account']} what="the WhatsApp settings">
-            {(account) => <WhatsAppForm account={account} />}
+            {(account, reload) => <WhatsAppForm account={account} reload={reload} />}
           </WhenLoaded>
         </Card>
       )}
@@ -79,8 +80,27 @@ export function NotificationsTab() {
   )
 }
 
-function ChannelsAndEmailForm({ settings }: { settings: TenantSettings }) {
+const EMAIL_FIELDS: ConflictField<TenantSettings>[] = [
+  { key: 'notification_from_name', label: 'Sender Name' },
+  { key: 'notification_from_email', label: 'Sender / Reply-to Address' },
+]
+const WHATSAPP_FIELDS: ConflictField<WhatsAppAccount>[] = [
+  { key: 'business_phone_number', label: 'Business Phone Number' },
+  { key: 'display_name', label: 'Display Name' },
+  { key: 'phone_number_id', label: 'Phone Number ID' },
+  { key: 'waba_id', label: 'WhatsApp Business Account ID (WABA)' },
+  // A secret: say that it changed, not what it is now.
+  { key: 'webhook_verify_token', label: 'Webhook Verify Token', show: () => 'changed' },
+]
+
+function ChannelsAndEmailForm({ settings, reload }: { settings: TenantSettings; reload: () => void }) {
   const queryClient = useQueryClient()
+  const guard = useSaveConflictCheck({
+    data: settings,
+    queryKey: ['tenant', 'settings'],
+    queryFn: getTenantSettings,
+    fields: EMAIL_FIELDS,
+  })
 
   // ── Channel toggles ──────────────────────────────────────────────────────────
   const [emailEnabled, setEmailEnabled]         = useState(settings.email_enabled ?? true)
@@ -143,6 +163,7 @@ function ChannelsAndEmailForm({ settings }: { settings: TenantSettings }) {
       return updateTenantSettings(payload)
     },
     onSuccess: () => {
+      guard.markSaved({ notification_from_email: fromEmail, notification_from_name: fromName })
       queryClient.invalidateQueries({ queryKey: ['tenant', 'settings'] })
       setEmailPassword('')
       toast.success('Email settings saved')
@@ -242,15 +263,32 @@ function ChannelsAndEmailForm({ settings }: { settings: TenantSettings }) {
           )}
         </div>
         <div className="mt-5">
-          <Button onClick={() => saveEmail()} isLoading={savingEmail}>Save Email Settings</Button>
+          {guard.conflict && (
+            <div className="mb-3">
+              <SaveConflictWarning
+                conflict={guard.conflict}
+                onLoadTheirs={reload}
+                onSaveMine={() => guard.saveAnyway(saveEmail)}
+              />
+            </div>
+          )}
+          <Button onClick={() => void guard.saveIfUnchanged(saveEmail)} isLoading={savingEmail || guard.checking}>
+            Save Email Settings
+          </Button>
         </div>
       </Card>
     </>
   )
 }
 
-function WhatsAppForm({ account }: { account: WhatsAppAccount }) {
+function WhatsAppForm({ account, reload }: { account: WhatsAppAccount; reload: () => void }) {
   const queryClient = useQueryClient()
+  const guard = useSaveConflictCheck({
+    data: account,
+    queryKey: ['tenant', 'whatsapp-account'],
+    queryFn: getWhatsAppAccount,
+    fields: WHATSAPP_FIELDS,
+  })
 
   const [waBusinessNumber, setWaBusinessNumber]   = useState(account.business_phone_number ?? '')
   const [waDisplayName, setWaDisplayName]         = useState(account.display_name ?? '')
@@ -276,6 +314,13 @@ function WhatsAppForm({ account }: { account: WhatsAppAccount }) {
       return updateWhatsAppAccount(payload)
     },
     onSuccess: () => {
+      guard.markSaved({
+        business_phone_number: waBusinessNumber,
+        display_name: waDisplayName,
+        phone_number_id: waPhoneNumberId,
+        waba_id: waWabaId,
+        webhook_verify_token: waWebhookToken,
+      })
       queryClient.invalidateQueries({ queryKey: ['tenant', 'whatsapp-account'] })
       setWaAccessToken('')
       toast.success('WhatsApp settings saved')
@@ -337,7 +382,18 @@ function WhatsAppForm({ account }: { account: WhatsAppAccount }) {
         />
       </div>
       <div className="mt-5">
-        <Button onClick={() => saveWhatsApp()} isLoading={savingWhatsApp}>Save WhatsApp Settings</Button>
+        {guard.conflict && (
+          <div className="mb-3">
+            <SaveConflictWarning
+              conflict={guard.conflict}
+              onLoadTheirs={reload}
+              onSaveMine={() => guard.saveAnyway(saveWhatsApp)}
+            />
+          </div>
+        )}
+        <Button onClick={() => void guard.saveIfUnchanged(saveWhatsApp)} isLoading={savingWhatsApp || guard.checking}>
+          Save WhatsApp Settings
+        </Button>
       </div>
     </>
   )

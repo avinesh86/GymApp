@@ -98,4 +98,21 @@ describe('Settings → Timetable — class tile colour', () => {
       expect(updateTenantSettings).toHaveBeenCalledWith(expect.objectContaining({ timetable_tile_style: 'solid' })),
     )
   })
+
+  it("warns instead of saving over someone else's change, and can load theirs", async () => {
+    renderTab()
+    await waitFor(() => expect(screen.getByRole('radio', { name: /Tint/ })).toBeChecked())
+    vi.mocked(getTenantSettings).mockResolvedValue({
+      week_start_day: 0,
+      default_timetable_view: 'week',
+      timetable_tile_style: 'tint',
+    } as never)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Preferences' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Week Start Day (now: Sunday)')
+    expect(updateTenantSettings).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Load their changes' }))
+    expect(await screen.findByLabelText('Week Start Day')).toHaveValue('0')
+  })
 })
