@@ -27,6 +27,7 @@ const manager: FacilitiesConfig = {
   can_do_checklists: true,
   has_checklists: false,
   has_my_checklists: false,
+  has_any_checklists: false,
   can_manage_checklists: true,
   can_manage: true,
   is_alert_recipient: true,

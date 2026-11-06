@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from apps.tenants.models import Site
 
-from .checklists import can_do, checklist_roles, run_status
+from .checklists import can_do, checklist_roles, open_overdue_filter, run_status
 from .models import ChecklistAnswer, ChecklistItem, ChecklistRun, ChecklistTemplate, Equipment, FaultReport
 
 
@@ -152,15 +152,28 @@ class ChecklistTemplateSerializer(_TenantScopedRelations, serializers.ModelSeria
     site_name = serializers.CharField(source="site.name", read_only=True, default="")
     equipment_name = serializers.CharField(source="equipment.name", read_only=True, default="")
     items = ChecklistItemSerializer(many=True)
+    # Checks past their due time and not done. Pausing the checklist takes
+    # them off the dashboard and out of overdue alerts, so the edit form warns
+    # before a pause when this is above zero.
+    open_overdue_count = serializers.SerializerMethodField()
 
     class Meta:
         model = ChecklistTemplate
         fields = [
             "id", "site", "site_name", "name", "category", "description", "equipment",
             "equipment_name", "frequency", "weekdays", "interval_days", "start_date",
-            "due_time", "assigned_roles", "is_active", "items", "created_at", "updated_at",
+            "due_time", "assigned_roles", "is_active", "items", "open_overdue_count",
+            "created_at", "updated_at",
         ]
-        read_only_fields = ["id", "site_name", "equipment_name", "created_at", "updated_at"]
+        read_only_fields = ["id", "site_name", "equipment_name", "open_overdue_count", "created_at", "updated_at"]
+
+    def get_open_overdue_count(self, obj) -> int:
+        # The list annotates it in one query (ChecklistTemplateViewSet);
+        # a freshly created or updated checklist is counted here.
+        counted = getattr(obj, "open_overdue_count", None)
+        if counted is not None:
+            return counted
+        return obj.runs.filter(open_overdue_filter()).count()
 
     def validate_weekdays(self, value):
         if not isinstance(value, list) or any(not isinstance(d, int) or not 0 <= d <= 6 for d in value):

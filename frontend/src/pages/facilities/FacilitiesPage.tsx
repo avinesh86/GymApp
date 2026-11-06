@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '../../components/shared/PageHeader'
 import { Select } from '../../components/ui/Select'
 import { EmptyState } from '../../components/ui/EmptyState'
@@ -10,10 +11,21 @@ import { ChecklistsTab } from './ChecklistsTab'
 
 type TabKey = 'maintenance' | 'checklists' | 'equipment'
 
+const TAB_KEYS: TabKey[] = ['maintenance', 'checklists', 'equipment']
+
 /** Facilities: owner, admin, gym manager, team leader and payroll. */
 export function FacilitiesPage() {
   const { data: config, isLoading } = useFacilitiesConfig()
-  const [chosen, setChosen] = useState<TabKey | null>(null)
+  // The tab lives in the address (?tab=checklists) so links elsewhere, such
+  // as the dashboard's checks card, can open a particular tab.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const fromUrl = searchParams.get('tab')
+  const chosen = TAB_KEYS.find((k) => k === fromUrl) ?? null
+  const setChosen = (key: TabKey) => {
+    const next = new URLSearchParams(searchParams)
+    next.set('tab', key)
+    setSearchParams(next, { replace: true })
+  }
   const [site, setSite] = useState('')
 
   if (isLoading || !config) return <PageSpinner />
