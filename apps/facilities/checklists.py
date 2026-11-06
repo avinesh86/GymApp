@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta
 
 from django.db import transaction
 from django.db.models import F
+from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from apps.core.timezones import format_datetime, local_today, tenant_timezone, to_tenant_local
@@ -97,7 +98,7 @@ def create_due_runs(tenant, today: date | None = None) -> int:
     )
     to_create = []
     for template in templates:
-        made_at = to_tenant_local(template.created_at, tenant)
+        made_at = to_tenant_local(template.schedule_start, tenant)
         day = max(window_start, template.start_date, made_at.date())
         while day <= today:
             if (template.id, day) not in existing and is_due_on(template, day):
@@ -112,6 +113,7 @@ def create_due_runs(tenant, today: date | None = None) -> int:
                 )
             day += timedelta(days=1)
     ChecklistRun.objects.bulk_create(to_create, ignore_conflicts=True)
+    # Runs attempted: with overlapping callers some may already have existed.
     return len(to_create)
 
 
@@ -140,9 +142,12 @@ def alert_overdue_runs(tenant, now=None) -> int:
         due_at__gte=now - timedelta(days=CATCH_UP_DAYS),
         template__is_active=True,
         template__is_deleted=False,
-        # A checklist set up after today's due time still shows today's
-        # check, but it wasn't anyone's fault it was late: don't alert it.
-        due_at__gt=F("template__created_at"),
+    ).exclude(
+        # A checklist set up (or switched back on, or rescheduled) after a
+        # due time still shows that check, but it was born late and nobody's
+        # fault: don't alert it. Checks from before the change still alert.
+        due_at__lte=Coalesce(F("template__schedule_from"), F("template__created_at")),
+        created_at__gte=Coalesce(F("template__schedule_from"), F("template__created_at")),
     )
     # Claim each run before sending: a run is ours only if our conditional
     # update stamped it. A second job that starts while this one is still

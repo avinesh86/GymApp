@@ -184,7 +184,7 @@ export function CheckModal({ run, onClose }: { run: ChecklistRun | null; onClose
                         {a.photo ? a.photo.name : 'Add a photo (optional)'}
                         <input
                           type="file"
-                          accept="image/*"
+                          accept="image/jpeg,image/png,image/webp"
                           capture="environment"
                           className="sr-only"
                           aria-label={`Photo: ${item.text}`}

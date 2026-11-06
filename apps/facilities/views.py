@@ -334,7 +334,14 @@ class ChecklistTemplateViewSet(TenantScopedMixin, viewsets.ModelViewSet):
 
     @transaction.atomic
     def perform_update(self, serializer):
+        before = {f: getattr(serializer.instance, f) for f in ChecklistTemplate.SCHEDULE_FIELDS}
         template = serializer.save(updated_by=self.request.user)
+        after = {f: getattr(template, f) for f in ChecklistTemplate.SCHEDULE_FIELDS}
+        if template.is_active and before != after:
+            # Switched back on or rescheduled: no catching up on (or alerting
+            # about) checks from before now.
+            template.schedule_from = timezone.now()
+            template.save(update_fields=["schedule_from", "updated_at"])
         # Checks not yet done take the new time and site; ones no longer due
         # under the new schedule go.
         today = local_today(self.request.tenant)
@@ -376,7 +383,7 @@ class ChecklistRunViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
             qs = qs.filter(completed_at__isnull=True, due_at__lt=now)
         elif state == "done":
             qs = qs.filter(completed_at__isnull=False)
-        if params.get("template", "").isdigit():
+        if params.get("template", "").isascii() and params.get("template", "").isdigit():
             qs = qs.filter(template_id=int(params["template"]))
         for param, lookup in (("from", "due_date__gte"), ("to", "due_date__lte")):
             if params.get(param):
@@ -426,7 +433,8 @@ class ChecklistRunViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
         return Response(self.get_serializer(run).data)
 
 
-PHOTO_FORMATS = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp"}
+# MPO is how Pillow reports a JPEG carrying extra images (many phone cameras).
+PHOTO_FORMATS = {"JPEG": "jpg", "MPO": "jpg", "PNG": "png", "WEBP": "webp"}
 
 
 def _image_extension(upload) -> str | None:
@@ -434,7 +442,8 @@ def _image_extension(upload) -> str | None:
     (checked by decoding it, not by the type the browser claims), else None."""
     try:
         upload.seek(0)
-        with Image.open(upload) as image:
+        # Only these decoders run (MPO comes through the JPEG one).
+        with Image.open(upload, formats=["JPEG", "PNG", "WEBP"]) as image:
             fmt = image.format
             image.verify()
     except Exception:

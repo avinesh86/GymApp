@@ -153,6 +153,18 @@ class ChecklistTemplate(TenantAwareModel):
     # Roles (from the gym's checklist roles) that do it; empty = all of them.
     assigned_roles = models.JSONField(default=list, blank=True)
     is_active = models.BooleanField(default=True)
+    # When the current schedule began: set when the checklist is switched
+    # back on or its schedule changes (null = since it was created). Checks
+    # before it aren't created, and ones already late at that moment aren't
+    # alerted as overdue.
+    schedule_from = models.DateTimeField(null=True, blank=True)
+
+    # Changing any of these starts a new schedule.
+    SCHEDULE_FIELDS = ("is_active", "frequency", "weekdays", "interval_days", "start_date", "due_time")
+
+    @property
+    def schedule_start(self):
+        return self.schedule_from or self.created_at
 
     class Meta:
         db_table = "facilities_checklist_template"

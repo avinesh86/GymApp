@@ -616,3 +616,80 @@ def test_bad_date_filter_is_a_400_not_a_500(tenant, owner_user, param):
     response = _client(owner_user).get(f"/api/v1/facilities/checklist-runs/?{param}=notadate")
     assert response.status_code == 400
     assert param in response.data["detail"]
+
+
+def test_switching_a_checklist_back_on_doesnt_catch_up_or_alert_the_days_it_was_off(
+    tenant, owner_user, team_leader_user
+):
+    t = _template(tenant)
+    owner = _client(owner_user)
+    url = f"/api/v1/facilities/checklists/{t.id}/"
+    with _at(datetime(2026, 11, 1, 5, 0, tzinfo=NZ)):
+        assert owner.patch(url, {"is_active": False}, format="json").status_code == 200
+    with _at(datetime(2026, 11, 6, 10, 0, tzinfo=NZ)):
+        assert owner.patch(url, {"is_active": True}, format="json").status_code == 200
+        mine = _client(team_leader_user).get("/api/v1/facilities/checklist-runs/mine/").data
+        assert [r["due_date"] for r in mine] == ["2026-11-06"]  # not 1st-5th
+        assert alert_overdue_runs(tenant) == 0  # today's 6am was before it came back on
+    with _at(datetime(2026, 11, 7, 9, 0, tzinfo=NZ)):
+        create_due_runs(tenant)
+        assert alert_overdue_runs(tenant) == 1  # the 7th is a normal check
+
+
+def test_rescheduling_doesnt_flood_alerts_but_keeps_real_overdue_checks(tenant, owner_user):
+    # Weekly on Mondays; Monday the 2nd's check was missed.
+    t = _template(tenant, frequency="weekly", weekdays=[0], start_date=date(2026, 11, 2))
+    with _at(datetime(2026, 11, 2, 5, 0, tzinfo=NZ)):
+        create_due_runs(tenant)
+    with _at(datetime(2026, 11, 6, 10, 0, tzinfo=NZ)):  # Friday: switch to daily
+        response = _client(owner_user).patch(
+            f"/api/v1/facilities/checklists/{t.id}/", {"frequency": "daily"}, format="json"
+        )
+        assert response.status_code == 200, response.data
+        runs = sorted(ChecklistRun.objects.values_list("due_date", flat=True))
+        assert runs == [date(2026, 11, 2), date(2026, 11, 6)]  # no daily runs for the 3rd-5th
+        assert alert_overdue_runs(tenant) == 1  # Monday's missed check, not today's
+    note = Notification.objects.get(recipient=owner_user, notification_type="facilities")
+    assert "Mon 2 Nov 2026" in note.body
+
+
+def test_editing_a_checklist_name_doesnt_restart_its_schedule(tenant, owner_user):
+    t = _template(tenant)
+    with _at(datetime(2026, 11, 6, 10, 0, tzinfo=NZ)):
+        response = _client(owner_user).patch(
+            f"/api/v1/facilities/checklists/{t.id}/", {"name": "Morning check"}, format="json"
+        )
+        assert response.status_code == 200
+    t.refresh_from_db()
+    assert t.schedule_from is None
+
+
+def _mpo_jpeg():
+    """A JPEG with an extra image, as many phone cameras save; Pillow calls it MPO."""
+    from PIL import Image
+
+    buf = BytesIO()
+    Image.new("RGB", (4, 4), "red").save(
+        buf, format="MPO", save_all=True, append_images=[Image.new("RGB", (4, 4), "blue")]
+    )
+    return SimpleUploadedFile("IMG_1.jpg", buf.getvalue(), content_type="image/jpeg")
+
+
+def test_phone_camera_jpeg_with_extra_images_is_accepted(tenant, team_leader_user, settings, tmp_path):
+    settings.MEDIA_ROOT = tmp_path
+    t = _template(tenant)
+    with _at(datetime(2026, 11, 1, 5, 0, tzinfo=NZ)):
+        create_due_runs(tenant)
+    run = ChecklistRun.objects.get(template=t)
+    done = _complete(_client(team_leader_user), run, [{"item": t.items.get().id, "passed": False}]).data
+    url = f"/api/v1/facilities/checklist-answers/{done['answers'][0]['id']}/photo/"
+
+    response = _client(team_leader_user).post(url, {"photo": _mpo_jpeg()}, format="multipart")
+
+    assert response.status_code == 200, response.data
+    assert ChecklistAnswer.objects.get(pk=done["answers"][0]["id"]).photo.name.endswith(".jpg")
+
+
+def test_non_ascii_digit_template_filter_is_ignored_not_a_500(tenant, owner_user):
+    response = _client(owner_user).get("/api/v1/facilities/checklist-runs/?template=\u00b2")
+    assert response.status_code == 200
