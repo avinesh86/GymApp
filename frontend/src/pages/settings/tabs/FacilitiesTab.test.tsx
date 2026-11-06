@@ -163,17 +163,17 @@ describe('Settings → Facilities', () => {
     await userEvent.click(screen.getByRole('switch', { name: 'Also send alerts by email' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save Facilities Settings' }))
 
+    // Only what was changed, with what it was when the form opened.
     await waitFor(() =>
       expect(updateTenantSettings).toHaveBeenCalledWith({
-        facilities_equipment_enabled: true,
-        facilities_maintenance_enabled: true,
         fault_reporting_enabled: false,
         facilities_alert_roles: ['owner', 'gym_manager', 'team_leader'],
         facilities_alert_email: true,
-        facilities_checklists_enabled: true,
-        checklist_roles: ['owner', 'admin', 'gym_manager', 'team_leader'],
-        facilities_alert_start_hour: 9,
-        facilities_alert_end_hour: 17,
+        expected: {
+          fault_reporting_enabled: true,
+          facilities_alert_roles: ['owner', 'admin', 'gym_manager'],
+          facilities_alert_email: false,
+        },
       }),
     )
   })
@@ -218,7 +218,7 @@ describe('Settings → Facilities', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Who hears about new faults (now: Owner)')
     expect(updateTenantSettings).not.toHaveBeenCalled()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Load their changes' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Use their values' }))
     await waitFor(() => expect(alerted().getByRole('checkbox', { name: 'Gym Manager' })).not.toBeChecked())
   })
 })

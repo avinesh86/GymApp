@@ -1,13 +1,13 @@
 import React, { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import toast from 'react-hot-toast'
+import { useQuery } from '@tanstack/react-query'
+import { format, parseISO } from 'date-fns'
 import { getTenantSettings, updateTenantSettings } from '../../../api/settings'
 import { Button } from '../../../components/ui/Button'
 import { Select } from '../../../components/ui/Select'
 import { Card } from '../../../components/ui/Card'
 import type { TenantSettings } from '../../../types'
 import { WhenLoaded } from './WhenLoaded'
-import { SaveConflictWarning, useSaveConflictCheck, type ConflictField } from './SaveConflict'
+import { SaveConflictWarning, useGuardedSave, type ConflictField } from './SaveConflict'
 
 const FREQUENCY_OPTIONS = [
   { value: 'weekly',       label: 'Weekly' },
@@ -55,7 +55,7 @@ export function InvoicesTab() {
   const query = useQuery({ queryKey: ['tenant', 'settings'], queryFn: getTenantSettings })
   return (
     <WhenLoaded query={query} savesKey={['tenant', 'settings']} what="the invoice settings">
-      {(settings, reload) => <InvoicesForm settings={settings} reload={reload} />}
+      {(settings) => <InvoicesForm settings={settings} />}
     </WhenLoaded>
   )
 }
@@ -66,38 +66,42 @@ const FIELDS: ConflictField<TenantSettings>[] = [
     label: 'Invoice Frequency',
     show: (v) => FREQUENCY_OPTIONS.find((o) => o.value === v)?.label ?? String(v),
   },
-  { key: 'pay_period_anchor_date', label: 'Pay Period Start Date' },
-  { key: 'payroll_approval_required', label: 'Payroll Approval Required', show: (v) => (v ? 'Yes' : 'No') },
+  {
+    key: 'pay_period_anchor_date',
+    label: 'Pay Period Start Date',
+    show: (v) => (typeof v === 'string' && v ? format(parseISO(v), 'd MMM yyyy') : '(blank)'),
+  },
+  {
+    key: 'payroll_approval_required',
+    label: 'Payroll Approval Required',
+  },
 ]
 
-function InvoicesForm({ settings, reload }: { settings: TenantSettings; reload: () => void }) {
-  const queryClient = useQueryClient()
-  const guard = useSaveConflictCheck({
-    data: settings,
-    queryKey: ['tenant', 'settings'],
-    queryFn: getTenantSettings,
-    fields: FIELDS,
-  })
+function InvoicesForm({ settings }: { settings: TenantSettings }) {
   const [frequency, setFrequency] = useState<string>(settings.invoice_frequency)
   const [anchorDate, setAnchorDate] = useState(settings.pay_period_anchor_date ?? '')
   const [approvalRequired, setApprovalRequired] = useState(settings.payroll_approval_required)
 
-  const { mutate, isPending } = useMutation({
-    mutationKey: ['tenant', 'settings'],
-    mutationFn: (payload: Partial<TenantSettings>) => updateTenantSettings(payload),
-    onSuccess: (_saved, payload) => {
-      guard.markSaved(payload)
-      queryClient.invalidateQueries({ queryKey: ['tenant', 'settings'] })
-      toast.success('Invoice settings saved')
-    },
-    onError: () => toast.error('Failed to save invoice settings'),
-  })
-  const save = () =>
-    mutate({
+  const guard = useGuardedSave({
+    data: settings,
+    fields: FIELDS,
+    queryKey: ['tenant', 'settings'],
+    queryFn: getTenantSettings,
+    send: updateTenantSettings,
+    current: () => ({
       invoice_frequency: frequency as TenantSettings['invoice_frequency'],
-      ...(anchorDate ? { pay_period_anchor_date: anchorDate } : {}),
+      // A blank date isn't sent: clearing it isn't supported.
+      pay_period_anchor_date: anchorDate || undefined,
       payroll_approval_required: approvalRequired,
-    })
+    }),
+    apply: (v) => {
+      if (v.invoice_frequency !== undefined) setFrequency(v.invoice_frequency)
+      if (v.pay_period_anchor_date !== undefined) setAnchorDate(v.pay_period_anchor_date ?? '')
+      if (v.payroll_approval_required !== undefined) setApprovalRequired(v.payroll_approval_required)
+    },
+    savedMessage: 'Invoice settings saved',
+    failedMessage: 'Failed to save invoice settings',
+  })
 
   return (
     <div className="max-w-md">
@@ -135,18 +139,8 @@ function InvoicesForm({ settings, reload }: { settings: TenantSettings; reload: 
             />
           </div>
 
-          {guard.conflict && (
-            <SaveConflictWarning
-              conflict={guard.conflict}
-              onLoadTheirs={reload}
-              onSaveMine={() => guard.saveAnyway(save)}
-            />
-          )}
-          <Button
-            onClick={() => void guard.saveIfUnchanged(save)}
-            isLoading={isPending || guard.checking}
-            className="w-fit"
-          >
+          <SaveConflictWarning conflict={guard.conflict} onLoadTheirs={guard.loadTheirs} onSaveMine={guard.saveMine} />
+          <Button onClick={() => void guard.save()} isLoading={guard.isSaving} className="w-fit">
             Save Invoice Settings
           </Button>
         </div>

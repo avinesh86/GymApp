@@ -80,17 +80,39 @@ describe('Settings → General', () => {
     expect(updateTenantBranding).not.toHaveBeenCalled()
   })
 
-  it("shows the gym's saved currency, timezone and app name, and saves them unchanged", async () => {
+  it("shows the gym's saved currency, timezone and app name, and saves only what was changed", async () => {
     renderTab()
 
     expect(await screen.findByLabelText('Timezone')).toHaveValue('Pacific/Auckland')
     expect(screen.getByLabelText('Currency Symbol')).toHaveValue('£')
     expect(screen.getByLabelText('App Name')).toHaveValue('Harbour Gym')
 
+    await userEvent.selectOptions(screen.getByLabelText('Timezone'), 'Europe/London')
     await userEvent.click(screen.getByRole('button', { name: 'Save Timezone' }))
     await waitFor(() =>
-      expect(updateTenantSettings).toHaveBeenCalledWith({ currency_symbol: '£', timezone: 'Pacific/Auckland' }),
+      expect(updateTenantSettings).toHaveBeenCalledWith({
+        timezone: 'Europe/London',
+        // What it was when the form opened: the server refuses if it changed since.
+        expected: { timezone: 'Pacific/Auckland' },
+      }),
     )
+  })
+
+  it("doesn't take its own save, tidied by the server, for someone else's change", async () => {
+    // The server trims spaces; the form must remember what was stored.
+    renderTab()
+    const appName = await screen.findByLabelText('App Name')
+    await userEvent.clear(appName)
+    await userEvent.type(appName, 'Harbour Fitness ')
+    vi.mocked(updateTenantBranding).mockResolvedValue({ ...BRANDING, app_name: 'Harbour Fitness' } as never)
+    await userEvent.click(screen.getByRole('button', { name: 'Save App Name' }))
+    await waitFor(() => expect(updateTenantBranding).toHaveBeenCalledTimes(1))
+    vi.mocked(getTenantBranding).mockResolvedValue({ ...BRANDING, app_name: 'Harbour Fitness' } as never)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save App Name' }))
+
+    await waitFor(() => expect(updateTenantBranding).toHaveBeenCalledTimes(2))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
   it('shows a custom currency symbol in the custom field', async () => {
@@ -152,7 +174,7 @@ describe('Settings → General', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Timezone (now: Australia/Sydney)')
     expect(updateTenantSettings).not.toHaveBeenCalled()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Load their changes' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Use their values' }))
     expect(await screen.findByLabelText('Timezone')).toHaveValue('Australia/Sydney')
   })
 

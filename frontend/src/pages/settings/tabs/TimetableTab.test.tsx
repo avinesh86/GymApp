@@ -50,19 +50,19 @@ describe('Settings → Timetable — loading', () => {
     expect(updateTenantSettings).not.toHaveBeenCalled()
   })
 
-  it("shows the gym's saved preferences and saves them unchanged", async () => {
+  it("shows the gym's saved preferences and saves only what was changed", async () => {
     vi.mocked(getTenantSettings).mockResolvedValue(SAVED as never)
     renderTab()
 
     expect(await screen.findByLabelText('Week Start Day')).toHaveValue('0')
     expect(screen.getByLabelText('Default View')).toHaveValue('list')
 
+    await userEvent.selectOptions(screen.getByLabelText('Week Start Day'), '1')
     await userEvent.click(screen.getByRole('button', { name: 'Save Preferences' }))
     await waitFor(() =>
       expect(updateTenantSettings).toHaveBeenCalledWith({
-        week_start_day: 0,
-        default_timetable_view: 'list',
-        timetable_tile_style: 'solid',
+        week_start_day: 1,
+        expected: { week_start_day: 0 },
       }),
     )
   })
@@ -112,7 +112,7 @@ describe('Settings → Timetable — class tile colour', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Week Start Day (now: Sunday)')
     expect(updateTenantSettings).not.toHaveBeenCalled()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Load their changes' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Use their values' }))
     expect(await screen.findByLabelText('Week Start Day')).toHaveValue('0')
   })
 })

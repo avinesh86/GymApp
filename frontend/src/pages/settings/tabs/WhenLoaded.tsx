@@ -41,7 +41,7 @@ export function useLoadState<T>(query: LoadQuery<T>, savesKey: QueryKey): LoadSt
   return state
 }
 
-function errorDescription(error: unknown, offline: boolean) {
+export function errorDescription(error: unknown, offline: boolean) {
   if (offline || (isAxiosError(error) && !error.response)) return 'Check your connection and try again.'
   if (isAxiosError(error) && error.response?.status === 403) return "Your account doesn't have access to these settings."
   return 'Something went wrong on our end. Try again, and tell us if it keeps happening.'
@@ -67,11 +67,9 @@ export function WhenLoaded<T>({
   savesKey: QueryKey
   /** Completes "Couldn't load …", e.g. "the invoice settings". */
   what: string
-  /** `reload` remounts the form from the latest data ("Load their changes"). */
-  children: (data: T, reload: () => void) => React.ReactNode
+  children: (data: T) => React.ReactNode
 }) {
   const state = useLoadState(query, savesKey)
-  const [version, setVersion] = useState(0)
   if (state === 'error') {
     const forbidden = isAxiosError(query.error) && query.error.response?.status === 403
     return (
@@ -83,5 +81,5 @@ export function WhenLoaded<T>({
     )
   }
   if (state === 'waiting' || query.data === undefined) return <PageSpinner />
-  return <React.Fragment key={version}>{children(query.data, () => setVersion((v) => v + 1))}</React.Fragment>
+  return <>{children(query.data)}</>
 }
