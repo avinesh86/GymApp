@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import Equipment, FaultReport
+from .models import ChecklistItem, ChecklistRun, ChecklistTemplate, Equipment, FaultReport
 
 
 @admin.register(Equipment)
@@ -15,3 +15,21 @@ class FaultReportAdmin(admin.ModelAdmin):
     list_display = ("title", "tenant", "equipment", "severity", "status", "created_at")
     list_filter = ("status", "severity")
     search_fields = ("title",)
+
+
+class ChecklistItemInline(admin.TabularInline):
+    model = ChecklistItem
+    extra = 0
+
+
+@admin.register(ChecklistTemplate)
+class ChecklistTemplateAdmin(admin.ModelAdmin):
+    list_display = ("name", "tenant", "site", "frequency", "due_time", "is_active")
+    list_filter = ("frequency", "category", "is_active")
+    inlines = [ChecklistItemInline]
+
+
+@admin.register(ChecklistRun)
+class ChecklistRunAdmin(admin.ModelAdmin):
+    list_display = ("template", "tenant", "due_date", "due_at", "completed_at", "completed_by")
+    list_filter = ("due_date",)

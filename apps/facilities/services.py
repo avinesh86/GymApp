@@ -33,6 +33,7 @@ class FacilitiesConfig:
     fault_reporting_enabled: bool
     alert_roles: tuple[str, ...]
     alert_email: bool
+    checklists_enabled: bool = False
 
 
 def get_config(tenant) -> FacilitiesConfig:
@@ -47,6 +48,7 @@ def get_config(tenant) -> FacilitiesConfig:
         alert_roles=tuple(s.facilities_alert_roles or ()),
         # The gym-wide email switch still wins.
         alert_email=s.facilities_alert_email and s.email_enabled,
+        checklists_enabled=s.facilities_checklists_enabled,
     )
 
 

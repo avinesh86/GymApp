@@ -7,7 +7,9 @@ import { defineConfig, devices } from '@playwright/test'
  * and never by calling the API directly. The only address any test types is
  * the app's front door — everything after that has to be reachable by
  * clicking, which is the point: a button wired to nothing fails here, and
- * that is the class of bug these exist to catch.
+ * that is the class of bug these exist to catch. The one exception is opening
+ * the address held in a QR label a test produced (that's how people arrive
+ * by scanning); see docs/RUNBOOK.md §8.
  */
 export default defineConfig({
   testDir: './e2e',

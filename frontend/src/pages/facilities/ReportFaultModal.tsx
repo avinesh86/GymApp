@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { listFaultBoard, listReportableEquipment, reportFault } from '../../api/facilities'
@@ -15,13 +15,15 @@ import type { FaultSeverity } from '../../types'
 interface Props {
   isOpen: boolean
   onClose: () => void
+  /** Opened from a machine's QR page: that machine is already chosen. */
+  equipmentId?: number
 }
 
 /**
  * Report a fault. Picking a machine first shows anything already reported on
  * it and how it's going, so staff don't log the same fault again.
  */
-export function ReportFaultModal({ isOpen, onClose }: Props) {
+export function ReportFaultModal({ isOpen, onClose, equipmentId: presetEquipment }: Props) {
   const queryClient = useQueryClient()
   const { data: config } = useFacilitiesConfig()
   const { user } = useAuth()
@@ -32,6 +34,10 @@ export function ReportFaultModal({ isOpen, onClose }: Props) {
   const [location, setLocation] = useState('')
   const [description, setDescription] = useState('')
   const [severity, setSeverity] = useState<FaultSeverity>('medium')
+
+  useEffect(() => {
+    if (isOpen && presetEquipment) setEquipmentId(String(presetEquipment))
+  }, [isOpen, presetEquipment])
 
   const { data: equipment = [] } = useQuery({
     queryKey: ['facilities', 'reportable-equipment'],

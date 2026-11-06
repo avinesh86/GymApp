@@ -187,6 +187,11 @@ class Command(BaseCommand):
         from apps.facilities.models import Equipment, FaultReport
         from apps.tenants.models import TenantSettings
 
+        from apps.facilities.models import ChecklistTemplate
+
+        checklists = ChecklistTemplate.objects.filter(tenant=tenant, name__startswith="E2E ")
+        counts["checklists"] = checklists.count()
+        checklists.delete()  # their due checks and answers go with them
         faults = FaultReport.objects.filter(tenant=tenant, title__startswith="E2E ")
         counts["faults"] = faults.count()
         faults.delete()
@@ -197,6 +202,8 @@ class Command(BaseCommand):
             facilities_equipment_enabled=True,
             facilities_maintenance_enabled=True,
             fault_reporting_enabled=True,
+            facilities_checklists_enabled=True,
+            checklist_roles=["owner", "admin", "gym_manager", "team_leader"],
         )
 
         removed = ", ".join(f"{n} {label}" for label, n in counts.items() if n)

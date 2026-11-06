@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query'
 import { useRef } from 'react'
 import { Toaster } from 'react-hot-toast'
@@ -23,6 +23,7 @@ import { CSVImportPage } from './pages/imports/CSVImportPage'
 import { SettingsPage } from './pages/settings/SettingsPage'
 import { FacilitiesPage } from './pages/facilities/FacilitiesPage'
 import { FaultBoardPage } from './pages/facilities/FaultBoardPage'
+import { EquipmentPage } from './pages/facilities/EquipmentPage'
 import { MySchedulePage } from './pages/schedule/MySchedulePage'
 import { InstructorCalendarPage } from './pages/schedule/InstructorCalendarPage'
 import { ProfilePage } from './pages/profile/ProfilePage'
@@ -97,6 +98,7 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth()
   const isRestoring = useAuthStore((s) => s.isRestoring)
   const accessToken = useAuthStore((s) => s.accessToken)
+  const location = useLocation()
 
   if (isRestoring || (isAuthenticated && !accessToken)) {
     return (
@@ -107,7 +109,9 @@ function RequireAuth({ children }: { children: React.ReactNode }) {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />
+    // Remember where they were going — a scanned equipment QR code, say —
+    // so signing in takes them there instead of the dashboard.
+    return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />
   }
 
   return <>{children}</>
@@ -266,6 +270,8 @@ export default function App() {
             />
 
             <Route path="/faults" element={<FaultBoardPage />} />
+            {/* What an equipment QR label opens — for everyone signed in. */}
+            <Route path="/equipment/:id" element={<EquipmentPage />} />
 
             <Route
               path="/settings"

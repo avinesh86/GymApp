@@ -110,6 +110,14 @@ class Command(BaseCommand):
             "send_scheduled_reports",
         ))
 
+        # 8. Facilities checklists: create due checks, alert overdue ones
+        #    (alerts held to the gym's business hours).
+        results.append(self._run_task(
+            "Run facilities checklists",
+            "apps.facilities.tasks",
+            "run_checklists",
+        ))
+
         self.stdout.write("")
         self.stdout.write("━" * 60)
         passed = sum(1 for ok, _ in results if ok)

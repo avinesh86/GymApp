@@ -38,7 +38,7 @@ what goes live.
 | **Branch** | A separate copy of the code where a change is made without affecting anyone else. |
 | **`main`** | The branch that is live. Anything merged here goes to the real website. |
 | **`test`** | The branch where finished changes wait before going live. |
-| **Pull request (PR)** | A request to move a branch's changes into another branch. It shows exactly what changed, and is where you review and approve. |
+| **Pull request (PR)** | A request to move a branch's changes into another branch. It shows exactly what changed, and what Claude's reviews found (see `RUNBOOK.md` section 9). |
 | **Merge** | Accepting a pull request, so its changes join the target branch. |
 | **CI** | Automatic checks GitHub runs on every pull request: tests, code style and a build. Green tick = passed, red cross = something broke. |
 | **Test** (in code) | A small program that checks a feature works. If someone breaks the feature later, its test fails. |
@@ -57,7 +57,7 @@ what goes live.
  Claude makes a branch from `test` and writes the code + tests
     │
     ▼
- Pull request into `test` ──► CI checks (must be green) ──► you review ──► merge
+ Pull request into `test` ──► CI + Claude's four reviews ──► you read the Reviews section ──► merge
     │
     ▼
  Release: pull request from `test` into `main` ──► CI ──► merge
