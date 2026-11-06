@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react'
-import { Bell } from 'lucide-react'
+import { Bell, Menu } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { listNotifications, markAllNotificationsRead, acceptCoverFromNotification } from '../../api/notifications'
 import { useAuth } from '../../hooks/useAuth'
@@ -8,9 +8,12 @@ import toast from 'react-hot-toast'
 
 interface TopBarProps {
   title?: string
+  /** Opens the slide-in menu on small screens. */
+  onMenuClick: () => void
+  menuOpen: boolean
 }
 
-export function TopBar({ title }: TopBarProps) {
+export function TopBar({ title, onMenuClick, menuOpen }: TopBarProps) {
   const [panelOpen, setPanelOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
   const queryClient = useQueryClient()
@@ -58,11 +61,27 @@ export function TopBar({ title }: TopBarProps) {
   }, [])
 
   return (
-    <header className="h-14 bg-[#0A0D14] border-b border-white/10 flex items-center justify-between px-6 sticky top-0 z-30">
-      <h1 className="text-base font-semibold text-white">{title}</h1>
+    <header className="h-14 bg-[#0A0D14] border-b border-white/10 flex items-center gap-2 pl-3 pr-4 md:px-6 sticky top-0 z-30">
+      {/* Part of the row, not floating over it, so it can never cover the title. */}
+      <button
+        type="button"
+        aria-label="Open menu"
+        aria-expanded={menuOpen}
+        // The menu is only rendered while open.
+        aria-controls={menuOpen ? 'mobile-menu' : undefined}
+        onClick={onMenuClick}
+        className="md:hidden h-11 w-11 shrink-0 flex items-center justify-center rounded-lg text-white hover:bg-white/10 transition-colors"
+      >
+        <Menu className="h-5 w-5" />
+      </button>
 
-      <div className="relative" ref={panelRef}>
+      <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-white" title={title}>
+        {title}
+      </h1>
+
+      <div className="relative shrink-0" ref={panelRef}>
         <button
+          aria-label="Open notifications"
           onClick={() => setPanelOpen((open) => !open)}
           className="relative p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
         >

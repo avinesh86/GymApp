@@ -133,7 +133,12 @@ export async function listChecklists(filters: SiteFilter = {}): Promise<Checklis
   return unwrapList(response.data)
 }
 
-export type ChecklistInput = Omit<ChecklistTemplate, 'id' | 'site_name' | 'equipment_name'>
+export type ChecklistInput = Omit<ChecklistTemplate, 'id' | 'site_name' | 'equipment_name' | 'open_overdue_count'>
+
+export async function getChecklist(id: number): Promise<ChecklistTemplate> {
+  const response = await apiClient.get<ChecklistTemplate>(`facilities/checklists/${id}/`)
+  return response.data
+}
 
 export async function createChecklist(data: ChecklistInput): Promise<ChecklistTemplate> {
   const response = await apiClient.post<ChecklistTemplate>('facilities/checklists/', data)

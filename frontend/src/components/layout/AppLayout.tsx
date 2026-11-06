@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
@@ -20,13 +20,14 @@ const PAGE_TITLES: Record<string, string> = {
 export function AppLayout() {
   const location = useLocation()
   const title = PAGE_TITLES[location.pathname] ?? 'Northern Arena'
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   return (
     <div className="flex h-screen bg-[#F0F2F5] overflow-hidden">
-      <Sidebar />
+      <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <TopBar title={title} />
+        <TopBar title={title} menuOpen={mobileMenuOpen} onMenuClick={() => setMobileMenuOpen(true)} />
         <SetupBanner />
 
         <main className="flex-1 overflow-y-auto p-6 bg-[#F0F2F5]">

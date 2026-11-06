@@ -47,7 +47,7 @@ export function FacilitiesDashboardCard() {
           )}
           <button
             onClick={() => navigate(config.can_manage ? '/facilities' : '/faults')}
-            className="text-xs text-cyan-600 hover:text-cyan-800"
+            className="py-2 px-1 text-xs text-cyan-600 hover:text-cyan-800"
           >
             {config.can_manage ? 'View Facilities' : 'See maintenance status'} &rsaquo;
           </button>

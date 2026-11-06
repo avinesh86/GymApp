@@ -58,6 +58,7 @@ beforeEach(() => {
     can_do_checklists: false,
     has_checklists: false,
     has_my_checklists: false,
+    has_any_checklists: false,
     can_manage_checklists: false,
     can_manage: false,
     is_alert_recipient: false,

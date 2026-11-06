@@ -24,27 +24,32 @@ export const RUN_ID = process.env.E2E_RUN_ID ?? String(Date.now()).slice(-6)
 
 export const named = (label: string) => `E2E ${label} ${RUN_ID}`
 
-/** Signs in from the front door. The one place a URL is typed (apart from
- * opening a QR label's address, which a test reads from the label). */
-export async function signIn(page: Page, who = OWNER) {
+/**
+ * Signs in from the front door. The one place a URL is typed (apart from
+ * opening a QR label's address, which a test reads from the label).
+ *
+ * `ready` is what shows once signed in: the sidebar's Dashboard link by
+ * default. On a phone the sidebar is hidden, so pass the menu button instead.
+ */
+export async function signIn(
+  page: Page,
+  who = OWNER,
+  ready = page.getByRole('link', { name: 'Dashboard' }),
+) {
   await page.goto('/')
 
   // Already signed in from a previous test in the same file? The app first
   // restores a saved session behind a spinner, so wait until it shows either
   // the menu or the sign-in form; checking straight away can see neither.
-  const sidebar = page.getByRole('link', { name: 'Dashboard' })
   const emailField = page.getByLabel('Email address')
-  await expect(sidebar.or(emailField).first()).toBeVisible()
-  if (await sidebar.isVisible()) return
+  await expect(ready.or(emailField).first()).toBeVisible()
+  if (await ready.isVisible()) return
 
   await page.getByLabel('Email address').fill(who.email)
   await page.getByLabel('Password').fill(who.password)
   await page.getByRole('button', { name: 'Sign in' }).click()
 
-  await expect(
-    page.getByRole('link', { name: 'Dashboard' }),
-    'signing in should land on a page with the main menu',
-  ).toBeVisible()
+  await expect(ready, 'signing in should land on a page with the main menu').toBeVisible()
 }
 
 /**
