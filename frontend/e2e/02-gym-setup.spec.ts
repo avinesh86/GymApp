@@ -47,8 +47,10 @@ test.describe.serial('setting up a gym', () => {
     // is genuinely required. What must never happen is both or neither.
     await signIn(page)
     await openSettingsTab(page, 'Notifications')
+    // Wait for the form: it appears only once the settings have loaded.
+    await expect(page.getByRole('button', { name: /Save Email Settings/i })).toBeVisible()
 
-    const managed = await page.getByLabel(/Reply-to Address/i).isVisible().catch(() => false)
+    const managed =await page.getByLabel(/Reply-to Address/i).isVisible().catch(() => false)
     const passwordField = page.getByLabel(/Gmail App Password/i)
 
     if (managed) {

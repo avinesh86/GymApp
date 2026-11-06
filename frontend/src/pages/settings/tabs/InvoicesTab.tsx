@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { getTenantSettings, updateTenantSettings } from '../../../api/settings'
 import { Button } from '../../../components/ui/Button'
 import { Select } from '../../../components/ui/Select'
 import { Card } from '../../../components/ui/Card'
+import type { TenantSettings } from '../../../types'
+import { WhenLoaded } from './WhenLoaded'
 
 const FREQUENCY_OPTIONS = [
   { value: 'weekly',       label: 'Weekly' },
@@ -49,20 +51,19 @@ function Toggle({
 }
 
 export function InvoicesTab() {
+  const query = useQuery({ queryKey: ['tenant', 'settings'], queryFn: getTenantSettings })
+  return (
+    <WhenLoaded query={query} what="the invoice settings">
+      {(settings) => <InvoicesForm settings={settings} />}
+    </WhenLoaded>
+  )
+}
+
+function InvoicesForm({ settings }: { settings: TenantSettings }) {
   const queryClient = useQueryClient()
-  const { data: settings } = useQuery({ queryKey: ['tenant', 'settings'], queryFn: getTenantSettings })
-
-  const [frequency, setFrequency] = useState('monthly')
-  const [anchorDate, setAnchorDate] = useState('')
-  const [approvalRequired, setApprovalRequired] = useState(true)
-
-  useEffect(() => {
-    if (settings) {
-      setFrequency(settings.invoice_frequency)
-      setAnchorDate(settings.pay_period_anchor_date ?? '')
-      setApprovalRequired(settings.payroll_approval_required)
-    }
-  }, [settings])
+  const [frequency, setFrequency] = useState<string>(settings.invoice_frequency)
+  const [anchorDate, setAnchorDate] = useState(settings.pay_period_anchor_date ?? '')
+  const [approvalRequired, setApprovalRequired] = useState(settings.payroll_approval_required)
 
   const { mutate: save, isPending } = useMutation({
     mutationFn: () =>
