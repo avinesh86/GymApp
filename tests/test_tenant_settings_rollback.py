@@ -78,9 +78,17 @@ def test_migration_0013_reverses_cleanly():
     """Undoing 0013 must really remove the defaults, or the database and
     Django's idea of it drift apart."""
     assert all(_column_has_default(c) for c in ADDED_BY_CHECKLISTS_RELEASE)
+    # What 0012 itself leaves: on MySQL, Django keeps the default it gives a
+    # JSON column, so checklist_roles has one there even before 0013.
+    kept_by_0012 = (
+        {"checklist_roles"}
+        if connection.vendor == "mysql" and not connection.mysql_is_mariadb
+        else set()
+    )
     try:
         call_command("migrate", "tenants", "0012", verbosity=0)
-        assert not any(_column_has_default(c) for c in ADDED_BY_CHECKLISTS_RELEASE)
+        for column in ADDED_BY_CHECKLISTS_RELEASE:
+            assert _column_has_default(column) == (column in kept_by_0012), column
     finally:
         call_command("migrate", verbosity=0)
     assert all(_column_has_default(c) for c in ADDED_BY_CHECKLISTS_RELEASE)

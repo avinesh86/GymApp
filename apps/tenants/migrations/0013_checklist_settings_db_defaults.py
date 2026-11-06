@@ -60,6 +60,10 @@ def add_roles_default(apps_registry, schema_editor):
 
 
 def remove_roles_default(apps_registry, schema_editor):
+    # Put back what 0012 left. On MySQL that includes this default: Django
+    # never drops a default it gave a JSON column there, so 0012 kept it.
+    if _is_mysql(schema_editor.connection):
+        return
     _set_roles_default(apps_registry, schema_editor, CHECKLIST_ROLES, None)
 
 
