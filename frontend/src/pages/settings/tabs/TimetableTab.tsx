@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { getTenantSettings, updateTenantSettings } from '../../../api/settings'
 import { Button } from '../../../components/ui/Button'
 import { Select } from '../../../components/ui/Select'
 import { Card } from '../../../components/ui/Card'
-import type { TimetableTileStyle } from '../../../types'
+import type { TenantSettings, TimetableTileStyle } from '../../../types'
+import { WhenLoaded } from './WhenLoaded'
 
 const DAY_OPTIONS = [
   { value: 0, label: 'Sunday' },
@@ -41,22 +42,22 @@ function TilePreview({ style }: { style: TimetableTileStyle }) {
 }
 
 export function TimetableTab() {
+  const query = useQuery({ queryKey: ['tenant', 'settings'], queryFn: getTenantSettings })
+  return (
+    <WhenLoaded query={query} savesKey={['tenant', 'settings']} what="the timetable settings">
+      {(settings) => <TimetableForm settings={settings} />}
+    </WhenLoaded>
+  )
+}
+
+function TimetableForm({ settings }: { settings: TenantSettings }) {
   const queryClient = useQueryClient()
-  const { data: settings } = useQuery({ queryKey: ['tenant', 'settings'], queryFn: getTenantSettings })
-
-  const [weekStart, setWeekStart] = useState('1')
-  const [defaultView, setDefaultView] = useState('week')
-  const [tileStyle, setTileStyle] = useState<TimetableTileStyle>('tint')
-
-  useEffect(() => {
-    if (settings) {
-      setWeekStart(String(settings.week_start_day ?? 1))
-      setDefaultView(settings.default_timetable_view ?? 'week')
-      setTileStyle(settings.timetable_tile_style ?? 'tint')
-    }
-  }, [settings])
+  const [weekStart, setWeekStart] = useState(String(settings.week_start_day ?? 1))
+  const [defaultView, setDefaultView] = useState<string>(settings.default_timetable_view ?? 'week')
+  const [tileStyle, setTileStyle] = useState<TimetableTileStyle>(settings.timetable_tile_style ?? 'tint')
 
   const { mutate: save, isPending } = useMutation({
+    mutationKey: ['tenant', 'settings'],
     mutationFn: () =>
       updateTenantSettings({
         week_start_day: Number(weekStart),

@@ -39,6 +39,38 @@ beforeEach(() => {
 })
 
 describe('Settings → Facilities', () => {
+  it("keeps an open form and the person's changes when its data goes out of date", async () => {
+    // It used to turn into a spinner once the cached copy it opened with went
+    // stale (30 seconds in the app), throwing away unsaved changes.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 50 } } })
+    client.setQueryData(['tenant', 'settings'], await vi.mocked(getTenantSettings)())
+    vi.mocked(getTenantSettings).mockReturnValue(new Promise(() => {}) as never)
+    renderTab(client)
+
+    const reporting = screen.getByRole('switch', { name: 'Report a fault button' })
+    await userEvent.click(reporting)
+    await new Promise((r) => setTimeout(r, 120))
+
+    expect(screen.getByRole('switch', { name: 'Report a fault button' })).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it("keeps an open form and the person's other changes while a save refreshes the data", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } })
+    client.setQueryData(['tenant', 'settings'], await vi.mocked(getTenantSettings)())
+    renderTab(client)
+    vi.mocked(getTenantSettings).mockReturnValue(new Promise(() => {}) as never)
+
+    await userEvent.click(screen.getByRole('switch', { name: 'Also send alerts by email' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save Facilities Settings' }))
+    await waitFor(() => expect(updateTenantSettings).toHaveBeenCalled())
+    // A change made after pressing Save, while the save is refreshing the data.
+    await userEvent.click(alerted().getByRole('checkbox', { name: 'Payroll' }))
+    await new Promise((r) => setTimeout(r, 30))
+
+    expect(screen.getByRole('switch', { name: 'Also send alerts by email' })).toHaveAttribute('aria-checked', 'true')
+    expect(alerted().getByRole('checkbox', { name: 'Payroll' })).toBeChecked()
+  })
+
   it('waits for fresh settings rather than starting from an out-of-date copy', async () => {
     // Saving a form seeded from a stale cache would undo someone else's change.
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } })

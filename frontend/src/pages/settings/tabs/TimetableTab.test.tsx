@@ -30,6 +30,55 @@ beforeEach(() => {
   vi.mocked(updateTenantSettings).mockResolvedValue({} as never)
 })
 
+describe('Settings → Timetable — loading', () => {
+  // Deliberately the opposite of the form's old starting values
+  // (Monday, week view, tint) so saving those would show up.
+  const SAVED = { week_start_day: 0, default_timetable_view: 'list', timetable_tile_style: 'solid' }
+
+  it("offers nothing to change or save until the gym's settings have loaded", async () => {
+    let finishLoading: (value: unknown) => void = () => {}
+    vi.mocked(getTenantSettings).mockReturnValue(new Promise((resolve) => (finishLoading = resolve)) as never)
+    renderTab()
+
+    await waitFor(() => expect(getTenantSettings).toHaveBeenCalled())
+    expect(screen.queryByRole('button', { name: 'Save Preferences' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /Tint/ })).not.toBeInTheDocument()
+
+    finishLoading(SAVED)
+
+    expect(await screen.findByRole('radio', { name: /Solid/ })).toBeChecked()
+    expect(updateTenantSettings).not.toHaveBeenCalled()
+  })
+
+  it("shows the gym's saved preferences and saves them unchanged", async () => {
+    vi.mocked(getTenantSettings).mockResolvedValue(SAVED as never)
+    renderTab()
+
+    expect(await screen.findByLabelText('Week Start Day')).toHaveValue('0')
+    expect(screen.getByLabelText('Default View')).toHaveValue('list')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Preferences' }))
+    await waitFor(() =>
+      expect(updateTenantSettings).toHaveBeenCalledWith({
+        week_start_day: 0,
+        default_timetable_view: 'list',
+        timetable_tile_style: 'solid',
+      }),
+    )
+  })
+
+  it('says so and offers to try again when the settings cannot be loaded', async () => {
+    vi.mocked(getTenantSettings).mockRejectedValueOnce(new Error('offline'))
+    renderTab()
+
+    expect(await screen.findByText("Couldn't load the timetable settings")).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save Preferences' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByRole('button', { name: 'Save Preferences' })).toBeInTheDocument()
+  })
+})
+
 describe('Settings → Timetable — class tile colour', () => {
   it('offers Stripe, Tint and Solid, with the saved one chosen', async () => {
     renderTab()

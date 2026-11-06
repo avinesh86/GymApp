@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { getTenantSettings, updateTenantSettings, getTenantBranding, updateTenantBranding } from '../../../api/settings'
@@ -6,6 +6,8 @@ import { Button } from '../../../components/ui/Button'
 import { Input } from '../../../components/ui/Input'
 import { Select } from '../../../components/ui/Select'
 import { Card } from '../../../components/ui/Card'
+import type { TenantBranding, TenantSettings } from '../../../types'
+import { WhenLoaded } from './WhenLoaded'
 
 const CURRENCY_OPTIONS = [
   { value: '$',   label: '$ — US Dollar' },
@@ -26,34 +28,34 @@ const TIMEZONES = [
 ]
 
 export function GeneralTab() {
+  // Both start loading at once; the form waits for both.
+  const settingsQuery = useQuery({ queryKey: ['tenant', 'settings'], queryFn: getTenantSettings })
+  const brandingQuery = useQuery({ queryKey: ['tenant', 'branding'], queryFn: getTenantBranding })
+  return (
+    <WhenLoaded query={settingsQuery} savesKey={['tenant', 'settings']} what="the general settings">
+      {(settings) => (
+        <WhenLoaded query={brandingQuery} savesKey={['tenant', 'branding']} what="the general settings">
+          {(branding) => <GeneralForm settings={settings} branding={branding} />}
+        </WhenLoaded>
+      )}
+    </WhenLoaded>
+  )
+}
+
+function isKnownCurrency(symbol: string) {
+  return CURRENCY_OPTIONS.some((o) => o.value === symbol && o.value !== 'custom')
+}
+
+function GeneralForm({ settings, branding }: { settings: TenantSettings; branding: TenantBranding }) {
   const queryClient = useQueryClient()
-
-  const { data: settings } = useQuery({ queryKey: ['tenant', 'settings'], queryFn: getTenantSettings })
-  const { data: branding } = useQuery({ queryKey: ['tenant', 'branding'], queryFn: getTenantBranding })
-
-  const [currency, setCurrency] = useState('$')
-  const [customCurrency, setCustomCurrency] = useState('')
-  const [appName, setAppName] = useState('')
-  const [timezone, setTimezone] = useState('UTC')
-
-  useEffect(() => {
-    if (settings) {
-      const known = CURRENCY_OPTIONS.find((o) => o.value === settings.currency_symbol && o.value !== 'custom')
-      if (known) {
-        setCurrency(settings.currency_symbol)
-      } else {
-        setCurrency('custom')
-        setCustomCurrency(settings.currency_symbol)
-      }
-      setTimezone(settings.timezone)
-    }
-  }, [settings])
-
-  useEffect(() => {
-    if (branding) setAppName(branding.app_name)
-  }, [branding])
+  const savedCurrencyKnown = isKnownCurrency(settings.currency_symbol)
+  const [currency, setCurrency] = useState(savedCurrencyKnown ? settings.currency_symbol : 'custom')
+  const [customCurrency, setCustomCurrency] = useState(savedCurrencyKnown ? '' : settings.currency_symbol)
+  const [appName, setAppName] = useState(branding.app_name)
+  const [timezone, setTimezone] = useState(settings.timezone)
 
   const { mutate: saveSettings, isPending: savingSettings } = useMutation({
+    mutationKey: ['tenant', 'settings'],
     mutationFn: () =>
       updateTenantSettings({
         currency_symbol: currency === 'custom' ? customCurrency : currency,
@@ -69,6 +71,7 @@ export function GeneralTab() {
   })
 
   const { mutate: saveBranding, isPending: savingBranding } = useMutation({
+    mutationKey: ['tenant', 'branding'],
     mutationFn: () => updateTenantBranding({ app_name: appName }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenant', 'branding'] })
