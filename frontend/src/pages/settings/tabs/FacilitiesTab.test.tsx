@@ -39,59 +39,64 @@ beforeEach(() => {
 })
 
 describe('Settings → Facilities', () => {
-  it("shows no switches until the gym's settings have loaded", async () => {
-    let resolve: (value: unknown) => void = () => {}
-    vi.mocked(getTenantSettings).mockReturnValue(new Promise((r) => (resolve = r)) as never)
+  it('waits for fresh settings rather than starting from an out-of-date copy', async () => {
+    // Saving a form seeded from a stale cache would undo someone else's change.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } })
+    const old = { ...(await vi.mocked(getTenantSettings)()), fault_reporting_enabled: true }
+    client.setQueryData(['tenant', 'settings'], old, { updatedAt: Date.now() - 60_000 })
+    vi.mocked(getTenantSettings).mockResolvedValue({ ...old, fault_reporting_enabled: false } as never)
+    renderTab(client)
+
+    await waitFor(() =>
+      expect(screen.getByRole('switch', { name: 'Report a fault button' })).toHaveAttribute('aria-checked', 'false'),
+    )
+  })
+
+  it('shows it is trying again rather than leaving the error up', async () => {
+    vi.mocked(getTenantSettings).mockRejectedValueOnce(new Error('offline'))
+    renderTab()
+    await screen.findByText("Couldn't load the Facilities settings")
+
+    vi.mocked(getTenantSettings).mockReturnValueOnce(new Promise(() => {}) as never)
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(screen.queryByText("Couldn't load the Facilities settings")).not.toBeInTheDocument()
+  })
+
+  it('says so and offers to try again when the settings cannot be loaded', async () => {
+    vi.mocked(getTenantSettings).mockRejectedValueOnce(new Error('offline'))
     renderTab()
 
-    // Showing the defaults (all on) meanwhile would let a quick Save write
-    // them over the gym's real settings.
-    expect(screen.queryByRole('switch', { name: 'Report a fault button' })).not.toBeInTheDocument()
+    expect(await screen.findByText("Couldn't load the Facilities settings")).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save Facilities Settings' })).not.toBeInTheDocument()
 
-    resolve({ fault_reporting_enabled: false, facilities_maintenance_enabled: true })
-    expect(await screen.findByRole('switch', { name: 'Report a fault button' })).toHaveAttribute('aria-checked', 'false')
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByRole('button', { name: 'Save Facilities Settings' })).toBeInTheDocument()
   })
 
-  it('waits for fresh settings rather than showing ones cached by another page', async () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    client.setQueryData(['tenant', 'settings'], { fault_reporting_enabled: true, facilities_maintenance_enabled: true })
-    let resolve: (value: unknown) => void = () => {}
-    vi.mocked(getTenantSettings).mockReturnValue(new Promise((r) => (resolve = r)) as never)
-    renderTab(client)
-
-    expect(screen.queryByRole('switch', { name: 'Report a fault button' })).not.toBeInTheDocument()
-
-    resolve({ fault_reporting_enabled: false, facilities_maintenance_enabled: true })
-    expect(await screen.findByRole('switch', { name: 'Report a fault button' })).toHaveAttribute('aria-checked', 'false')
-  })
-
-  it('still opens when another page fetched the settings moments ago', async () => {
-    // As in the app: cached settings count as fresh for 30 seconds.
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } })
-    client.setQueryData(['tenant', 'settings'], { fault_reporting_enabled: true, facilities_maintenance_enabled: true })
-    vi.mocked(getTenantSettings).mockResolvedValue({ fault_reporting_enabled: false, facilities_maintenance_enabled: true } as never)
-    renderTab(client)
-
-    expect(await screen.findByRole('switch', { name: 'Report a fault button' })).toHaveAttribute('aria-checked', 'false')
-  })
-
-  it("shows the error, not settings cached by another page, when this visit's fetch fails", async () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    client.setQueryData(['tenant', 'settings'], { fault_reporting_enabled: true, facilities_maintenance_enabled: true })
-    vi.mocked(getTenantSettings).mockRejectedValue(new Error('offline'))
-    renderTab(client)
-
-    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load the Facilities settings")
-    expect(screen.queryByRole('switch', { name: 'Report a fault button' })).not.toBeInTheDocument()
-  })
-
-  it('says so if the settings could not be loaded, rather than spinning or showing defaults', async () => {
-    vi.mocked(getTenantSettings).mockRejectedValue(new Error('offline'))
+  it("shows nothing to change or save until the gym's real settings have loaded", async () => {
+    // Saving the form's starting defaults would switch a gym's "off"
+    // settings back on (and a test reading a switch too early sees "on").
+    let finishLoading: (value: unknown) => void = () => {}
+    vi.mocked(getTenantSettings).mockReturnValue(new Promise((resolve) => (finishLoading = resolve)) as never)
     renderTab()
 
-    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load the Facilities settings")
+    expect(screen.queryByRole('button', { name: 'Save Facilities Settings' })).not.toBeInTheDocument()
     expect(screen.queryByRole('switch', { name: 'Report a fault button' })).not.toBeInTheDocument()
+
+    finishLoading({
+      facilities_equipment_enabled: true,
+      facilities_maintenance_enabled: true,
+      fault_reporting_enabled: false,
+      facilities_alert_roles: ['owner'],
+      facilities_alert_email: false,
+      facilities_checklists_enabled: true,
+      checklist_roles: ['owner'],
+      facilities_alert_start_hour: 9,
+      facilities_alert_end_hour: 17,
+    })
+
+    expect(await screen.findByRole('switch', { name: 'Report a fault button' })).toHaveAttribute('aria-checked', 'false')
   })
 
   it('shows the saved switches and alert roles', async () => {
