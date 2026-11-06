@@ -193,4 +193,20 @@ describe('Settings → Notifications', () => {
     await waitFor(() => expect(updateTenantSettings).toHaveBeenCalledWith({ email_enabled: true }))
     await waitFor(() => expect(channelSwitches()).toEqual(['false', 'true', 'true', 'true']))
   })
+
+  it('shows the saved value when a switch is tapped twice and both saves fail', async () => {
+    let failSaves: () => void = () => {}
+    const failing = new Promise((_, reject) => (failSaves = () => reject(new Error('offline'))))
+    failing.catch(() => {})
+    vi.mocked(updateTenantSettings).mockReturnValue(failing as never)
+    renderTab()
+    await waitFor(() => expect(channelSwitches()).toEqual(['false', 'true', 'true', 'true']))
+
+    await userEvent.click(screen.getAllByRole('switch')[1]) // WhatsApp off
+    await userEvent.click(screen.getAllByRole('switch')[1]) // and on again
+    failSaves()
+
+    await waitFor(() => expect(updateTenantSettings).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(channelSwitches()).toEqual(['false', 'true', 'true', 'true']))
+  })
 })

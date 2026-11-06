@@ -55,3 +55,23 @@ test('Notifications offers no WhatsApp Save until the WhatsApp account has loade
   await expect(page.getByLabel('Business Phone Number')).toBeVisible()
   await expect(page.getByRole('button', { name: 'Save WhatsApp Settings' })).toBeVisible()
 })
+
+test("an open settings form keeps what's been typed once its data is 30 seconds old", async ({ page }) => {
+  // The data goes out of date after 30 seconds (App.tsx staleTime). An open
+  // form must not be swapped for a spinner then, losing the edit.
+  test.setTimeout(90_000)
+  await signIn(page)
+  await openSettingsTab(page, 'General')
+  await expect(page.getByLabel('Timezone')).toBeVisible()
+  // Opened within 30 seconds of General, so it starts from the cached copy.
+  await page.getByRole('button', { name: 'Invoices', exact: true }).click()
+  const frequency = page.getByLabel('Invoice Frequency')
+  const saved = await frequency.inputValue()
+  const edited = saved === 'weekly' ? 'monthly' : 'weekly'
+  await frequency.selectOption(edited)
+
+  await page.waitForTimeout(35_000)
+
+  await expect(frequency).toHaveValue(edited)
+  await expect(page.getByRole('button', { name: 'Save Invoice Settings' })).toBeVisible()
+})

@@ -6,7 +6,7 @@ import { Button } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
 import { Input } from '../../../components/ui/Input'
 import type { TenantSettings, WhatsAppAccount } from '../../../types'
-import { WhenLoaded } from './WhenLoaded'
+import { WhenLoaded, useLoadState } from './WhenLoaded'
 
 function Toggle({
   label,
@@ -52,9 +52,7 @@ export function NotificationsTab() {
   const waQuery = useQuery({ queryKey: ['tenant', 'whatsapp-account'], queryFn: getWhatsAppAccount })
   // The WhatsApp card waits for the cards above to appear (or fail), so it
   // doesn't jump down the page while someone is typing in it.
-  const settingsSettled =
-    settingsQuery.isError ||
-    (settingsQuery.data !== undefined && !(settingsQuery.isStale && !settingsQuery.isFetchedAfterMount))
+  const settingsSettled = useLoadState(settingsQuery, ['tenant', 'settings']) !== 'waiting'
 
   return (
     <div className="max-w-lg space-y-6">
@@ -103,17 +101,34 @@ function ChannelsAndEmailForm({ settings }: { settings: TenantSettings }) {
   const emailSendingManaged = settings.email_sending_managed ?? false
 
   // ── Auto-save channel toggles ────────────────────────────────────────────────
+  type ChannelField = 'email_enabled' | 'whatsapp_enabled' | 'cover_alerts_enabled' | 'invoice_reminders_enabled'
   const { mutate: saveToggle } = useMutation({
     mutationKey: ['tenant', 'settings'],
-    mutationFn: (patch: Partial<Record<string, boolean>>) => updateTenantSettings(patch),
+    mutationFn: (patch: Partial<Record<ChannelField, boolean>>) => updateTenantSettings(patch),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tenant', 'settings'] }),
-    onError: () => toast.error('Failed to save setting'),
+    onError: (_error, patch) => {
+      // Put the switch back to what's saved, so the screen matches the
+      // server, however many taps were in flight.
+      const setters: Record<ChannelField, (v: boolean) => void> = {
+        email_enabled: setEmailEnabled,
+        whatsapp_enabled: setWhatsappEnabled,
+        cover_alerts_enabled: setCoverAlerts,
+        invoice_reminders_enabled: setInvoiceReminders,
+      }
+      const saved: Record<ChannelField, boolean> = {
+        email_enabled: settings.email_enabled ?? true,
+        whatsapp_enabled: settings.whatsapp_enabled ?? false,
+        cover_alerts_enabled: settings.cover_alerts_enabled ?? false,
+        invoice_reminders_enabled: settings.invoice_reminders_enabled ?? false,
+      }
+      for (const field of Object.keys(patch) as ChannelField[]) setters[field](saved[field])
+      toast.error('Failed to save setting')
+    },
   })
 
-  function handleToggle(field: string, value: boolean, setter: (v: boolean) => void) {
+  function handleToggle(field: ChannelField, value: boolean, setter: (v: boolean) => void) {
     setter(value)
-    // Switch it back if the save fails, so the screen matches what's saved.
-    saveToggle({ [field]: value }, { onError: () => setter(!value) })
+    saveToggle({ [field]: value })
   }
 
   // ── Save email settings ──────────────────────────────────────────────────────
