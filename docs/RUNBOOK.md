@@ -325,6 +325,12 @@ if each change adds its own.
    test fails, either the code is wrong or the test is out of date, and the
    pull request should say which and why.
 4. **Anything a person clicks through needs a UI test** (see below).
+5. **New required columns get a database default** (`db_default`). A failed
+   deploy rolls the code back but not the database, and the older code
+   leaves new columns out of its inserts; without a database default the
+   insert fails. `tests/test_tenant_settings_rollback.py` shows how to test
+   it. JSON columns on MySQL 8 need a hand-written migration (see
+   `tenants/0013`).
 
 ### Which kind of test
 
@@ -343,6 +349,12 @@ A UI test must reach every page **the way a person would**: sign in, then
 click the menu item, tab, button or link. It must not jump to a page by
 typing its address (for example `page.goto('/timetable')`), and must not call
 the API directly. The only address a test may visit is the app's front door.
+
+**One exception: QR codes.** A person who scans a machine's QR label really
+does arrive by address: their phone opens what the code holds. So a test may
+open the address held in a QR label **that the test produced earlier by
+clicking**, read from the label itself, never written into the test. That
+is the only exception (`frontend/e2e/14-facilities-checklists.spec.ts`).
 
 Why: a page can work perfectly while **the button or link that should lead to
 it is missing, hidden, or points to the wrong place**. A test that opens the

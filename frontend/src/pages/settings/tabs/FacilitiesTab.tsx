@@ -1,10 +1,12 @@
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { getTenantSettings, updateTenantSettings } from '../../../api/settings'
 import { Button } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
-import type { UserRole } from '../../../types'
+import { EmptyState } from '../../../components/ui/EmptyState'
+import { PageSpinner } from '../../../components/ui/Spinner'
+import type { TenantSettings, UserRole } from '../../../types'
 
 const ALERT_ROLES: { role: UserRole; label: string }[] = [
   { role: 'owner', label: 'Owner' },
@@ -64,32 +66,46 @@ function hourLabel(h: number) {
   return String(h % 12) + (h < 12 ? 'am' : 'pm')
 }
 
+/** Loads the gym's settings, then shows the form. The form only exists once
+ * the real settings do, so there are never placeholder values on screen to
+ * read or to save over the gym's real settings. */
 export function FacilitiesTab() {
+  const { data: settings, isError, isStale, isFetchedAfterMount, refetch } = useQuery({
+    queryKey: ['tenant', 'settings'],
+    queryFn: getTenantSettings,
+  })
+  if (isError && !settings) {
+    return (
+      <EmptyState
+        title="Couldn't load the Facilities settings"
+        description="Check your connection and try again."
+        action={{ label: 'Try again', onClick: () => refetch() }}
+      />
+    )
+  }
+  // An out-of-date cached copy would seed the form with old values, and Save
+  // would then undo someone else's change: wait for the fresh one.
+  if (!settings || (isStale && !isFetchedAfterMount && !isError)) return <PageSpinner />
+  return <FacilitiesForm settings={settings} />
+}
+
+function FacilitiesForm({ settings }: { settings: TenantSettings }) {
   const queryClient = useQueryClient()
-  const { data: settings } = useQuery({ queryKey: ['tenant', 'settings'], queryFn: getTenantSettings })
-
-  const [equipment, setEquipment] = useState(true)
-  const [maintenance, setMaintenance] = useState(true)
-  const [reporting, setReporting] = useState(true)
-  const [alertRoles, setAlertRoles] = useState<UserRole[]>([])
-  const [alertEmail, setAlertEmail] = useState(false)
-  const [checklists, setChecklists] = useState(true)
-  const [checklistRoles, setChecklistRoles] = useState<UserRole[]>([])
-  const [alertStart, setAlertStart] = useState(9)
-  const [alertEnd, setAlertEnd] = useState(17)
-
-  useEffect(() => {
-    if (!settings) return
-    setEquipment(settings.facilities_equipment_enabled ?? true)
-    setMaintenance(settings.facilities_maintenance_enabled ?? true)
-    setReporting(settings.fault_reporting_enabled ?? true)
-    setAlertRoles(settings.facilities_alert_roles ?? ['owner', 'admin', 'gym_manager'])
-    setAlertEmail(settings.facilities_alert_email ?? false)
-    setChecklists(settings.facilities_checklists_enabled ?? true)
-    setChecklistRoles(settings.checklist_roles ?? ['owner', 'admin', 'gym_manager', 'team_leader'])
-    setAlertStart(settings.facilities_alert_start_hour ?? 9)
-    setAlertEnd(settings.facilities_alert_end_hour ?? 17)
-  }, [settings])
+  // Starts from the saved settings and keeps the person's edits after that:
+  // a background refetch doesn't reset switches they've changed but not saved.
+  const [equipment, setEquipment] = useState(settings.facilities_equipment_enabled ?? true)
+  const [maintenance, setMaintenance] = useState(settings.facilities_maintenance_enabled ?? true)
+  const [reporting, setReporting] = useState(settings.fault_reporting_enabled ?? true)
+  const [alertRoles, setAlertRoles] = useState<UserRole[]>(
+    settings.facilities_alert_roles ?? ['owner', 'admin', 'gym_manager'],
+  )
+  const [alertEmail, setAlertEmail] = useState(settings.facilities_alert_email ?? false)
+  const [checklists, setChecklists] = useState(settings.facilities_checklists_enabled ?? true)
+  const [checklistRoles, setChecklistRoles] = useState<UserRole[]>(
+    settings.checklist_roles ?? ['owner', 'admin', 'gym_manager', 'team_leader'],
+  )
+  const [alertStart, setAlertStart] = useState(settings.facilities_alert_start_hour ?? 9)
+  const [alertEnd, setAlertEnd] = useState(settings.facilities_alert_end_hour ?? 17)
 
   const { mutate: save, isPending } = useMutation({
     mutationFn: () =>

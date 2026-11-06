@@ -51,7 +51,13 @@ export function EquipmentQr({ id, name, assetTag }: { id: number; name: string; 
   return (
     <div className="flex items-center gap-4">
       {dataUrl ? (
-        <img src={dataUrl} alt={`QR code for ${name}`} className="h-28 w-28 rounded border border-gray-200" data-testid="equipment-qr" />
+        <img
+          src={dataUrl}
+          alt={`QR code for ${name}`}
+          className="h-28 w-28 rounded border border-gray-200"
+          data-testid="equipment-qr"
+          data-qr-url={equipmentUrl(id)}
+        />
       ) : (
         <div className="h-28 w-28 rounded border border-gray-200 bg-gray-50" />
       )}

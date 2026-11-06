@@ -29,6 +29,15 @@ async function setReportButton(page: Page, on: boolean) {
 }
 
 test.describe.serial('facilities: equipment and faults', () => {
+  // The last test switches the button off and back on. If it fails in
+  // between, the retry (which reruns the whole group) must not start with the
+  // button off, or the instructor tests fail for the wrong reason.
+  test.beforeAll(async ({ browser }) => {
+    const page = await browser.newPage()
+    await setReportButton(page, true)
+    await page.close()
+  })
+
   test('the owner adds a machine to the equipment register', async ({ page }) => {
     await signIn(page)
     await goToSection(page, 'Facilities')
