@@ -71,6 +71,7 @@ for (const width of [320, 375, 390]) {
       expect(closeBox.height).toBeGreaterThanOrEqual(44)
       await close.click()
       await expect(page.getByRole('link', { name: 'Dashboard' })).toBeHidden()
+      await expect(menuButton(page)).toHaveAttribute('aria-expanded', 'false')
 
       await menuButton(page).click()
       await page.getByRole('link', { name: 'Dashboard' }).click()

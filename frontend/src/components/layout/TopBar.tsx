@@ -67,7 +67,8 @@ export function TopBar({ title, onMenuClick, menuOpen }: TopBarProps) {
         type="button"
         aria-label="Open menu"
         aria-expanded={menuOpen}
-        aria-controls="mobile-menu"
+        // The menu is only rendered while open.
+        aria-controls={menuOpen ? 'mobile-menu' : undefined}
         onClick={onMenuClick}
         className="md:hidden h-11 w-11 shrink-0 flex items-center justify-center rounded-lg text-white hover:bg-white/10 transition-colors"
       >
