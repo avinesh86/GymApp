@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React from 'react'
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard,
@@ -12,7 +12,6 @@ import {
   Upload,
   Settings,
   LogOut,
-  Menu,
   X,
   User,
   Building2,
@@ -56,20 +55,26 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/settings',         label: 'Settings',        icon: <Settings className="h-5 w-5" />,        permission: 'settings' },
 ]
 
-function WaveIcon() {
+function WaveIcon({ className }: { className?: string }) {
   return (
-    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <svg className={className} width="28" height="28" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M2 18C5 14 8 10 11 14C14 18 17 10 20 8C23 6 25 10 26 14" stroke="white" strokeWidth="2.5" strokeLinecap="round"/>
       <path d="M2 22C5 18 8 14 11 18C14 22 17 14 20 12C23 10 25 14 26 18" stroke="white" strokeWidth="2" strokeLinecap="round" opacity="0.5"/>
     </svg>
   )
 }
 
-export function Sidebar() {
+interface SidebarProps {
+  /** Whether the slide-in menu is open on small screens. The button that opens
+   *  it lives in the top bar, so the layout owns this state. */
+  mobileOpen: boolean
+  onMobileClose: () => void
+}
+
+export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
   const { can } = usePermission()
   const { user, logout } = useAuth()
   const { data: branding } = useTenantBranding()
-  const [mobileOpen, setMobileOpen] = useState(false)
   const { data: facilities } = useFacilitiesConfig()
 
   const appName = branding?.app_name ?? 'Northern Arena'
@@ -77,9 +82,11 @@ export function Sidebar() {
   const sidebarContent = (
     <div className="flex flex-col h-full">
       {/* Logo */}
-      <div className="flex items-center gap-2.5 px-4 py-5 border-b border-white/10">
-        <WaveIcon />
-        <span className="text-sm font-bold text-white truncate">{appName}</span>
+      {/* pr-12 keeps a long name clear of the slide-in menu's close button */}
+      <div className="flex items-center gap-2.5 pl-4 pr-12 md:pr-4 py-5 border-b border-white/10">
+        {/* Full size in the phone menu; the desktop sidebar is left as it was. */}
+        <WaveIcon className="shrink-0 md:shrink" />
+        <span className="min-w-0 text-sm font-bold text-white truncate" title={appName}>{appName}</span>
       </div>
 
       {/* Nav items */}
@@ -96,7 +103,7 @@ export function Sidebar() {
           <NavLink
             key={item.to}
             to={item.to}
-            onClick={() => setMobileOpen(false)}
+            onClick={onMobileClose}
             className={({ isActive }) =>
               [
                 'flex items-center gap-3 px-3 py-2.5 mb-0.5 text-sm font-medium transition-colors duration-150',
@@ -136,7 +143,7 @@ export function Sidebar() {
         </div>
         <NavLink
           to="/profile"
-          onClick={() => setMobileOpen(false)}
+          onClick={onMobileClose}
           className="flex items-center gap-2 w-full px-3 py-2 text-xs text-[#94A3B8] hover:text-white hover:bg-white/5 rounded-lg transition-colors mb-1"
         >
           <User className="h-4 w-4" />
@@ -160,25 +167,18 @@ export function Sidebar() {
         {sidebarContent}
       </aside>
 
-      {/* Mobile hamburger */}
-      <button
-        className="md:hidden fixed top-4 left-4 z-50 p-2 bg-[#0A0D14] rounded-lg shadow-md border border-white/10"
-        onClick={() => setMobileOpen(true)}
-      >
-        <Menu className="h-5 w-5 text-white" />
-      </button>
-
       {/* Mobile overlay */}
       {mobileOpen && (
         <div className="md:hidden fixed inset-0 z-50 flex">
           <div
             className="absolute inset-0 bg-black/40"
-            onClick={() => setMobileOpen(false)}
+            onClick={onMobileClose}
           />
           <aside className="relative w-56 bg-[#0A0D14] h-full shadow-xl">
             <button
+              aria-label="Close menu"
               className="absolute top-4 right-4 p-1 text-[#94A3B8] hover:text-white"
-              onClick={() => setMobileOpen(false)}
+              onClick={onMobileClose}
             >
               <X className="h-5 w-5" />
             </button>
