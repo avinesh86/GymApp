@@ -194,7 +194,9 @@ the gym. Or ask Claude: "Follow the runbook and create a release to `main`."
    four reviews (section 9). Claude also runs a risk review of the release as
    a whole (migrations, setting defaults that change existing gyms, anything
    that needs watching during the deploy) and puts it in the description. No
-   second person's approval is needed: one developer works on FitOps.
+   one else needs to approve on GitHub: one developer works on FitOps. You
+   (the owner) decide when to merge; Claude merges into `main` only when you
+   tell it to.
 7. **Merge with "Create a merge commit".** Not squash. A merge commit keeps
    `test` and `main` in step so the next release doesn't show old changes
    again. **Don't delete the `test` branch** afterwards, even though GitHub
@@ -226,7 +228,9 @@ For when something live is broken and can't wait for the next release.
 
 1. Ask Claude: "Hotfix: <problem>. Branch off `main`, fix it with a test, and
    open a pull request into `main`." The four reviews (section 9) still run:
-   a rushed fix to production is where they matter most.
+   a rushed fix to production is where they matter most. If the site is down,
+   Claude tells you what they found and you decide whether to merge now or
+   fix the non-blocking findings first.
 2. Wait for CI, merge (**Create a merge commit**). It deploys automatically,
    and a GitHub Release is created for it like any other (section 4, step 9).
    Delete the hotfix branch.
@@ -372,9 +376,10 @@ Add this to any request, or rely on "Follow the runbook…", which includes it:
 
 One developer works on FitOps, so there is no second person to review pull
 requests. Claude does the reviewing instead: on **every** pull request,
-**without being asked**, before it opens the pull request and again after
-any large change to it. Nobody needs to request these, and Claude doesn't
-ask anyone else to review or approve.
+**without being asked**, before it opens the pull request. Nobody needs to
+request these, and Claude doesn't ask anyone besides you (the owner) to
+review or approve. You still decide what merges into `main`, and Claude
+merges into `main` only when you tell it to.
 
 There are four reviews. Each is done by a separate review agent that starts
 fresh: it sees the change and the project rules, not the reasoning of
@@ -386,23 +391,52 @@ it.
 | **Architecture** | Is this the right shape and place for the change? Does it follow the project's patterns (tenant scoping, `TenantAwareModel`, migrations for schema changes)? Will it still make sense later? | Logic in the wrong layer; a one-off script where a migration belongs; duplicated code; a design that automates something risky |
 | **Risk** | What can go wrong in production when this deploys, and how would we recover? | Migrations on tables with data, table locks, setting defaults that change existing gyms, deploy and rollback behaviour |
 | **Adversarial** | How can this be broken? Bad or odd input, another gym's data, two things at once, timezones, permissions. | Security holes (cross-gym access, unsafe uploads), races, 500 errors on odd input, alerts sent twice |
-| **UI** | For anything a person sees: can they find it, understand it and use it, on a phone too? | Dead ends, missing loading or empty states, unclear labels or error messages, layouts that break on small screens |
+| **UI** | For anything a person sees (screens, error messages, emails, WhatsApp messages): can they find it, understand it and use it, on a phone too? | Dead ends, missing loading or empty states, unclear labels or error messages, layouts that break on small screens |
 
-The UI review is skipped when nothing a person sees changes; the pull
-request says so.
+**How much review:**
 
-The rules:
+- **Code changes:** all four, each by its own reviewer. The UI review is
+  skipped only when nothing a person sees changes, and the pull request
+  says so.
+- **Docs-only changes:** one reviewer covering all four points is enough.
+- **Releases (`test` → `main`) and back-merges (`main` → `test`):** the
+  pull requests inside them were already reviewed, so they get one risk
+  review of the whole release instead, written into the description.
+- **After fixing findings:** only the reviews whose area the fix touched run
+  again, once. Anything still open goes in the Reviews section or to you;
+  reviews don't loop.
 
-1. **Every finding is dealt with.** It is either fixed in the pull request
-   (with a test when it's a bug, section 8) or listed as accepted, with the
-   reason. Nothing is dropped silently.
+**The rules:**
+
+1. **Every finding is dealt with**, including ones marked "plausible": fixed
+   in the pull request (with a test when it's a bug, section 8), or listed as
+   accepted with the reason. Nothing is dropped silently. Problems that were
+   already there before the change are listed as follow-ups, not fixed in the
+   same pull request (one change per pull request).
 2. **Findings are checked, not guessed.** Reviewers reproduce a problem
    where they can, and mark anything they couldn't confirm as "plausible".
-3. **The pull request says what happened.** Its description ends with a
-   **Reviews** section: one line per review, what it found and what was done
-   about each finding.
+3. **Some findings can't be waved through.** Claude can't accept a finding
+   about security, one gym seeing another's data, data loss or migrations on
+   its own: it fixes it or asks you. If Claude disagrees with a reviewer,
+   both views go in the Reviews section and you decide.
 4. **Decisions that change what users get come to you.** If a finding
    changes behaviour people will notice, or the right fix isn't clear,
-   Claude asks you before merging rather than choosing alone.
-5. **Reviews add to tests, they don't replace them.** CI and the tests in
+   Claude asks you before the pull request is merged rather than choosing
+   alone.
+5. **No pretend reviews.** If separate review agents can't be run, the
+   pull request says so; Claude doesn't review its own work in the same
+   conversation and call it independent.
+6. **Reviews add to tests, they don't replace them.** CI and the tests in
    section 8 still have to pass.
+
+**The Reviews section** at the end of every pull request description looks
+like this, so you can see at a glance whether anything waits on you:
+
+> **Reviews**
+> - Architecture: no findings.
+> - Risk: 2 found: 1 fixed (test added), 1 accepted (table is empty on
+>   production, so the lock is instant).
+> - Adversarial: 1 found, fixed (test added).
+> - UI: skipped, nothing a person sees changed.
+>
+> **Needs your decision:** none.
