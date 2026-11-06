@@ -26,6 +26,7 @@ from rest_framework.test import APIClient
 
 from apps.facilities.checklists import alert_overdue_runs, create_due_runs, is_due_on
 from apps.facilities.models import (
+    ChecklistAnswer,
     ChecklistItem,
     ChecklistRun,
     ChecklistTemplate,
@@ -494,3 +495,124 @@ def test_history_has_faults_and_checks(tenant, team_leader_user, manager_user, t
     check = next(e for e in history.data["events"] if e["kind"] == "check")
     assert check["by"] == team_leader_user.full_name
     assert check["lines"] == [{"text": "Belt tension", "passed": True, "note": "", "photo": None}]
+
+
+# ─── Review fixes ────────────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    "name,content,content_type",
+    [
+        ("x.html", b"<script>alert(document.cookie)</script>", "image/png"),
+        (
+            "x.svg",
+            b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>',
+            "image/svg+xml",
+        ),
+        ("x.png", b"not really a png", "image/png"),
+    ],
+)
+def test_photo_must_really_be_a_jpeg_png_or_webp(
+    tenant, team_leader_user, settings, tmp_path, name, content, content_type
+):
+    settings.MEDIA_ROOT = tmp_path
+    t = _template(tenant)
+    with _at(datetime(2026, 11, 1, 5, 0, tzinfo=NZ)):
+        create_due_runs(tenant)
+    run = ChecklistRun.objects.get(template=t)
+    done = _complete(_client(team_leader_user), run, [{"item": t.items.get().id, "passed": False}]).data
+    url = f"/api/v1/facilities/checklist-answers/{done['answers'][0]['id']}/photo/"
+
+    upload = SimpleUploadedFile(name, content, content_type=content_type)
+    response = _client(team_leader_user).post(url, {"photo": upload}, format="multipart")
+
+    assert response.status_code == 400
+    assert not ChecklistAnswer.objects.get(pk=done["answers"][0]["id"]).photo
+    assert not any(tmp_path.rglob("x.*"))
+
+
+def test_photo_is_saved_under_a_server_made_name(tenant, team_leader_user, settings, tmp_path):
+    settings.MEDIA_ROOT = tmp_path
+    t = _template(tenant)
+    with _at(datetime(2026, 11, 1, 5, 0, tzinfo=NZ)):
+        create_due_runs(tenant)
+    run = ChecklistRun.objects.get(template=t)
+    done = _complete(_client(team_leader_user), run, [{"item": t.items.get().id, "passed": False}]).data
+    url = f"/api/v1/facilities/checklist-answers/{done['answers'][0]['id']}/photo/"
+
+    png = _png()
+    png.name = "page.html"  # a real PNG under a misleading name
+    assert _client(team_leader_user).post(url, {"photo": png}, format="multipart").status_code == 200
+
+    stored = ChecklistAnswer.objects.get(pk=done["answers"][0]["id"]).photo.name
+    assert stored.startswith("facilities/checklists/")
+    assert stored.endswith(".png")
+    assert "page" not in stored
+
+
+def test_overlapping_alert_jobs_alert_each_check_once(tenant, owner_user):
+    """A second job that starts while the first is still sending finds the
+    checks already claimed."""
+    _template(tenant)
+    from apps.facilities import checklists
+
+    real_create = Notification.objects.create
+    second_job = {}
+
+    def create_and_start_second_job(**kwargs):
+        note = real_create(**kwargs)
+        if "ran" not in second_job:
+            second_job["ran"] = True
+            second_job["sent"] = checklists.alert_overdue_runs(tenant)
+        return note
+
+    with _at(datetime(2026, 11, 1, 9, 0, tzinfo=NZ)):
+        create_due_runs(tenant)
+        with mock.patch.object(Notification.objects, "create", side_effect=create_and_start_second_job):
+            checklists.alert_overdue_runs(tenant)
+
+    assert second_job["sent"] == 0
+    assert Notification.objects.filter(recipient=owner_user, notification_type="facilities").count() == 1
+
+
+def test_switched_off_checklist_leaves_no_overdue_checks_to_do(tenant, owner_user, team_leader_user):
+    t = _template(tenant)
+    with _at(datetime(2026, 11, 3, 7, 0, tzinfo=NZ)):
+        create_due_runs(tenant)
+        response = _client(owner_user).patch(
+            f"/api/v1/facilities/checklists/{t.id}/", {"is_active": False}, format="json"
+        )
+        assert response.status_code == 200, response.data
+        mine = _client(team_leader_user).get("/api/v1/facilities/checklist-runs/mine/").data
+    assert mine == []
+
+
+def test_checklist_set_up_after_todays_due_time_is_not_alerted_as_overdue(tenant, owner_user):
+    t = _template(tenant, start_date=date(2026, 11, 3))  # due by 06:00
+    ChecklistTemplate.objects.filter(pk=t.pk).update(created_at=datetime(2026, 11, 3, 14, 0, tzinfo=NZ))
+    with _at(datetime(2026, 11, 3, 14, 5, tzinfo=NZ)):
+        assert create_due_runs(tenant) == 1  # today's check can still be done
+        assert alert_overdue_runs(tenant) == 0
+    # Tomorrow's check is a normal one and is alerted when it goes overdue.
+    with _at(datetime(2026, 11, 4, 9, 0, tzinfo=NZ)):
+        create_due_runs(tenant)
+        assert alert_overdue_runs(tenant) == 1
+    note = Notification.objects.get(recipient=owner_user, notification_type="facilities")
+    assert note.title == "1 check overdue"
+
+
+def test_checks_to_do_stays_cheap_with_many_checklists(tenant, team_leader_user, django_assert_max_num_queries):
+    for i in range(10):
+        _template(tenant, name=f"Check {i}")
+    client = _client(team_leader_user)
+    with _at(datetime(2026, 11, 8, 7, 0, tzinfo=NZ)):
+        client.get("/api/v1/facilities/checklist-runs/mine/")  # creates the week's checks
+        with django_assert_max_num_queries(25):
+            client.get("/api/v1/facilities/checklist-runs/mine/")
+
+
+@pytest.mark.parametrize("param", ["from", "to"])
+def test_bad_date_filter_is_a_400_not_a_500(tenant, owner_user, param):
+    response = _client(owner_user).get(f"/api/v1/facilities/checklist-runs/?{param}=notadate")
+    assert response.status_code == 400
+    assert param in response.data["detail"]

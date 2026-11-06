@@ -19,7 +19,14 @@ function WaveIcon() {
  * one of ours (a same-site path, never another site). */
 export function afterLoginPath(state: unknown): string {
   const from = (state as { from?: unknown } | null)?.from
-  if (typeof from === 'string' && from.startsWith('/') && !from.startsWith('//') && !from.startsWith('/login')) {
+  // Browsers treat "\" like "/", so "/\evil.com" would leave the site too.
+  if (
+    typeof from === 'string' &&
+    from.startsWith('/') &&
+    !from.startsWith('//') &&
+    !from.includes('\\') &&
+    !from.startsWith('/login')
+  ) {
     return from
   }
   return '/dashboard'

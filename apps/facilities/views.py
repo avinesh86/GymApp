@@ -1,8 +1,13 @@
+import uuid
 from datetime import timedelta
 
+from django.core.files import File
 from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
+from django.utils.dateparse import parse_date
+from PIL import Image
+from rest_framework.exceptions import ValidationError
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -373,10 +378,12 @@ class ChecklistRunViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
             qs = qs.filter(completed_at__isnull=False)
         if params.get("template", "").isdigit():
             qs = qs.filter(template_id=int(params["template"]))
-        if params.get("from"):
-            qs = qs.filter(due_date__gte=params["from"])
-        if params.get("to"):
-            qs = qs.filter(due_date__lte=params["to"])
+        for param, lookup in (("from", "due_date__gte"), ("to", "due_date__lte")):
+            if params.get(param):
+                day = _parse_day(params[param])
+                if day is None:
+                    raise ValidationError({param: "Use a date like 2026-11-30."})
+                qs = qs.filter(**{lookup: day})
         qs = qs.order_by("due_at" if state in ("open", "overdue") else "-due_at", "id")
         return _filter_site(qs, self.request)
 
@@ -394,7 +401,9 @@ class ChecklistRunViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
         today = local_today(request.tenant)
         runs = [
             run
-            for run in self.get_queryset().filter(completed_at__isnull=True, due_date__lte=today)
+            for run in self.get_queryset().filter(
+                completed_at__isnull=True, due_date__lte=today, template__is_active=True
+            )
             if can_do(run.template, request.user, roles)
         ]
         runs.sort(key=lambda r: r.due_at)
@@ -417,6 +426,29 @@ class ChecklistRunViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
         return Response(self.get_serializer(run).data)
 
 
+PHOTO_FORMATS = {"JPEG": "jpg", "PNG": "png", "WEBP": "webp"}
+
+
+def _image_extension(upload) -> str | None:
+    """The extension for an upload that really is a JPEG, PNG or WebP image
+    (checked by decoding it, not by the type the browser claims), else None."""
+    try:
+        upload.seek(0)
+        with Image.open(upload) as image:
+            fmt = image.format
+            image.verify()
+    except Exception:
+        return None
+    return PHOTO_FORMATS.get(fmt)
+
+
+def _parse_day(value):
+    try:
+        return parse_date(value)
+    except ValueError:
+        return None
+
+
 class ChecklistAnswerPhotoView(APIView):
     """A photo for a failed item, added by whoever did the check."""
 
@@ -435,10 +467,14 @@ class ChecklistAnswerPhotoView(APIView):
         photo = request.FILES.get("photo")
         if photo is None:
             return Response({"detail": "Choose a photo."}, status=400)
-        if not (photo.content_type or "").startswith("image/"):
-            return Response({"detail": "That file isn't an image."}, status=400)
         if photo.size > 10 * 1024 * 1024:
             return Response({"detail": "Photos must be under 10 MB."}, status=400)
-        answer.photo = photo
+        ext = _image_extension(photo)
+        if ext is None:
+            return Response({"detail": "That file isn't a JPEG, PNG or WebP photo."}, status=400)
+        # Never keep the uploader's name or extension: media is served by
+        # extension, so "x.html" would be served as a web page.
+        photo.seek(0)
+        answer.photo.save(f"{uuid.uuid4().hex}.{ext}", File(photo), save=False)
         answer.save(update_fields=["photo"])
         return Response({"id": answer.id, "photo": request.build_absolute_uri(answer.photo.url)})

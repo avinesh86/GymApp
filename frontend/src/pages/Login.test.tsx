@@ -16,4 +16,9 @@ describe('where signing in takes you', () => {
     expect(afterLoginPath({ from: '//evil.example' })).toBe('/dashboard')
     expect(afterLoginPath({ from: '/login' })).toBe('/dashboard')
   })
+
+  it('not via a backslash, which browsers read as a slash', () => {
+    expect(afterLoginPath({ from: '/\\evil.example' })).toBe('/dashboard')
+    expect(afterLoginPath({ from: '/\\/evil.example' })).toBe('/dashboard')
+  })
 })

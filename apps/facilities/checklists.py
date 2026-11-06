@@ -8,6 +8,7 @@ import logging
 from datetime import date, datetime, timedelta
 
 from django.db import transaction
+from django.db.models import F
 from django.utils import timezone
 
 from apps.core.timezones import format_datetime, local_today, tenant_timezone, to_tenant_local
@@ -81,28 +82,37 @@ def can_do(template: ChecklistTemplate, user, roles=None) -> bool:
 
 def create_due_runs(tenant, today: date | None = None) -> int:
     """Create a run for each active checklist due today or in the last few
-    days (but not before the checklist existed). Safe to call repeatedly."""
+    days (but not before the checklist existed). Safe to call repeatedly,
+    and from overlapping callers: the unique (checklist, day) constraint
+    settles any race. A few queries in all, however many checklists."""
     today = today or local_today(tenant)
-    created = 0
-    templates = ChecklistTemplate.objects.filter(tenant=tenant, is_active=True, is_deleted=False)
+    window_start = today - timedelta(days=CATCH_UP_DAYS)
+    templates = list(ChecklistTemplate.objects.filter(tenant=tenant, is_active=True, is_deleted=False))
+    if not templates:
+        return 0
+    existing = set(
+        ChecklistRun.objects.filter(template__in=templates, due_date__gte=window_start).values_list(
+            "template_id", "due_date"
+        )
+    )
+    to_create = []
     for template in templates:
-        made_on = to_tenant_local(template.created_at, tenant).date()
-        first = max(today - timedelta(days=CATCH_UP_DAYS), template.start_date, made_on)
-        day = first
+        made_at = to_tenant_local(template.created_at, tenant)
+        day = max(window_start, template.start_date, made_at.date())
         while day <= today:
-            if is_due_on(template, day):
-                _, was_created = ChecklistRun.objects.get_or_create(
-                    template=template,
-                    due_date=day,
-                    defaults={
-                        "tenant": tenant,
-                        "site": template.site,
-                        "due_at": due_at(template, day, tenant),
-                    },
+            if (template.id, day) not in existing and is_due_on(template, day):
+                to_create.append(
+                    ChecklistRun(
+                        tenant=tenant,
+                        template=template,
+                        site=template.site,
+                        due_date=day,
+                        due_at=due_at(template, day, tenant),
+                    )
                 )
-                created += was_created
             day += timedelta(days=1)
-    return created
+    ChecklistRun.objects.bulk_create(to_create, ignore_conflicts=True)
+    return len(to_create)
 
 
 # ─── Overdue alerts, business hours only ─────────────────────────────────────
@@ -121,18 +131,30 @@ def alert_overdue_runs(tenant, now=None) -> int:
     now = now or timezone.now()
     if not in_alert_hours(tenant, now):
         return 0
-    runs = list(
-        ChecklistRun.objects.filter(
-            tenant=tenant,
-            is_deleted=False,
-            completed_at__isnull=True,
-            overdue_alerted_at__isnull=True,
-            due_at__lt=now,
-            due_at__gte=now - timedelta(days=CATCH_UP_DAYS),
-            template__is_active=True,
-            template__is_deleted=False,
-        ).select_related("template", "site")
+    candidates = ChecklistRun.objects.filter(
+        tenant=tenant,
+        is_deleted=False,
+        completed_at__isnull=True,
+        overdue_alerted_at__isnull=True,
+        due_at__lt=now,
+        due_at__gte=now - timedelta(days=CATCH_UP_DAYS),
+        template__is_active=True,
+        template__is_deleted=False,
+        # A checklist set up after today's due time still shows today's
+        # check, but it wasn't anyone's fault it was late: don't alert it.
+        due_at__gt=F("template__created_at"),
     )
+    # Claim each run before sending: a run is ours only if our conditional
+    # update stamped it. A second job that starts while this one is still
+    # emailing finds them taken, so no check is alerted twice. (If sending
+    # then fails, those checks aren't re-alerted: one missed alert beats
+    # repeats to every key person.)
+    claimed = [
+        pk
+        for pk in candidates.values_list("pk", flat=True)
+        if ChecklistRun.objects.filter(pk=pk, overdue_alerted_at__isnull=True).update(overdue_alerted_at=now)
+    ]
+    runs = list(ChecklistRun.objects.filter(pk__in=claimed).select_related("template", "site"))
     if not runs:
         return 0
 
@@ -159,7 +181,6 @@ def alert_overdue_runs(tenant, now=None) -> int:
         sent += 1
         if config.alert_email and user.email:
             _email(notification)
-    ChecklistRun.objects.filter(pk__in=[r.pk for r in runs]).update(overdue_alerted_at=now)
     return sent
 
 
