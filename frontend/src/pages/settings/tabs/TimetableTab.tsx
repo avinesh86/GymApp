@@ -132,7 +132,12 @@ function TimetableForm({ settings }: { settings: TenantSettings }) {
             </div>
           </fieldset>
           <SaveConflictWarning conflict={guard.conflict} onLoadTheirs={guard.loadTheirs} onSaveMine={guard.saveMine} />
-          <Button onClick={() => void guard.save()} isLoading={guard.isSaving} className="w-fit">
+          <Button
+            onClick={() => void guard.save()}
+            isLoading={guard.isSaving}
+            disabled={guard.saveBlocked}
+            className="w-fit"
+          >
             Save Preferences
           </Button>
         </div>

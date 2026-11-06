@@ -21,8 +21,15 @@ def guarded_patch(request, model, instance, serializer_class, **save_kwargs):
     while checking and saving, so a save can't slip in between the two.
     Requests without ``expected`` save as before.
     """
-    data = {key: value for key, value in request.data.items() if key != "expected"}
-    expected = request.data.get("expected")
+    if not hasattr(request.data, "items"):
+        return Response(
+            {"non_field_errors": ["Send the settings as an object of field: value."]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    data = request.data.copy()
+    expected = data.pop("expected", None)
+    if isinstance(expected, list) and hasattr(request.data, "getlist"):
+        expected = expected[-1]  # a form-encoded body
     if expected is not None and not isinstance(expected, dict):
         return Response(
             {"expected": ["Send the values the form opened with, as field: value."]},
@@ -32,10 +39,14 @@ def guarded_patch(request, model, instance, serializer_class, **save_kwargs):
         locked = model.objects.select_for_update().get(pk=instance.pk)
         if expected:
             current = serializer_class(locked).data
+            # Changed since the form opened, and not already set to what this
+            # save sends (then there's nothing to choose between).
             changed = [
                 field
                 for field, value in expected.items()
-                if field in current and current[field] != value
+                if field in current
+                and current[field] != value
+                and not (field in data and current[field] == data[field])
             ]
             if changed:
                 return Response(

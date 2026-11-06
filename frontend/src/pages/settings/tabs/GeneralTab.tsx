@@ -138,6 +138,7 @@ function GeneralForm({ settings, branding }: { settings: TenantSettings; brandin
               void settingsSave.save()
             }}
             isLoading={settingsSave.isSaving}
+            disabled={settingsSave.saveBlocked}
             className="w-fit"
           >
             Save Currency
@@ -160,7 +161,12 @@ function GeneralForm({ settings, branding }: { settings: TenantSettings; brandin
             onLoadTheirs={brandingSave.loadTheirs}
             onSaveMine={brandingSave.saveMine}
           />
-          <Button onClick={() => void brandingSave.save()} isLoading={brandingSave.isSaving} className="w-fit">
+          <Button
+            onClick={() => void brandingSave.save()}
+            isLoading={brandingSave.isSaving}
+            disabled={brandingSave.saveBlocked}
+            className="w-fit"
+          >
             Save App Name
           </Button>
         </div>
@@ -183,6 +189,7 @@ function GeneralForm({ settings, branding }: { settings: TenantSettings; brandin
               void settingsSave.save()
             }}
             isLoading={settingsSave.isSaving}
+            disabled={settingsSave.saveBlocked}
             className="w-fit"
           >
             Save Timezone

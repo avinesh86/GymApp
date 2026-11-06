@@ -187,4 +187,15 @@ describe('Settings → General', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('App Name (now: Harbour Fitness)')
     expect(updateTenantBranding).not.toHaveBeenCalled()
   })
+
+  it('shows the app name as the server stored it after saving', async () => {
+    renderTab()
+    const appName = await screen.findByLabelText('App Name')
+    await userEvent.clear(appName)
+    await userEvent.type(appName, 'Harbour Fitness  ')
+    vi.mocked(updateTenantBranding).mockResolvedValue({ ...BRANDING, app_name: 'Harbour Fitness' } as never)
+    await userEvent.click(screen.getByRole('button', { name: 'Save App Name' }))
+
+    await waitFor(() => expect(appName).toHaveValue('Harbour Fitness'))
+  })
 })

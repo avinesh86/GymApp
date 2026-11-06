@@ -80,9 +80,10 @@ export function NotificationsTab() {
   )
 }
 
-const EMAIL_FIELDS: ConflictField<TenantSettings>[] = [
+/** Labelled as on the form, which depends on how the gym's email is sent. */
+const emailFields = (managed: boolean): ConflictField<TenantSettings>[] => [
   { key: 'notification_from_name', label: 'Sender Name' },
-  { key: 'notification_from_email', label: 'Sender / Reply-to Address' },
+  { key: 'notification_from_email', label: managed ? 'Reply-to Address' : 'Sender Email' },
 ]
 const WHATSAPP_FIELDS: ConflictField<WhatsAppAccount>[] = [
   { key: 'business_phone_number', label: 'Business Phone Number' },
@@ -147,7 +148,7 @@ function ChannelsAndEmailForm({ settings }: { settings: TenantSettings }) {
   // ── Save email settings ──────────────────────────────────────────────────────
   const emailSave = useGuardedSave({
     data: settings,
-    fields: EMAIL_FIELDS,
+    fields: emailFields(emailSendingManaged),
     queryKey: ['tenant', 'settings'],
     queryFn: getTenantSettings,
     send: updateTenantSettings,
@@ -158,7 +159,8 @@ function ChannelsAndEmailForm({ settings }: { settings: TenantSettings }) {
     },
     // A newly typed password is always sent; it's only ever a deliberate change.
     extra: () => (emailPassword ? { notification_email_password: emailPassword } : {}),
-    onSaved: () => setEmailPassword(''),
+    // Clear it only if it's the one that was saved, not one typed since.
+    onSaved: (_saved, sent) => setEmailPassword((typed) => (typed === sent.notification_email_password ? '' : typed)),
     savedMessage: 'Email settings saved',
     failedMessage: 'Failed to save email settings',
   })
@@ -262,7 +264,7 @@ function ChannelsAndEmailForm({ settings }: { settings: TenantSettings }) {
               onSaveMine={emailSave.saveMine}
             />
           </div>
-          <Button onClick={() => void emailSave.save()} isLoading={emailSave.isSaving}>
+          <Button onClick={() => void emailSave.save()} isLoading={emailSave.isSaving} disabled={emailSave.saveBlocked}>
             Save Email Settings
           </Button>
         </div>
@@ -305,7 +307,8 @@ function WhatsAppForm({ account }: { account: WhatsAppAccount }) {
     },
     // A newly typed access token is always sent; it's only ever a deliberate change.
     extra: () => (waAccessToken ? { access_token: waAccessToken } : {}),
-    onSaved: () => setWaAccessToken(''),
+    // Clear it only if it's the one that was saved, not one typed since.
+    onSaved: (_saved, sent) => setWaAccessToken((typed) => (typed === sent.access_token ? '' : typed)),
     savedMessage: 'WhatsApp settings saved',
     failedMessage: 'Failed to save WhatsApp settings',
   })
@@ -371,7 +374,7 @@ function WhatsAppForm({ account }: { account: WhatsAppAccount }) {
             onSaveMine={whatsAppSave.saveMine}
           />
         </div>
-        <Button onClick={() => void whatsAppSave.save()} isLoading={whatsAppSave.isSaving}>
+        <Button onClick={() => void whatsAppSave.save()} isLoading={whatsAppSave.isSaving} disabled={whatsAppSave.saveBlocked}>
           Save WhatsApp Settings
         </Button>
       </div>

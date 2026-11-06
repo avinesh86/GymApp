@@ -140,7 +140,12 @@ function InvoicesForm({ settings }: { settings: TenantSettings }) {
           </div>
 
           <SaveConflictWarning conflict={guard.conflict} onLoadTheirs={guard.loadTheirs} onSaveMine={guard.saveMine} />
-          <Button onClick={() => void guard.save()} isLoading={guard.isSaving} className="w-fit">
+          <Button
+            onClick={() => void guard.save()}
+            isLoading={guard.isSaving}
+            disabled={guard.saveBlocked}
+            className="w-fit"
+          >
             Save Invoice Settings
           </Button>
         </div>

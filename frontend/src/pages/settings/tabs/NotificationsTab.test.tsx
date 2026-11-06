@@ -237,4 +237,48 @@ describe('Settings → Notifications', () => {
     expect(warning).not.toHaveTextContent('their-new-secret')
     expect(updateWhatsAppAccount).not.toHaveBeenCalled()
   })
+
+  it('treats what was typed during a save as not yet saved, and keeps a password typed meanwhile', async () => {
+    renderTab()
+    const senderName = await screen.findByLabelText('Sender Name')
+    let finishSave: (value: unknown) => void = () => {}
+    vi.mocked(updateTenantSettings).mockReturnValueOnce(new Promise((resolve) => (finishSave = resolve)) as never)
+    await userEvent.clear(senderName)
+    await userEvent.type(senderName, 'Gym One')
+    await userEvent.click(screen.getByRole('button', { name: 'Save Email Settings' }))
+    await waitFor(() => expect(updateTenantSettings).toHaveBeenCalledTimes(1))
+
+    // Typed while that save was still on its way.
+    await userEvent.type(senderName, ' Two')
+    await userEvent.type(screen.getByLabelText(/Gmail App Password/), 'abcd efgh')
+    finishSave({ ...SETTINGS, notification_from_name: 'Gym One' })
+    await waitFor(() => expect(screen.getByLabelText(/Gmail App Password/)).toHaveValue('abcd efgh'))
+    expect(senderName).toHaveValue('Gym One Two')
+
+    vi.mocked(getTenantSettings).mockResolvedValue({ ...SETTINGS, notification_from_name: 'Gym One' } as never)
+    await userEvent.click(screen.getByRole('button', { name: 'Save Email Settings' }))
+    await waitFor(() =>
+      expect(updateTenantSettings).toHaveBeenLastCalledWith({
+        notification_from_name: 'Gym One Two',
+        notification_email_password: 'abcd efgh',
+        expected: { notification_from_name: 'Gym One' },
+      }),
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it("doesn't send a field the server holds as empty just because the form shows it blank", async () => {
+    vi.mocked(getWhatsAppAccount).mockResolvedValue({ ...WA_ACCOUNT, waba_id: null } as never)
+    renderTab()
+    const display = await screen.findByLabelText('Display Name')
+    await userEvent.type(display, '!')
+    await userEvent.click(screen.getByRole('button', { name: 'Save WhatsApp Settings' }))
+
+    await waitFor(() =>
+      expect(updateWhatsAppAccount).toHaveBeenCalledWith({
+        display_name: 'Harbour Gym!',
+        expected: { display_name: 'Harbour Gym' },
+      }),
+    )
+  })
 })

@@ -23,8 +23,10 @@ export interface Conflict<T> {
   changed: ConflictField<T>[]
 }
 
+/** Equal for these purposes; blank, null and missing all count as empty. */
 function sameValue(a: unknown, b: unknown) {
-  return JSON.stringify(a ?? null) === JSON.stringify(b ?? null)
+  const norm = (v: unknown) => (v === undefined || v === '' ? null : v)
+  return JSON.stringify(norm(a)) === JSON.stringify(norm(b))
 }
 
 function defaultShow(value: unknown) {
@@ -57,7 +59,8 @@ export interface GuardedSaveOptions<T> {
   extra?: () => Record<string, unknown>
   /** Also refreshed after a save. */
   alsoRefresh?: QueryKey[]
-  onSaved?: (saved: T) => void
+  /** After a save. `sent` is what this save sent (e.g. to clear a password only if it was the one sent). */
+  onSaved?: (saved: T, sent: Record<string, unknown>) => void
   savedMessage: string
   failedMessage: string
 }
@@ -87,8 +90,18 @@ export function useGuardedSave<T>(options: GuardedSaveOptions<T>) {
   const opened = useRef<Partial<T>>(pick(data, keys))
   const [conflict, setConflict] = useState<Conflict<T> | null>(null)
   const [checking, setChecking] = useState(false)
+  // The button that started the save, to give focus back to afterwards.
+  const returnFocusTo = useRef<HTMLElement | null>(null)
+  const refocusAfterSave = useRef(false)
 
-  const changedBy = (latest: Partial<T>) => fields.filter((f) => !sameValue(latest[f.key], opened.current[f.key]))
+  /** Fields someone else changed since the form opened, ignoring any now
+   * set to exactly what this form has (nothing to choose between). */
+  const changedBy = (latest: Partial<T>) => {
+    const values = current()
+    return fields.filter(
+      (f) => !sameValue(latest[f.key], opened.current[f.key]) && !sameValue(latest[f.key], values[f.key]),
+    )
+  }
   const mine = () => {
     const values = current()
     return keys.filter((key) => values[key] !== undefined && !sameValue(values[key], opened.current[key]))
@@ -98,20 +111,34 @@ export function useGuardedSave<T>(options: GuardedSaveOptions<T>) {
     mutationKey: queryKey,
     mutationFn: (payload: Partial<T> & { expected: Partial<T> }) => send(payload),
     onSuccess: (saved, sent) => {
-      // What the server stored (it may have tidied it), not what was sent;
-      // a field it didn't send back keeps the value that was sent.
+      // Only the fields this save sent: another admin may have changed the
+      // others meanwhile, and the next check must still catch that.
+      // What the server stored (it may have tidied it, e.g. trimmed spaces),
+      // falling back to what was sent.
+      const sentKeys = keys.filter((key) => key in sent && key !== 'expected')
       const stored = Object.fromEntries(
-        keys.filter((key) => key in sent || saved?.[key] !== undefined).map((key) => [
-          key,
-          saved?.[key] !== undefined ? saved[key] : (sent as Partial<T>)[key],
-        ]),
+        sentKeys.map((key) => [key, saved?.[key] !== undefined ? saved[key] : (sent as Partial<T>)[key]]),
       ) as Partial<T>
       opened.current = { ...opened.current, ...stored }
+      // Show the tidied value, unless the person has typed something else since.
+      const values = current()
+      apply(
+        pick(
+          stored,
+          sentKeys.filter((key) => sameValue(values[key], (sent as Partial<T>)[key])),
+        ),
+      )
       if (saved) queryClient.setQueryData(queryKey, saved)
       void queryClient.invalidateQueries({ queryKey })
       for (const key of alsoRefresh ?? []) void queryClient.invalidateQueries({ queryKey: key })
-      onSaved?.(saved)
+      onSaved?.(saved, sent as Record<string, unknown>)
       toast.success(options.savedMessage)
+    },
+    onSettled: () => {
+      if (refocusAfterSave.current) {
+        refocusAfterSave.current = false
+        restoreFocus()
+      }
     },
     onError: (error) => {
       if (isAxiosError(error) && error.response?.status === 409) {
@@ -129,8 +156,17 @@ export function useGuardedSave<T>(options: GuardedSaveOptions<T>) {
     mutate({ ...pick(values, changedKeys), ...(extra?.() ?? {}), expected: pick(opened.current, changedKeys) } as never)
   }
 
+  /** Back to the button that started the save, once it's on screen and enabled again. */
+  function restoreFocus() {
+    requestAnimationFrame(() => {
+      const el = returnFocusTo.current
+      if (el?.isConnected) el.focus()
+    })
+  }
+
   /** Saves this person's changes, unless someone else changed these settings meanwhile. */
   async function save() {
+    if (document.activeElement instanceof HTMLElement) returnFocusTo.current = document.activeElement
     setConflict(null)
     setChecking(true)
     let latest: T
@@ -156,6 +192,7 @@ export function useGuardedSave<T>(options: GuardedSaveOptions<T>) {
     apply(pick(conflict.latest, conflict.changed.map((f) => f.key)))
     opened.current = pick(conflict.latest, keys)
     setConflict(null)
+    restoreFocus()
   }
 
   /** Keeps their changes to fields this person didn't touch; saves this person's. */
@@ -166,11 +203,20 @@ export function useGuardedSave<T>(options: GuardedSaveOptions<T>) {
     apply(pick(conflict.latest, theirsOnly))
     opened.current = pick(conflict.latest, keys)
     setConflict(null)
+    refocusAfterSave.current = true
     // Against their values now, so yet another change is caught too.
     submit(myKeys)
   }
 
-  return { save, loadTheirs, saveMine, conflict, isSaving: isPending || checking }
+  return {
+    save,
+    loadTheirs,
+    saveMine,
+    conflict,
+    isSaving: isPending || checking,
+    /** While the warning shows, the form's own Save would only show it again. */
+    saveBlocked: conflict !== null,
+  }
 }
 
 /** The warning shown when Save finds the settings changed underneath. */
@@ -203,15 +249,10 @@ export function SaveConflictWarning<T>({
         <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
         Someone else changed these settings since you opened this page. Nothing has been saved yet.
       </p>
-      <ul className="mt-2 ml-6 list-disc space-y-0.5">
+      <ul className="mt-2 ml-6 list-disc space-y-0.5 [overflow-wrap:anywhere]">
         {conflict.changed.map((f) => (
           <li key={f.key}>
-            {f.label}{' '}
-            {f.secret ? (
-              '(changed)'
-            ) : (
-              <span className="whitespace-nowrap">(now: {(f.show ?? defaultShow)(conflict.latest[f.key])})</span>
-            )}
+            {f.label} {f.secret ? '(changed)' : `(now: ${(f.show ?? defaultShow)(conflict.latest[f.key])})`}
           </li>
         ))}
       </ul>

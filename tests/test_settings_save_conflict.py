@@ -154,3 +154,23 @@ def test_another_gyms_settings_are_untouched(client, gym_settings, other_tenant)
 
     theirs.refresh_from_db()
     assert theirs.invoice_frequency == "monthly"
+
+
+def test_setting_a_field_to_what_someone_else_already_set_is_not_a_conflict(client, gym_settings):
+    """Both admins chose the same value: nothing to choose between."""
+    gym_settings.invoice_frequency = "weekly"
+    gym_settings.save()
+
+    response = client.patch(
+        SETTINGS,
+        {"invoice_frequency": "weekly", "expected": {"invoice_frequency": "monthly"}},
+        format="json",
+    )
+
+    assert response.status_code == 200
+
+
+def test_a_body_that_is_not_an_object_is_a_bad_request_not_a_server_error(client, gym_settings):
+    for body in ([1, 2], "monthly"):
+        response = client.patch(SETTINGS, body, format="json")
+        assert response.status_code == 400, body

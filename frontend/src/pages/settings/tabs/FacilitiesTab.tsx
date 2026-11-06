@@ -276,7 +276,7 @@ function FacilitiesForm({ settings }: { settings: TenantSettings }) {
       </Card>
 
       <SaveConflictWarning conflict={guard.conflict} onLoadTheirs={guard.loadTheirs} onSaveMine={guard.saveMine} />
-      <Button onClick={() => void guard.save()} isLoading={guard.isSaving} disabled={!hoursValid} className="w-fit">
+      <Button onClick={() => void guard.save()} isLoading={guard.isSaving} disabled={!hoursValid || guard.saveBlocked} className="w-fit">
         Save Facilities Settings
       </Button>
     </div>
