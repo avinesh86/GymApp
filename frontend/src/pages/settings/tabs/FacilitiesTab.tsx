@@ -70,7 +70,10 @@ function hourLabel(h: number) {
  * the real settings do, so there are never placeholder values on screen to
  * read or to save over the gym's real settings. */
 export function FacilitiesTab() {
-  const { data: settings, isError, refetch } = useQuery({ queryKey: ['tenant', 'settings'], queryFn: getTenantSettings })
+  const { data: settings, isError, isStale, isFetchedAfterMount, refetch } = useQuery({
+    queryKey: ['tenant', 'settings'],
+    queryFn: getTenantSettings,
+  })
   if (isError && !settings) {
     return (
       <EmptyState
@@ -80,7 +83,9 @@ export function FacilitiesTab() {
       />
     )
   }
-  if (!settings) return <PageSpinner />
+  // An out-of-date cached copy would seed the form with old values, and Save
+  // would then undo someone else's change: wait for the fresh one.
+  if (!settings || (isStale && !isFetchedAfterMount && !isError)) return <PageSpinner />
   return <FacilitiesForm settings={settings} />
 }
 

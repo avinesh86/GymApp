@@ -11,8 +11,7 @@ vi.mock('../../../api/settings', () => ({
 }))
 vi.mock('react-hot-toast', () => ({ default: { success: vi.fn(), error: vi.fn() } }))
 
-function renderTab() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+function renderTab(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return render(
     <QueryClientProvider client={client}>
       <FacilitiesTab />
@@ -40,6 +39,30 @@ beforeEach(() => {
 })
 
 describe('Settings → Facilities', () => {
+  it('waits for fresh settings rather than starting from an out-of-date copy', async () => {
+    // Saving a form seeded from a stale cache would undo someone else's change.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } })
+    const old = { ...(await vi.mocked(getTenantSettings)()), fault_reporting_enabled: true }
+    client.setQueryData(['tenant', 'settings'], old, { updatedAt: Date.now() - 60_000 })
+    vi.mocked(getTenantSettings).mockResolvedValue({ ...old, fault_reporting_enabled: false } as never)
+    renderTab(client)
+
+    await waitFor(() =>
+      expect(screen.getByRole('switch', { name: 'Report a fault button' })).toHaveAttribute('aria-checked', 'false'),
+    )
+  })
+
+  it('shows it is trying again rather than leaving the error up', async () => {
+    vi.mocked(getTenantSettings).mockRejectedValueOnce(new Error('offline'))
+    renderTab()
+    await screen.findByText("Couldn't load the Facilities settings")
+
+    vi.mocked(getTenantSettings).mockReturnValueOnce(new Promise(() => {}) as never)
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+
+    expect(screen.queryByText("Couldn't load the Facilities settings")).not.toBeInTheDocument()
+  })
+
   it('says so and offers to try again when the settings cannot be loaded', async () => {
     vi.mocked(getTenantSettings).mockRejectedValueOnce(new Error('offline'))
     renderTab()
