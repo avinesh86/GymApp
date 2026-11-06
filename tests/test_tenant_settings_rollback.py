@@ -35,6 +35,25 @@ def _db_default_fields(model):
     return [f for f in model._meta.local_concrete_fields if _has_db_default(f)]
 
 
+def _expected_value(field):
+    """What new code would store when it leaves the column to its default:
+    the Python ``default`` if there is one, else the ``db_default`` value.
+    None for a db_default expression (e.g. Now()) with nothing to compare."""
+    if field.has_default():
+        return field.get_default()
+    if hasattr(field.db_default, "resolve_expression"):
+        return getattr(field.db_default, "value", None)
+    return field.db_default
+
+
+def test_expected_value_handles_db_default_without_a_python_default():
+    # check_migration_defaults suggests db_default=...; a field with only
+    # that must still be compared by value, not as a DatabaseDefault object.
+    assert _expected_value(models.IntegerField(db_default=5)) == 5
+    assert _expected_value(models.IntegerField(default=7, db_default=7)) == 7
+    assert _expected_value(models.JSONField(db_default=["a"])) == ["a"]
+
+
 def _insert_like_old_code(tenant):
     """INSERT a settings row the way older code would: every column except
     the ones a newer release added (all of which have a db_default)."""
@@ -70,11 +89,13 @@ def test_older_code_can_still_create_gym_settings():
     _insert_like_old_code(tenant)
 
     saved = TenantSettings.objects.get(tenant=tenant)
-    made_by_new_code = TenantSettings(tenant=tenant)
     for field in left_out:
-        assert getattr(saved, field.attname) == getattr(
-            made_by_new_code, field.attname
-        ), f"{field.name}: the database default differs from the model's default"
+        expected = _expected_value(field)
+        if expected is None:
+            continue
+        assert getattr(saved, field.attname) == expected, (
+            f"{field.name}: the database default differs from the model's default"
+        )
 
 
 def _column_default(table, column):
@@ -82,13 +103,17 @@ def _column_default(table, column):
     with connection.cursor() as cursor:
         if connection.vendor == "sqlite":
             cursor.execute(f"PRAGMA table_info({connection.ops.quote_name(table)})")
-            return next(row[4] for row in cursor.fetchall() if row[1] == column)
+            rows = {row[1]: row[4] for row in cursor.fetchall()}
+            assert column in rows, f"{table}.{column} not found in the database"
+            return rows[column]
         cursor.execute(
             "SELECT COLUMN_DEFAULT FROM information_schema.COLUMNS "
             "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s AND COLUMN_NAME = %s",
             [table, column],
         )
-        return cursor.fetchone()[0]
+        row = cursor.fetchone()
+        assert row is not None, f"{table}.{column} not found in the database"
+        return row[0]
 
 
 @pytest.mark.django_db

@@ -1,6 +1,7 @@
 """
 Fail when a migration not yet on the base ref adds a required column to an
-existing model without a database default (RUNBOOK §8 rule 5).
+existing model, or makes an existing column required, without a database
+default (RUNBOOK §8 rule 5). See apps/core/migration_checks.py.
 
     python manage.py check_migration_defaults                 # against origin/main
     python manage.py check_migration_defaults --base origin/test
@@ -12,7 +13,7 @@ If a column really can't have a default and the risk is understood, list it
 on the migration with the reason, and say why in the pull request:
 
     class Migration(migrations.Migration):
-        allow_add_field_without_db_default = {
+        allow_without_db_default = {
             "tenantsettings.some_field": "why a rolled-back release never inserts here",
         }
 """
@@ -25,7 +26,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.db.migrations.loader import MigrationLoader
 
-from apps.core.migration_checks import find_unsafe_add_fields, final_field_lookup
+from apps.core.migration_checks import field_before_lookup, find_unsafe_columns
 
 
 def paths_on(ref: str, repo_root: Path) -> set[str]:
@@ -47,21 +48,49 @@ def paths_on(ref: str, repo_root: Path) -> set[str]:
     return set(result.stdout.splitlines())
 
 
-def new_migrations(loader: MigrationLoader, on_base: set[str], repo_root: Path):
+def migration_file(migration):
+    module = sys.modules.get(type(migration).__module__)
+    return getattr(module, "__file__", None)
+
+
+def new_migrations(loader, on_base: set[str], repo_root: Path):
     """(app_label, Migration, repo-relative path) for this project's
-    migrations whose files aren't on the base ref."""
-    found = []
-    for (app_label, _name), migration in sorted(loader.graph.nodes.items()):
-        module = sys.modules.get(type(migration).__module__)
-        module_file = getattr(module, "__file__", None)
+    migrations whose files aren't on the base ref, in the order they apply.
+
+    A squashed migration counts as already live when every migration it
+    replaces is on the base ref (its operations ran there already)."""
+    plan = []
+    for leaf in sorted(loader.graph.leaf_nodes()):
+        plan += loader.graph.forwards_plan(leaf)
+    found, seen = [], set()
+    for node in plan:
+        if node in seen:
+            continue
+        seen.add(node)
+        migration = loader.graph.nodes[node]
+        module_file = migration_file(migration)
         if not module_file:
             continue
         try:
-            path = Path(module_file).resolve().relative_to(repo_root).as_posix()
+            relative = Path(module_file).resolve().relative_to(repo_root)
         except ValueError:
             continue  # a third-party app's migration, not in this repo
-        if path not in on_base:
-            found.append((app_label, migration, path))
+        if {"site-packages", "dist-packages"} & set(relative.parts):
+            continue  # a virtualenv inside the repo
+        if relative.as_posix() in on_base:
+            continue
+        replaced = [
+            (relative.parent / f"{name}.py").as_posix()
+            for app_label, name in (migration.replaces or [])
+            if app_label == node[0]
+        ]
+        if (
+            replaced
+            and len(replaced) == len(migration.replaces)
+            and all(path in on_base for path in replaced)
+        ):
+            continue
+        found.append((node[0], migration, relative.as_posix()))
     return found
 
 
@@ -83,20 +112,18 @@ class Command(BaseCommand):
         on_base = paths_on(options["base"], repo_root)
         loader = MigrationLoader(None, ignore_no_migrations=True)
         pending = new_migrations(loader, on_base, repo_root)
-        problems = find_unsafe_add_fields(
-            pending, final_field_lookup(loader.project_state())
-        )
+        problems = find_unsafe_columns(pending, field_before_lookup(loader))
         if not problems:
             self.stdout.write(
                 self.style.SUCCESS(
                     f"{len(pending)} migration(s) not on {options['base']}: "
-                    "no new required column lacks a database default."
+                    "no new required column without a database default."
                 )
             )
             return
         for problem in problems:
             self.stdout.write(self.style.ERROR(problem.describe()))
         raise CommandError(
-            f"{len(problems)} new required column(s) without db_default. "
+            f"{len(problems)} problem(s) with new required columns. "
             "See RUNBOOK §8 rule 5."
         )

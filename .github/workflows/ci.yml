@@ -50,13 +50,6 @@ jobs:
       - name: Check for missing migrations
         run: python manage.py makemigrations --check --dry-run --settings=fitops.settings.ci
 
-      # RUNBOOK §8 rule 5: a rolled-back release can't insert into a new
-      # required column unless it has a database default (db_default).
-      - name: Check new required columns have a database default
-        run: |
-          git fetch --no-tags --depth=1 origin +refs/heads/main:refs/remotes/origin/main
-          python manage.py check_migration_defaults --base origin/main
-
       - name: Run tests with coverage
         run: |
           pytest \
@@ -67,6 +60,15 @@ jobs:
             --cov-report=term-missing \
             --cov-report=xml:coverage.xml \
             --junitxml=test-results.xml
+
+      # RUNBOOK §8 rule 5: a rolled-back release can't insert into a new
+      # required column unless it has a database default (db_default).
+      # Runs after the tests (even failed ones) so neither hides the other.
+      - name: Check new required columns have a database default
+        if: success() || failure()
+        run: |
+          git fetch --no-tags --depth=1 origin +refs/heads/main:refs/remotes/origin/main
+          python manage.py check_migration_defaults --base origin/main
 
       - name: Upload coverage report
         if: always()

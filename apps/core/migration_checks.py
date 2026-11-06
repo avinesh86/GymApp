@@ -2,15 +2,24 @@
 Find new required columns that a rolled-back release couldn't insert into.
 
 A failed deploy rolls the code back but not the database (RUNBOOK §8 rule 5).
-The older code doesn't know columns added since, so its INSERTs leave them
-out. Django drops the one-off default it used to fill existing rows right
-after AddField, so a NOT NULL column with no database default (``db_default``)
-then rejects every insert: on MySQL's strict mode that's a 500.
+Older code doesn't know columns added since, so its INSERTs leave them out;
+and it still writes NULL to a column it knew as nullable. Django drops the
+one-off default it used to fill existing rows right after AddField, so a
+NOT NULL column with no database default (``db_default``) then rejects those
+inserts: on MySQL's strict mode that's a 500.
 
 A migration is "new" when its file isn't on the base ref (``origin/main``,
-i.e. what production runs). Columns on models that a new migration creates
-are fine: the older code doesn't know the table at all. So is a column a
-later new migration gives a ``db_default`` (as tenants.0013 did for 0012).
+i.e. what production runs). The new migrations are replayed in order:
+
+- AddField of a required column on a model that already exists, or AlterField
+  that makes an existing column required (it was nullable or had a
+  db_default), is a problem...
+- ...unless a later new migration fixes it (AlterField to null=True or adding
+  a db_default) or removes it. Renames are followed.
+- Models a new migration creates are fine: older code never writes to them.
+
+Not checked (see RUNBOOK §8 rule 5): columns added with RunSQL, and edits to
+a migration file that is already on the base ref.
 """
 
 from dataclasses import dataclass
@@ -18,95 +27,189 @@ from dataclasses import dataclass
 from django.db import models
 from django.db.migrations.operations import (
     AddField,
+    AlterField,
     CreateModel,
+    DeleteModel,
+    RemoveField,
+    RenameField,
+    RenameModel,
     SeparateDatabaseAndState,
 )
 
 # On a Migration class: {"<model_name>.<field_name>": "why this is safe"}.
-EXEMPTIONS_ATTRIBUTE = "allow_add_field_without_db_default"
+EXEMPTIONS_ATTRIBUTE = "allow_without_db_default"
 
 
 @dataclass(frozen=True)
-class UnsafeAddField:
-    app_label: str
-    migration: str
+class Problem:
     path: str
+    app_label: str
     model_name: str
     field_name: str
+    what: str
 
     def describe(self) -> str:
-        return (
-            f"{self.path}: {self.app_label}.{self.model_name}.{self.field_name} "
-            "is a new required column with no db_default. Code from before this "
-            "release can't insert rows after a rollback. Add db_default=... "
-            "(or null=True)."
-        )
+        return f"{self.path}: {self.app_label}.{self.model_name}.{self.field_name} {self.what}"
 
 
-def _database_operations(operations):
-    """The operations that touch the database, unpacking SeparateDatabaseAndState."""
+ADDED = (
+    "is a new required column with no db_default. Code from before this release "
+    "leaves it out of its inserts, which then fail after a rollback. "
+    "Add db_default=... (or null=True)."
+)
+MADE_REQUIRED = (
+    "is made required with no db_default. Code from before this release can "
+    "still insert NULL or leave it out, which then fails after a rollback. "
+    "Add db_default=... (or keep null=True)."
+)
+
+
+def _operations(operations, touches_db=True):
+    """(operation, touches_db) pairs, unpacking SeparateDatabaseAndState.
+
+    Only operations that touch the database can create a problem. A fix can
+    come from either side: a hand-written database step (RunPython/RunSQL)
+    paired with a state AlterField that records the db_default, as in
+    tenants.0013."""
     for operation in operations:
         if isinstance(operation, SeparateDatabaseAndState):
-            yield from _database_operations(operation.database_operations)
+            yield from _operations(operation.database_operations, touches_db)
+            yield from _operations(operation.state_operations, False)
         else:
-            yield operation
+            yield operation, touches_db
 
 
-def _is_required_column(field) -> bool:
+def _has_db_default(field) -> bool:
+    default = field.db_default
+    if default is models.NOT_PROVIDED or default is None:
+        return False
+    # db_default=Value(None) is DEFAULT NULL: no help on a NOT NULL column.
+    if isinstance(default, models.Value) and default.value is None:
+        return False
+    return True
+
+
+def is_required_column(field) -> bool:
+    """A column an INSERT that leaves it out (or sends NULL) can't satisfy."""
     if field.many_to_many or getattr(field, "generated", False):
         return False
-    return not field.null and field.db_default is models.NOT_PROVIDED
+    return not field.null and not _has_db_default(field)
 
 
-def find_unsafe_add_fields(new_migrations, final_field) -> list[UnsafeAddField]:
-    """
-    ``new_migrations``: (app_label, Migration instance, path) for every
-    migration not yet on the base ref.
-    ``final_field(app_label, model_name, field_name)``: the field as the last
-    migration leaves it, or None if it (or its model) is gone by then.
-    """
-    created = {
-        (app_label, op.name_lower)
-        for app_label, migration, _ in new_migrations
-        for op in _database_operations(migration.operations)
-        if isinstance(op, CreateModel)
-    }
-    found = []
-    for app_label, migration, path in new_migrations:
-        exempt = {
-            key.lower()
-            for key, reason in getattr(migration, EXEMPTIONS_ATTRIBUTE, {}).items()
-            if str(reason).strip()
-        }
-        for op in _database_operations(migration.operations):
-            if not isinstance(op, AddField) or not _is_required_column(op.field):
-                continue
-            if (app_label, op.model_name_lower) in created:
-                continue
-            if f"{op.model_name_lower}.{op.name_lower}" in exempt:
-                continue
-            final = final_field(app_label, op.model_name_lower, op.name)
-            if final is None or not _is_required_column(final):
-                continue
-            found.append(
-                UnsafeAddField(
-                    app_label=app_label,
-                    migration=migration.name,
-                    path=path,
-                    model_name=op.model_name_lower,
-                    field_name=op.name,
+def _exemptions(migration, path, app_label, touched):
+    raw = getattr(migration, EXEMPTIONS_ATTRIBUTE, {})
+    problems, exempt = [], set()
+    for key, reason in raw.items():
+        model_name, _, field_name = key.lower().partition(".")
+        if (model_name, field_name) not in touched:
+            problems.append(
+                Problem(
+                    path,
+                    app_label,
+                    model_name,
+                    field_name,
+                    f"is listed in {EXEMPTIONS_ATTRIBUTE} but this migration "
+                    "doesn't add or alter it (typo, or left behind after a rename?).",
                 )
             )
-    return found
+        elif not str(reason).strip():
+            problems.append(
+                Problem(
+                    path,
+                    app_label,
+                    model_name,
+                    field_name,
+                    f"is listed in {EXEMPTIONS_ATTRIBUTE} without a reason.",
+                )
+            )
+        else:
+            exempt.add((model_name, field_name))
+    return problems, exempt
 
 
-def final_field_lookup(project_state):
-    """Turn a ProjectState into the ``final_field`` callable above."""
+def find_unsafe_columns(new_migrations, field_before) -> list[Problem]:
+    """
+    ``new_migrations``: (app_label, Migration, path) for every migration not
+    yet on the base ref, in the order they apply.
+    ``field_before(app_label, migration_name, model_name, field_name)``: the
+    field as it was just before that migration, or None if it didn't exist.
+    """
+    created: set[tuple[str, str]] = set()
+    # (app_label, model_name, field_name lowercased) -> Problem, until fixed.
+    open_problems: dict[tuple[str, str, str], Problem] = {}
+    other_problems: list[Problem] = []
 
-    def final_field(app_label, model_name, field_name):
-        model_state = project_state.models.get((app_label, model_name))
+    for app_label, migration, path in new_migrations:
+        operations = list(_operations(migration.operations))
+        touched = {
+            (op.model_name_lower, op.name_lower)
+            for op, _ in operations
+            if isinstance(op, (AddField, AlterField))
+        }
+        problems, exempt = _exemptions(migration, path, app_label, touched)
+        other_problems += problems
+
+        for op, touches_db in operations:
+            if isinstance(op, CreateModel):
+                created.add((app_label, op.name_lower))
+            elif isinstance(op, DeleteModel):
+                created.discard((app_label, op.name_lower))
+                for key in [
+                    k for k in open_problems if k[:2] == (app_label, op.name_lower)
+                ]:
+                    del open_problems[key]
+            elif isinstance(op, RenameModel):
+                old, new = op.old_name_lower, op.new_name_lower
+                if (app_label, old) in created:
+                    created.discard((app_label, old))
+                    created.add((app_label, new))
+                for key in [k for k in open_problems if k[:2] == (app_label, old)]:
+                    open_problems[(app_label, new, key[2])] = open_problems.pop(key)
+            elif isinstance(op, RemoveField):
+                open_problems.pop((app_label, op.model_name_lower, op.name_lower), None)
+            elif isinstance(op, RenameField):
+                old_key = (app_label, op.model_name_lower, op.old_name_lower)
+                if old_key in open_problems:
+                    new_key = (app_label, op.model_name_lower, op.new_name_lower)
+                    open_problems[new_key] = open_problems.pop(old_key)
+            elif isinstance(op, (AddField, AlterField)):
+                key = (app_label, op.model_name_lower, op.name_lower)
+                if (app_label, op.model_name_lower) in created:
+                    continue
+                if not is_required_column(op.field):
+                    open_problems.pop(key, None)  # fixed by this change
+                    continue
+                if not touches_db:
+                    continue
+                if key in open_problems or (key[1], key[2]) in exempt:
+                    continue
+                if isinstance(op, AddField):
+                    what = ADDED
+                else:
+                    before = field_before(
+                        app_label, migration.name, op.model_name_lower, op.name
+                    )
+                    if before is None or is_required_column(before):
+                        continue  # was already required: nothing new
+                    what = MADE_REQUIRED
+                open_problems[key] = Problem(
+                    path, app_label, op.model_name_lower, op.name, what
+                )
+
+    return other_problems + list(open_problems.values())
+
+
+def field_before_lookup(loader):
+    """``field_before`` for find_unsafe_columns, from a MigrationLoader."""
+    states = {}
+
+    def field_before(app_label, migration_name, model_name, field_name):
+        node = (app_label, migration_name)
+        if node not in states:
+            states[node] = loader.project_state(node, at_end=False)
+        model_state = states[node].models.get((app_label, model_name))
         if model_state is None:
             return None
         return model_state.fields.get(field_name)
 
-    return final_field
+    return field_before
