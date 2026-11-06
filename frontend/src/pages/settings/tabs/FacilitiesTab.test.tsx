@@ -60,11 +60,15 @@ describe('Settings → Facilities', () => {
     renderTab(client)
     vi.mocked(getTenantSettings).mockReturnValue(new Promise(() => {}) as never)
 
+    await userEvent.click(screen.getByRole('switch', { name: 'Also send alerts by email' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save Facilities Settings' }))
     await waitFor(() => expect(updateTenantSettings).toHaveBeenCalled())
+    // A change made after pressing Save, while the save is refreshing the data.
+    await userEvent.click(alerted().getByRole('checkbox', { name: 'Payroll' }))
     await new Promise((r) => setTimeout(r, 30))
 
-    expect(screen.getByRole('button', { name: 'Save Facilities Settings' })).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: 'Also send alerts by email' })).toHaveAttribute('aria-checked', 'true')
+    expect(alerted().getByRole('checkbox', { name: 'Payroll' })).toBeChecked()
   })
 
   it('waits for fresh settings rather than starting from an out-of-date copy', async () => {
