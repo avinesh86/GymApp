@@ -79,14 +79,17 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
 
   const appName = branding?.app_name ?? 'Northern Arena'
 
-  const sidebarContent = (
+  // The phone menu passes its close button, which sits at the end of the logo
+  // row so a long gym name truncates before it instead of running underneath.
+  const renderContent = (closeButton?: React.ReactNode) => (
     <div className="flex flex-col h-full">
       {/* Logo */}
-      {/* pr-12 keeps a long name clear of the slide-in menu's close button */}
-      <div className="flex items-center gap-2.5 pl-4 pr-12 md:pr-4 py-5 border-b border-white/10">
-        {/* Full size in the phone menu; the desktop sidebar is left as it was. */}
-        <WaveIcon className="shrink-0 md:shrink" />
-        <span className="min-w-0 text-sm font-bold text-white truncate" title={appName}>{appName}</span>
+      <div className={`flex items-center gap-2.5 py-5 border-b border-white/10 ${closeButton ? 'pl-4 pr-2' : 'px-4'}`}>
+        <WaveIcon className={closeButton ? 'shrink-0' : undefined} />
+        <span className={`text-sm font-bold text-white truncate ${closeButton ? 'min-w-0 flex-1' : ''}`} title={appName}>
+          {appName}
+        </span>
+        {closeButton}
       </div>
 
       {/* Nav items */}
@@ -164,7 +167,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
     <>
       {/* Desktop sidebar */}
       <aside className="hidden md:flex flex-col w-40 shrink-0 bg-[#0A0D14] h-screen sticky top-0">
-        {sidebarContent}
+        {renderContent()}
       </aside>
 
       {/* Mobile overlay */}
@@ -174,15 +177,17 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
             className="absolute inset-0 bg-black/40"
             onClick={onMobileClose}
           />
-          <aside className="relative w-56 bg-[#0A0D14] h-full shadow-xl">
-            <button
-              aria-label="Close menu"
-              className="absolute top-4 right-4 p-1 text-[#94A3B8] hover:text-white"
-              onClick={onMobileClose}
-            >
-              <X className="h-5 w-5" />
-            </button>
-            {sidebarContent}
+          <aside id="mobile-menu" className="relative w-56 bg-[#0A0D14] h-full shadow-xl">
+            {renderContent(
+              <button
+                type="button"
+                aria-label="Close menu"
+                className="h-11 w-11 shrink-0 -my-2 flex items-center justify-center rounded-lg text-[#94A3B8] hover:text-white hover:bg-white/10"
+                onClick={onMobileClose}
+              >
+                <X className="h-5 w-5" />
+              </button>,
+            )}
           </aside>
         </div>
       )}

@@ -27,7 +27,7 @@ export function AppLayout() {
       <Sidebar mobileOpen={mobileMenuOpen} onMobileClose={() => setMobileMenuOpen(false)} />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <TopBar title={title} onMenuClick={() => setMobileMenuOpen(true)} />
+        <TopBar title={title} menuOpen={mobileMenuOpen} onMenuClick={() => setMobileMenuOpen(true)} />
         <SetupBanner />
 
         <main className="flex-1 overflow-y-auto p-6 bg-[#F0F2F5]">

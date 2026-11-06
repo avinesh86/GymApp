@@ -10,9 +10,10 @@ interface TopBarProps {
   title?: string
   /** Opens the slide-in menu on small screens. */
   onMenuClick: () => void
+  menuOpen: boolean
 }
 
-export function TopBar({ title, onMenuClick }: TopBarProps) {
+export function TopBar({ title, onMenuClick, menuOpen }: TopBarProps) {
   const [panelOpen, setPanelOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
   const queryClient = useQueryClient()
@@ -60,11 +61,13 @@ export function TopBar({ title, onMenuClick }: TopBarProps) {
   }, [])
 
   return (
-    <header className="h-14 bg-[#0A0D14] border-b border-white/10 flex items-center gap-2 pl-2 pr-4 md:px-6 sticky top-0 z-30">
+    <header className="h-14 bg-[#0A0D14] border-b border-white/10 flex items-center gap-2 pl-3 pr-4 md:px-6 sticky top-0 z-30">
       {/* Part of the row, not floating over it, so it can never cover the title. */}
       <button
         type="button"
         aria-label="Open menu"
+        aria-expanded={menuOpen}
+        aria-controls="mobile-menu"
         onClick={onMenuClick}
         className="md:hidden h-11 w-11 shrink-0 flex items-center justify-center rounded-lg text-white hover:bg-white/10 transition-colors"
       >
@@ -77,7 +80,7 @@ export function TopBar({ title, onMenuClick }: TopBarProps) {
 
       <div className="relative shrink-0" ref={panelRef}>
         <button
-          aria-label="Notifications"
+          aria-label="Open notifications"
           onClick={() => setPanelOpen((open) => !open)}
           className="relative p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
         >

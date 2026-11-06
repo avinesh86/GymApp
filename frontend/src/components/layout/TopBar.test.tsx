@@ -13,10 +13,10 @@ vi.mock('../../hooks/useAuth', () => ({ useAuth: () => ({ user: null }) }))
 
 const LONG_NAME = 'The Extremely Long Named Northern Arena Health and Fitness Centre'
 
-function renderTopBar(onMenuClick = vi.fn()) {
+function renderTopBar(onMenuClick = vi.fn(), menuOpen = false) {
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <TopBar title={LONG_NAME} onMenuClick={onMenuClick} />
+      <TopBar title={LONG_NAME} onMenuClick={onMenuClick} menuOpen={menuOpen} />
     </QueryClientProvider>,
   )
   return onMenuClick
@@ -51,6 +51,17 @@ describe('the top bar on a phone', () => {
     expect(title).toHaveClass('truncate', 'min-w-0', 'flex-1')
     // The full name is still there for anyone who hovers or uses a screen reader.
     expect(title).toHaveAttribute('title', LONG_NAME)
+  })
+
+  it('tells screen readers whether the menu is open', () => {
+    renderTopBar(vi.fn(), true)
+    expect(screen.getByRole('button', { name: 'Open menu' })).toHaveAttribute('aria-expanded', 'true')
+  })
+
+  it('names the bell differently from the Settings "Notifications" tab', () => {
+    renderTopBar()
+    expect(screen.getByRole('button', { name: 'Open notifications' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Notifications' })).toBeNull()
   })
 
   it('opens the menu when pressed', async () => {
