@@ -5,7 +5,6 @@ that isn't an API endpoint or static file.
 Used on PythonAnywhere where Django serves both the API and the
 frontend from a single web app.
 """
-
 import os
 
 from django.conf import settings

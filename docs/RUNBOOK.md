@@ -345,7 +345,8 @@ if each change adds its own.
    migration that's already on `main`, removed and renamed columns (older
    code still uses the old name), or a model deleted and re-created under
    the same name: check those by hand. Only squash migrations that are
-   already on `main`; the check refuses a squash of unreleased ones. CI also runs the
+   already on `main`; the check refuses a squash that includes unreleased
+   ones. A migration file that's moved or renamed counts as new. CI also runs the
    migrations and the rollback tests on MySQL 8 (the **MySQL Tests** job),
    since SQLite accepts some changes production's MySQL rejects.
 

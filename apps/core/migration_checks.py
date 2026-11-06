@@ -153,6 +153,21 @@ def find_unsafe_columns(new_migrations, field_before) -> list[Problem]:
         problems, exempt = _exemptions(migration, path, app_label, touched)
         other_problems += problems
 
+        # Within this migration: each field's latest definition, and the name
+        # it had before the migration (for field_before), following renames.
+        seen: dict[tuple[str, str], object] = {}
+        original: dict[tuple[str, str], tuple[str, str]] = {}
+        model_original: dict[str, str] = {}
+
+        def before_this_op(model_name, field_name):
+            if (model_name, field_name) in seen:
+                return seen[(model_name, field_name)]
+            orig_model, orig_field = original.get(
+                (model_name, field_name),
+                (model_original.get(model_name, model_name), field_name),
+            )
+            return field_before(app_label, migration.name, orig_model, orig_field)
+
         for op, touches_db, group in operations:
             if isinstance(op, CreateModel):
                 created.add((app_label, op.name_lower))
@@ -164,6 +179,11 @@ def find_unsafe_columns(new_migrations, field_before) -> list[Problem]:
                     del open_problems[key]
             elif isinstance(op, RenameModel):
                 old, new = op.old_name_lower, op.new_name_lower
+                model_original[new] = model_original.pop(old, old)
+                for m, f in [k for k in seen if k[0] == old]:
+                    seen[(new, f)] = seen.pop((m, f))
+                for m, f in [k for k in original if k[0] == old]:
+                    original[(new, f)] = original.pop((m, f))
                 if (app_label, old) in created:
                     created.discard((app_label, old))
                     created.add((app_label, new))
@@ -174,6 +194,15 @@ def find_unsafe_columns(new_migrations, field_before) -> list[Problem]:
             elif isinstance(op, RemoveField):
                 open_problems.pop((app_label, op.model_name_lower, op.name_lower), None)
             elif isinstance(op, RenameField):
+                model = op.model_name_lower
+                renamed = before_this_op(model, op.old_name)
+                original[(model, op.new_name)] = original.pop(
+                    (model, op.old_name),
+                    (model_original.get(model, model), op.old_name),
+                )
+                seen.pop((model, op.old_name), None)
+                if renamed is not None:
+                    seen[(model, op.new_name)] = renamed
                 old_key = (app_label, op.model_name_lower, op.old_name_lower)
                 if old_key in open_problems:
                     new_key = (app_label, op.model_name_lower, op.new_name_lower)
@@ -181,6 +210,12 @@ def find_unsafe_columns(new_migrations, field_before) -> list[Problem]:
                     raised_in[new_key] = raised_in.pop(old_key, None)
             elif isinstance(op, (AddField, AlterField)):
                 key = (app_label, op.model_name_lower, op.name_lower)
+                before = (
+                    None
+                    if isinstance(op, AddField)
+                    else before_this_op(op.model_name_lower, op.name)
+                )
+                seen[(op.model_name_lower, op.name)] = op.field
                 if (app_label, op.model_name_lower) in created:
                     continue
                 if not is_required_column(op.field):
@@ -199,9 +234,6 @@ def find_unsafe_columns(new_migrations, field_before) -> list[Problem]:
                 if isinstance(op, AddField):
                     what = ADDED
                 else:
-                    before = field_before(
-                        app_label, migration.name, op.model_name_lower, op.name
-                    )
                     if before is None:
                         what = ADDED  # added earlier in this same migration
                     elif is_required_column(before):

@@ -36,11 +36,7 @@ class Command(BaseCommand):
 
         tenant, created = Tenant.objects.get_or_create(
             slug="demo-gym",
-            defaults={
-                "name": "Demo Gym",
-                "is_active": True,
-                "plan": Tenant.Plan.GROWTH,
-            },
+            defaults={"name": "Demo Gym", "is_active": True, "plan": Tenant.Plan.GROWTH},
         )
         TenantDomain.objects.get_or_create(
             domain="localhost",
@@ -81,10 +77,7 @@ class Command(BaseCommand):
         site, _ = Site.objects.get_or_create(
             tenant=tenant,
             name="Main Studio",
-            defaults={
-                "address": "123 Fitness Street, Sydney NSW 2000",
-                "is_active": True,
-            },
+            defaults={"address": "123 Fitness Street, Sydney NSW 2000", "is_active": True},
         )
         self.stdout.write(f"  Created site: {site.name}")
         return site
@@ -226,7 +219,9 @@ class Command(BaseCommand):
         for day_offset in range(7):
             event_date = today + timedelta(days=day_offset)
             for i, ct in enumerate(class_types):
-                start_dt = timezone.datetime.combine(event_date, time(7 + i * 2, 0))
+                start_dt = timezone.datetime.combine(
+                    event_date, time(7 + i * 2, 0)
+                )
                 if timezone.is_naive(start_dt):
                     start_dt = timezone.make_aware(start_dt)
                 end_dt = start_dt + timedelta(minutes=ct.duration_minutes)

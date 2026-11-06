@@ -12,7 +12,6 @@ Usage (set this in PA → Tasks → Scheduled tasks, hourly):
 The command is idempotent and safe to re-run.  Individual task failures
 are logged but do not prevent subsequent tasks from running.
 """
-
 import logging
 
 from django.core.management.base import BaseCommand
@@ -21,9 +20,7 @@ logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = (
-        "Runs all periodic background tasks (replaces Celery Beat on PythonAnywhere)."
-    )
+    help = "Runs all periodic background tasks (replaces Celery Beat on PythonAnywhere)."
 
     def handle(self, *args, **options):
         self.stdout.write("━" * 60)
@@ -33,135 +30,108 @@ class Command(BaseCommand):
         results = []
 
         # 1. Generate upcoming recurring timetable events (daily)
-        results.append(
-            self._run_task(
-                "Generate recurring events",
-                "apps.timetable.tasks",
-                "generate_upcoming_recurring_events",
-            )
-        )
+        results.append(self._run_task(
+            "Generate recurring events",
+            "apps.timetable.tasks",
+            "generate_upcoming_recurring_events",
+        ))
 
         # 2. Check unfilled classes (daily)
-        results.append(
-            self._run_task(
-                "Check unfilled classes",
-                "apps.timetable.tasks",
-                "check_unfilled_classes",
-            )
-        )
+        results.append(self._run_task(
+            "Check unfilled classes",
+            "apps.timetable.tasks",
+            "check_unfilled_classes",
+        ))
 
         # 2b. Mark past events completed (hourly) — stops finished classes
         #     showing as 'Scheduled'; they still appear in awaiting-attendance.
-        results.append(
-            self._run_task(
-                "Mark past events completed",
-                "apps.timetable.tasks",
-                "mark_past_events_completed",
-            )
-        )
+        results.append(self._run_task(
+            "Mark past events completed",
+            "apps.timetable.tasks",
+            "mark_past_events_completed",
+        ))
 
         # 3. Expire stale cover offers (every 30 min — fine to run hourly)
-        results.append(
-            self._run_task(
-                "Expire cover offers",
-                "apps.cover.tasks",
-                "expire_cover_offers",
-            )
-        )
+        results.append(self._run_task(
+            "Expire cover offers",
+            "apps.cover.tasks",
+            "expire_cover_offers",
+        ))
 
         # 3b. Expire cover requests where the event date has passed (daily)
-        results.append(
-            self._run_task(
-                "Expire stale cover requests",
-                "apps.cover.tasks",
-                "expire_stale_cover_requests",
-            )
-        )
+        results.append(self._run_task(
+            "Expire stale cover requests",
+            "apps.cover.tasks",
+            "expire_stale_cover_requests",
+        ))
 
         # 3c. Advance cover requests: mark critical + escalate exhausted tiers.
         #     Runs AFTER expire_cover_offers so escalation sees expired offers.
-        results.append(
-            self._run_task(
-                "Advance cover requests",
-                "apps.cover.tasks",
-                "advance_cover_requests",
-            )
-        )
+        results.append(self._run_task(
+            "Advance cover requests",
+            "apps.cover.tasks",
+            "advance_cover_requests",
+        ))
 
         # 4. Send cover reminders (hourly)
-        results.append(
-            self._run_task(
-                "Send cover reminders",
-                "apps.cover.tasks",
-                "send_cover_reminders",
-            )
-        )
+        results.append(self._run_task(
+            "Send cover reminders",
+            "apps.cover.tasks",
+            "send_cover_reminders",
+        ))
 
         # 5. Process pending notifications (every 5 min — runs on each invocation)
-        results.append(
-            self._run_task(
-                "Send pending notifications",
-                "apps.notifications.tasks",
-                "send_pending_notifications",
-            )
-        )
+        results.append(self._run_task(
+            "Send pending notifications",
+            "apps.notifications.tasks",
+            "send_pending_notifications",
+        ))
 
         # 6. Auto-generate invoices (frequency-dependent — safe to check hourly)
-        results.append(
-            self._run_task(
-                "Auto-generate invoices",
-                "apps.invoices.tasks",
-                "auto_generate_invoices",
-            )
-        )
+        results.append(self._run_task(
+            "Auto-generate invoices",
+            "apps.invoices.tasks",
+            "auto_generate_invoices",
+        ))
 
         # 7. Send invoice reminders (weekly — safe to run every invocation,
         #    the task itself is idempotent)
-        results.append(
-            self._run_task(
-                "Send invoice reminders",
-                "apps.invoices.tasks",
-                "send_invoice_reminders",
-            )
-        )
+        results.append(self._run_task(
+            "Send invoice reminders",
+            "apps.invoices.tasks",
+            "send_invoice_reminders",
+        ))
 
         # 8. Email scheduled reports (each period is sent once; on an hourly
         #    runner a report goes out up to an hour after its send time)
-        results.append(
-            self._run_task(
-                "Send scheduled reports",
-                "apps.reports.tasks",
-                "send_scheduled_reports",
-            )
-        )
+        results.append(self._run_task(
+            "Send scheduled reports",
+            "apps.reports.tasks",
+            "send_scheduled_reports",
+        ))
 
         # 8. Facilities checklists: create due checks, alert overdue ones
         #    (alerts held to the gym's business hours).
-        results.append(
-            self._run_task(
-                "Run facilities checklists",
-                "apps.facilities.tasks",
-                "run_checklists",
-            )
-        )
+        results.append(self._run_task(
+            "Run facilities checklists",
+            "apps.facilities.tasks",
+            "run_checklists",
+        ))
 
         self.stdout.write("")
         self.stdout.write("━" * 60)
         passed = sum(1 for ok, _ in results if ok)
         failed = len(results) - passed
         style = self.style.SUCCESS if failed == 0 else self.style.WARNING
-        self.stdout.write(
-            style(
-                f"Done: {passed} passed, {failed} failed out of {len(results)} tasks."
-            )
-        )
+        self.stdout.write(style(
+            f"Done: {passed} passed, {failed} failed out of {len(results)} tasks."
+        ))
 
     def _run_task(self, label: str, module_path: str, func_name: str):
         """Import and execute a single task function, catching any errors."""
         self.stdout.write(f"\n▸ {label}...")
         try:
             import importlib
-
             module = importlib.import_module(module_path)
             task_func = getattr(module, func_name)
 

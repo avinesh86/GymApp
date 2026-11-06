@@ -20,9 +20,7 @@ def tenant_timezone(tenant) -> ZoneInfo:
     """The gym's configured timezone, falling back to the project default."""
     # The reverse one-to-one raises AttributeError when settings were never
     # created, so the nested getattr covers that.
-    name = (
-        getattr(getattr(tenant, "settings", None), "timezone", "") or settings.TIME_ZONE
-    )
+    name = getattr(getattr(tenant, "settings", None), "timezone", "") or settings.TIME_ZONE
     try:
         return ZoneInfo(name)
     except (ZoneInfoNotFoundError, ValueError):
@@ -72,23 +70,23 @@ def local_today(tenant) -> date:
 
 
 def format_date(value, tenant=None) -> str:
-    """ "Tue 6 Oct 2026". Accepts a datetime (converted) or a plain date."""
+    """"Tue 6 Oct 2026". Accepts a datetime (converted) or a plain date."""
     local = _local(value, tenant)
     return f"{local:%a} {local.day} {local:%b %Y}"
 
 
 def format_time(value, tenant) -> str:
-    """ "09:00", in the gym's local time."""
+    """"09:00", in the gym's local time."""
     return f"{to_tenant_local(value, tenant):%H:%M}"
 
 
 def format_datetime(value, tenant) -> str:
-    """ "Tue 6 Oct 2026 at 09:00"."""
+    """"Tue 6 Oct 2026 at 09:00"."""
     return f"{format_date(value, tenant)} at {format_time(value, tenant)}"
 
 
 def format_date_range(start, end, tenant=None) -> str:
-    """ "Thu 1 Oct 2026 – Sat 31 Oct 2026"."""
+    """"Thu 1 Oct 2026 – Sat 31 Oct 2026"."""
     return f"{format_date(start, tenant)} – {format_date(end, tenant)}"
 
 

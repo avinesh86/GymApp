@@ -152,9 +152,7 @@ def _attachment(attachment) -> dict:
         filename, content, mimetype = attachment
         if isinstance(content, str):
             content = content.encode("utf-8")
-        mimetype = (
-            mimetype or mimetypes.guess_type(filename)[0] or "application/octet-stream"
-        )
+        mimetype = mimetype or mimetypes.guess_type(filename)[0] or "application/octet-stream"
 
     return {
         "filename": filename,

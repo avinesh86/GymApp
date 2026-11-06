@@ -174,6 +174,51 @@ def test_a_state_claim_with_a_database_step_fixes_it():
     assert _check(_migration(_add("level", _required())), later) == []
 
 
+def test_add_backfill_then_require_in_one_migration_is_flagged():
+    found = _check(
+        _migration(
+            _add("level", models.IntegerField(null=True)),
+            migrations.RunPython(migrations.RunPython.noop),
+            _alter("level", _required()),
+        )
+    )
+    assert len(found) == 1
+
+
+def test_rename_then_make_required_in_one_migration_is_flagged():
+    found = _check(
+        _migration(
+            migrations.RenameField("gym", "trial", "trial_ends"),
+            _alter("trial_ends", models.DateTimeField()),
+        ),
+        before={("gym", "trial"): models.DateTimeField(null=True)},
+    )
+    assert len(found) == 1
+    assert "made required" in found[0].describe()
+
+
+def test_rename_then_alter_a_required_column_in_one_migration_passes():
+    found = _check(
+        _migration(
+            migrations.RenameField("gym", "title", "name"),
+            _alter("name", models.CharField(max_length=200)),
+        ),
+        before={("gym", "title"): models.CharField(max_length=100)},
+    )
+    assert found == []
+
+
+def test_rename_model_then_alter_a_required_column_in_one_migration_passes():
+    found = _check(
+        _migration(
+            migrations.RenameModel("Gym", "Club"),
+            _alter("name", models.CharField(max_length=200), model="club"),
+        ),
+        before={("gym", "name"): models.CharField(max_length=100)},
+    )
+    assert found == []
+
+
 # ─── what passes ─────────────────────────────────────────────────────────────
 
 

@@ -46,9 +46,7 @@ def log_audit(user, action, obj, before_data=None, after_data=None, request=None
             user_agent=user_agent or "",
         )
     except Exception:
-        logger.exception(
-            "Failed to write audit log for action=%s object=%s", action, obj
-        )
+        logger.exception("Failed to write audit log for action=%s object=%s", action, obj)
 
 
 def _get_client_ip(request):
