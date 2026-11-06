@@ -32,27 +32,35 @@ def _json_field(db_default):
     return field
 
 
-def _set_roles_default(apps_registry, schema_editor, db_default):
+def _set_roles_default(apps_registry, schema_editor, old_default, db_default):
+    """Move checklist_roles' database default from ``old_default`` to
+    ``db_default`` (None = no default). Both ends are given explicitly: the
+    state Django hands a RunPython doesn't include this change, so reading
+    the "old" field from it would make the reverse a no-op."""
     model = apps_registry.get_model("tenants", "TenantSettings")
     table = schema_editor.quote_name(model._meta.db_table)
     if _is_mysql(schema_editor.connection):
         default = ""
         if db_default is not None:
-            default =" DEFAULT (CAST(%s AS JSON))" % schema_editor.quote_value(json.dumps(db_default))
-        schema_editor.execute(f"ALTER TABLE {table} MODIFY `checklist_roles` JSON NOT NULL{default}")
+            default = " DEFAULT (CAST(%s AS JSON))" % schema_editor.quote_value(
+                json.dumps(db_default)
+            )
+        schema_editor.execute(
+            f"ALTER TABLE {table} MODIFY `checklist_roles` JSON NOT NULL{default}"
+        )
         return
-    old = model._meta.get_field("checklist_roles")
+    old = _json_field(old_default)
     new = _json_field(db_default)
-    new.model = model
+    old.model = new.model = model
     schema_editor.alter_field(model, old, new)
 
 
 def add_roles_default(apps_registry, schema_editor):
-    _set_roles_default(apps_registry, schema_editor, CHECKLIST_ROLES)
+    _set_roles_default(apps_registry, schema_editor, None, CHECKLIST_ROLES)
 
 
 def remove_roles_default(apps_registry, schema_editor):
-    _set_roles_default(apps_registry, schema_editor, None)
+    _set_roles_default(apps_registry, schema_editor, CHECKLIST_ROLES, None)
 
 
 class Migration(migrations.Migration):
@@ -73,7 +81,9 @@ class Migration(migrations.Migration):
                     ),
                 ),
             ],
-            database_operations=[migrations.RunPython(add_roles_default, remove_roles_default)],
+            database_operations=[
+                migrations.RunPython(add_roles_default, remove_roles_default)
+            ],
         ),
         migrations.AlterField(
             model_name="tenantsettings",

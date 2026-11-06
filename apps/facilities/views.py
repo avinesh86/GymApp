@@ -60,20 +60,33 @@ class FacilitiesConfigView(APIView):
         config = get_config(request.tenant)
         sites = Site.objects.filter(tenant=request.tenant, is_active=True).order_by("name")
         can_manage = can_manage_facilities(request.user)
+        roles = checklist_roles(request.tenant)
+        can_do_checklists = config.checklists_enabled and can_manage and request.user.role in roles
+        active_checklists = (
+            list(
+                ChecklistTemplate.objects.filter(tenant=request.tenant, is_active=True, is_deleted=False).only(
+                    "id", "assigned_roles"
+                )
+            )
+            if config.checklists_enabled
+            else []
+        )
         return Response({
             "equipment_enabled": config.equipment_enabled,
             "maintenance_enabled": config.maintenance_enabled,
             "fault_reporting_enabled": config.fault_reporting_enabled,
             "checklists_enabled": config.checklists_enabled,
             # Only roles that can open Facilities ever do checklists.
-            "can_do_checklists": config.checklists_enabled
-            and can_manage
-            and request.user.role in checklist_roles(request.tenant),
+            "can_do_checklists": can_do_checklists,
             "can_manage_checklists": request.user.role in ("owner", "admin", "gym_manager"),
-            # The dashboard's checks card waits until the gym has a checklist,
-            # so gyms that haven't set any up don't see "All checks done".
-            "has_checklists": config.checklists_enabled
-            and ChecklistTemplate.objects.filter(tenant=request.tenant, is_active=True, is_deleted=False).exists(),
+            # The gym has set up at least one checklist (the Checklists tab
+            # opens on its list until then).
+            "has_checklists": bool(active_checklists),
+            # ...and at least one of them is this person's to do. The
+            # dashboard's checks card waits for this, so nobody is told "All
+            # checks done" about checklists that don't exist or aren't theirs.
+            "has_my_checklists": can_do_checklists
+            and any(can_do(t, request.user, roles) for t in active_checklists),
             "can_manage": can_manage,
             "is_alert_recipient": request.user.role in config.alert_roles,
             "sites": [{"id": s.id, "name": s.name} for s in sites],

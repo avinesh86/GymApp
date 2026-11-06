@@ -164,7 +164,9 @@ class TenantSettings(models.Model):
     facilities_alert_email = models.BooleanField(default=False)
     # Checklists: the scheduled checks (opening, cleaning, safety...).
     # db_default (here and below): the database fills these in when older code,
-    # which doesn't know them, inserts a row; e.g. after a rollback.
+    # which doesn't know them, inserts a row; e.g. after a rollback. Changing
+    # checklist_roles' db_default needs a hand-written migration like 0013:
+    # MySQL 8 rejects Django's ALTER COLUMN SET DEFAULT on a JSON column.
     facilities_checklists_enabled = models.BooleanField(default=True, db_default=True)
     # Roles that do checklists. Instructors and PTs never see them.
     checklist_roles = models.JSONField(

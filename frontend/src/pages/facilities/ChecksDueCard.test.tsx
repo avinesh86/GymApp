@@ -21,6 +21,7 @@ const baseConfig: FacilitiesConfig = {
   checklists_enabled: true,
   can_do_checklists: true,
   has_checklists: true,
+  has_my_checklists: true,
   can_manage_checklists: true,
   can_manage: true,
   is_alert_recipient: true,
@@ -67,10 +68,17 @@ describe('Checks to do card', () => {
   })
 
   it('stays hidden until the gym has set up a checklist', () => {
-    renderCard({ has_checklists: false })
+    renderCard({ has_checklists: false, has_my_checklists: false })
 
     expect(screen.queryByTestId('checks-card')).not.toBeInTheDocument()
     expect(screen.queryByText('All checks done')).not.toBeInTheDocument()
+    expect(listMyChecks).not.toHaveBeenCalled()
+  })
+
+  it('stays hidden when none of the checklists are this person\'s to do', () => {
+    renderCard({ has_my_checklists: false })
+
+    expect(screen.queryByTestId('checks-card')).not.toBeInTheDocument()
     expect(listMyChecks).not.toHaveBeenCalled()
   })
 
@@ -81,10 +89,18 @@ describe('Checks to do card', () => {
     expect(listMyChecks).not.toHaveBeenCalled()
   })
 
-  it('says all checks are done once there are checklists but nothing is due', async () => {
+  it('says nothing is due once there are checklists but none are due', async () => {
     renderCard({})
 
-    expect(await screen.findByText('All checks done')).toBeInTheDocument()
+    expect(await screen.findByText('Nothing due right now')).toBeInTheDocument()
+  })
+
+  it('says so when the checks could not be loaded, rather than "nothing due"', async () => {
+    vi.mocked(listMyChecks).mockRejectedValue(new Error('offline'))
+    renderCard({})
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load your checks")
+    expect(screen.queryByText('Nothing due right now')).not.toBeInTheDocument()
   })
 
   it('lists the checks that are due', async () => {

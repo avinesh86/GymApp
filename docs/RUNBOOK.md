@@ -325,6 +325,12 @@ if each change adds its own.
    test fails, either the code is wrong or the test is out of date, and the
    pull request should say which and why.
 4. **Anything a person clicks through needs a UI test** (see below).
+5. **New required columns get a database default** (`db_default`). A failed
+   deploy rolls the code back but not the database, and the older code
+   leaves new columns out of its inserts; without a database default the
+   insert fails. `tests/test_tenant_settings_rollback.py` shows how to test
+   it. JSON columns on MySQL 8 need a hand-written migration (see
+   `tenants/0013`).
 
 ### Which kind of test
 

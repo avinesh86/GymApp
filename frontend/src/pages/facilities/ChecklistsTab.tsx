@@ -18,7 +18,11 @@ type View = 'todo' | 'checklists' | 'history'
 
 export function ChecklistsTab({ site }: { site: number | '' }) {
   const { data: config } = useFacilitiesConfig()
-  const [view, setView] = useState<View>(config?.can_do_checklists ? 'todo' : 'history')
+  // Until the gym has a checklist there's nothing to do or look back on, so
+  // open on the list, where managers set the first one up.
+  const [view, setView] = useState<View>(
+    !config?.has_checklists ? 'checklists' : config.can_do_checklists ? 'todo' : 'history',
+  )
   const [openRun, setOpenRun] = useState<ChecklistRun | null>(null)
   const [editing, setEditing] = useState<ChecklistTemplate | null>(null)
   const [adding, setAdding] = useState(false)
@@ -52,8 +56,14 @@ export function ChecklistsTab({ site }: { site: number | '' }) {
         )}
       </div>
 
-      {view === 'todo' && <ToDo onOpen={setOpenRun} />}
-      {view === 'checklists' && <Templates site={site} onEdit={config?.can_manage_checklists ? setEditing : undefined} />}
+      {view === 'todo' && <ToDo onOpen={setOpenRun} hasMine={!!config?.has_my_checklists} />}
+      {view === 'checklists' && (
+        <Templates
+          site={site}
+          onEdit={config?.can_manage_checklists ? setEditing : undefined}
+          onAdd={config?.can_manage_checklists ? () => setAdding(true) : undefined}
+        />
+      )}
       {view === 'history' && <History site={site} onOpen={setOpenRun} />}
 
       <CheckModal run={openRun} onClose={() => setOpenRun(null)} />
@@ -90,9 +100,12 @@ function RunRow({ run, onOpen }: { run: ChecklistRun; onOpen: (r: ChecklistRun) 
   )
 }
 
-function ToDo({ onOpen }: { onOpen: (r: ChecklistRun) => void }) {
+function ToDo({ onOpen, hasMine }: { onOpen: (r: ChecklistRun) => void; hasMine: boolean }) {
   const { data: runs = [], isLoading } = useQuery({ queryKey: ['facilities', 'my-checks'], queryFn: listMyChecks })
   if (isLoading) return <PageSpinner />
+  if (runs.length === 0 && !hasMine) {
+    return <EmptyState title="No checklists for you yet" description="None of your gym's checklists are set up for your role." />
+  }
   if (runs.length === 0) return <EmptyState title="Nothing to check right now" description="All your checks are done." />
   return (
     <ul className="flex flex-col gap-3" aria-label="Checks to do">
@@ -103,12 +116,31 @@ function ToDo({ onOpen }: { onOpen: (r: ChecklistRun) => void }) {
   )
 }
 
-function Templates({ site, onEdit }: { site: number | ''; onEdit?: (t: ChecklistTemplate) => void }) {
+function Templates({
+  site,
+  onEdit,
+  onAdd,
+}: {
+  site: number | ''
+  onEdit?: (t: ChecklistTemplate) => void
+  onAdd?: () => void
+}) {
   const { data: templates = [], isLoading } = useQuery({
     queryKey: ['facilities', 'checklists', site],
     queryFn: () => listChecklists({ site }),
   })
   if (isLoading) return <PageSpinner />
+  if (templates.length === 0) {
+    return onAdd ? (
+      <EmptyState
+        title="No checklists yet"
+        description="Set up opening, cleaning or safety checks. The people who do them see them on their dashboard when they're due."
+        action={{ label: 'Set up a checklist', onClick: onAdd }}
+      />
+    ) : (
+      <EmptyState title="No checklists yet" description="Your gym manager hasn't set up any checklists yet." />
+    )
+  }
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
       <Table

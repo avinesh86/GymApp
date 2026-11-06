@@ -630,8 +630,10 @@ export interface FacilitiesConfig {
   checklists_enabled: boolean
   /** In the gym's checklist roles (and checklists are on). */
   can_do_checklists: boolean
-  // At least one active checklist exists; the dashboard card waits for it.
+  // The gym has at least one active checklist.
   has_checklists: boolean
+  // At least one active checklist is this person's to do; the dashboard card waits for it.
+  has_my_checklists: boolean
   /** Owner, admin and gym manager set checklists up. */
   can_manage_checklists: boolean
   can_manage: boolean

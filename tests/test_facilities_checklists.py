@@ -729,3 +729,16 @@ def test_dashboard_card_stays_hidden_when_checklists_are_switched_off(tenant, ow
     _settings(tenant, facilities_checklists_enabled=False)
 
     assert _client(owner_user).get("/api/v1/facilities/config/").data["has_checklists"] is False
+
+
+def test_dashboard_card_only_for_people_with_a_checklist_of_their_own(tenant, team_leader_user, manager_user):
+    """A team leader at a gym whose only checklist is for gym managers would
+    otherwise be told "All checks done" every day about checks that aren't theirs."""
+    _template(tenant, assigned_roles=["gym_manager"])
+    config_url = "/api/v1/facilities/config/"
+
+    leader = _client(team_leader_user).get(config_url).data
+    assert leader["has_checklists"] is True
+    assert leader["has_my_checklists"] is False
+
+    assert _client(manager_user).get(config_url).data["has_my_checklists"] is True

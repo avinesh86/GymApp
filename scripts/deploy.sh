@@ -96,7 +96,9 @@ banner() {
 # Code is rolled back automatically. The database is NOT: restoring a dump
 # discards every write since the deploy started, which is a call a human has to
 # make. Migrations are additive in this codebase, so the old code usually runs
-# fine against the new schema — the dump is there for when it does not.
+# fine against the new schema, as long as new required columns have a database
+# default (RUNBOOK §8 rule 5): old code leaves them out of its inserts. The dump
+# is there for when it does not.
 rollback() {
     banner "✗ Deploy failed — rolling back to ${PREVIOUS_COMMIT:0:8}"
 

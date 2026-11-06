@@ -12,19 +12,20 @@ import { RUN_STATUS } from './labels'
 import type { ChecklistRun } from '../../types'
 
 /** Checks due today (and any overdue) for people who do checklists. Hidden
- * until the gym has set up a checklist, so it never just says "All checks
- * done" to a gym that has none. */
+ * until one of the gym's checklists is this person's to do, so nobody is
+ * told "All checks done" about checklists that don't exist or aren't theirs. */
 export function ChecksDueCard() {
   const navigate = useNavigate()
   const { data: config } = useFacilitiesConfig()
   const [openRun, setOpenRun] = useState<ChecklistRun | null>(null)
-  const { data: runs = [] } = useQuery({
+  const show = !!config?.can_do_checklists && !!config?.has_my_checklists
+  const { data: runs = [], isLoading, isError } = useQuery({
     queryKey: ['facilities', 'my-checks'],
     queryFn: listMyChecks,
-    enabled: !!config?.can_do_checklists && !!config?.has_checklists,
+    enabled: show,
   })
 
-  if (!config?.can_do_checklists || !config?.has_checklists) return null
+  if (!show) return null
   const overdue = runs.filter((r) => r.status === 'overdue').length
 
   return (
@@ -39,8 +40,14 @@ export function ChecksDueCard() {
           View Facilities &rsaquo;
         </button>
       </div>
-      {runs.length === 0 ? (
-        <p className="py-6 text-center text-sm text-gray-400">All checks done</p>
+      {isLoading ? (
+        <p className="py-6 text-center text-sm text-gray-400">Loading checks…</p>
+      ) : isError ? (
+        <p className="py-6 text-center text-sm text-red-600" role="alert">
+          Couldn't load your checks. Refresh to try again.
+        </p>
+      ) : runs.length === 0 ? (
+        <p className="py-6 text-center text-sm text-gray-400">Nothing due right now</p>
       ) : (
         <ul className="divide-y divide-gray-50">
           {runs.slice(0, 5).map((run) => (

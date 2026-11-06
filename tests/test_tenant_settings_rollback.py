@@ -10,6 +10,7 @@ MySQL's strict mode rejects the row and signup returns 500.
 """
 
 import pytest
+from django.core.management import call_command
 from django.db import connection
 
 from apps.tenants.models import TenantSettings
@@ -37,7 +38,9 @@ def _insert_like_old_code(tenant):
     values = [f.get_db_prep_save(f.pre_save(row, add=True), connection) for f in fields]
     table = connection.ops.quote_name(TenantSettings._meta.db_table)
     with connection.cursor() as cursor:
-        cursor.execute(f"INSERT INTO {table} ({columns}) VALUES ({placeholders})", values)
+        cursor.execute(
+            f"INSERT INTO {table} ({columns}) VALUES ({placeholders})", values
+        )
 
 
 @pytest.mark.django_db
@@ -52,3 +55,32 @@ def test_code_from_before_checklists_can_still_create_gym_settings():
     assert settings.checklist_roles == ["owner", "admin", "gym_manager", "team_leader"]
     assert settings.facilities_alert_start_hour == 9
     assert settings.facilities_alert_end_hour == 17
+
+
+def _column_has_default(column):
+    with connection.cursor() as cursor:
+        if connection.vendor == "sqlite":
+            cursor.execute("PRAGMA table_info(tenants_settings)")
+            return (
+                next(row[4] for row in cursor.fetchall() if row[1] == column)
+                is not None
+            )
+        cursor.execute(
+            "SELECT COLUMN_DEFAULT FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants_settings' AND COLUMN_NAME = %s",
+            [column],
+        )
+        return cursor.fetchone()[0] is not None
+
+
+@pytest.mark.django_db(transaction=True)
+def test_migration_0013_reverses_cleanly():
+    """Undoing 0013 must really remove the defaults, or the database and
+    Django's idea of it drift apart."""
+    assert all(_column_has_default(c) for c in ADDED_BY_CHECKLISTS_RELEASE)
+    try:
+        call_command("migrate", "tenants", "0012", verbosity=0)
+        assert not any(_column_has_default(c) for c in ADDED_BY_CHECKLISTS_RELEASE)
+    finally:
+        call_command("migrate", verbosity=0)
+    assert all(_column_has_default(c) for c in ADDED_BY_CHECKLISTS_RELEASE)
