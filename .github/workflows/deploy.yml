@@ -14,6 +14,14 @@ on:
         description: Branch or commit SHA to deploy
         required: false
         default: main
+      repair_schema:
+        description: >-
+          Repair missing tables/columns (migrations recorded as applied but
+          never run). Only adds, never drops. Tick only after reading the failed
+          deploy's check_db_schema list.
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   group: deploy-production
@@ -24,9 +32,13 @@ jobs:
     name: Deploy to production
     runs-on: ubuntu-latest
     # workflow_run fires on failure too — only deploy the successful ones.
+    # And only CI runs for a push to main: a pull request whose head branch is
+    # main (the main → test sync PR) runs CI on the same commit with
+    # head_branch "main" as well, which used to deploy (and release) twice.
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      github.event.workflow_run.conclusion == 'success'
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
 
     environment:
       name: production
@@ -54,6 +66,7 @@ jobs:
             # accurate until the script decides to move it.
             git show "origin/${REF}:scripts/deploy.sh" > /tmp/fitops-deploy.sh
             PROJECT_DIR=${{ secrets.DEPLOY_PATH }} DEPLOY_BRANCH="$REF" \
+              SCHEMA_FIX=${{ github.event.inputs.repair_schema == 'true' && '1' || '0' }} \
               bash /tmp/fitops-deploy.sh
 
       - name: Report rollback

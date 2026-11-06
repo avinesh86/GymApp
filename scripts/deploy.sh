@@ -22,6 +22,8 @@
 #                    the first entry in ALLOWED_HOSTS in .env.
 #   BACKUP_DIR       where dumps are written   (default: <project>/backups)
 #   SKIP_BACKUP=1    skip the dump (fast redeploys of frontend-only changes)
+#   SCHEMA_FIX=1     add tables/columns the models need but the database lacks
+#                    (migrations recorded but never run). Needs the backup.
 #   COMPOSE_FILE     compose file to use. Defaults to docker-compose.prod.yml
 #                    when present, otherwise docker-compose.yml.
 #
@@ -38,6 +40,11 @@ DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
 HEALTHCHECK_URL="${HEALTHCHECK_URL:-http://localhost/api/v1/public/health/}"
 BACKUP_DIR="${BACKUP_DIR:-${PROJECT_DIR}/backups}"
 SKIP_BACKUP="${SKIP_BACKUP:-0}"
+SCHEMA_FIX="${SCHEMA_FIX:-0}"
+if [ "$SCHEMA_FIX" = "1" ] && [ "$SKIP_BACKUP" = "1" ]; then
+    echo "✗ SCHEMA_FIX=1 changes the database, so it needs the backup: drop SKIP_BACKUP=1." >&2
+    exit 1
+fi
 
 # Django rejects a request whose Host header is not in ALLOWED_HOSTS with a 400,
 # so probing http://localhost fails on a server that only allows its public
@@ -76,6 +83,7 @@ cd "$PROJECT_DIR"
 PREVIOUS_COMMIT=""
 BACKUP_FILE=""
 MIGRATIONS_APPLIED="no"
+SCHEMA_CHECK_RUNNING="no"
 
 banner() {
     echo ""
@@ -111,6 +119,14 @@ rollback() {
 
     echo "  Rolled back and healthy at $(git log --oneline -1)"
 
+    if [ "$SCHEMA_CHECK_RUNNING" = "yes" ]; then
+        echo ""
+        echo "⚠ The schema check failed (see the check_db_schema output above)."
+        echo "  If it lists missing tables/columns, the database is BEHIND the code:"
+        echo "  restoring the dump won't help. Review the list, then either run"
+        echo "  Actions > Deploy with 'Repair missing tables/columns' ticked, or add"
+        echo "  them by hand (sqlmigrate <app> <migration> shows the SQL)."
+    fi
     if [ "$MIGRATIONS_APPLIED" = "yes" ]; then
         echo ""
         echo "⚠ Migrations ran before the failure. The schema is NEWER than the"
@@ -212,6 +228,24 @@ echo ""
 echo "▸ Applying migrations..."
 MIGRATIONS_APPLIED="yes"
 $COMPOSE run --rm -T web python manage.py migrate --noinput
+
+# A migration can be recorded as applied without its SQL having run (faked,
+# or a database copied from another server). That passes every check above
+# and then 500s on the first query, so check every model's tables and columns
+# exist. Missing ones fail the deploy; adding them is a separate, deliberate
+# choice (SCHEMA_FIX=1, the "Repair missing tables/columns" box on a manual
+# Deploy run), never automatic, and never without a backup.
+echo ""
+SCHEMA_CHECK_RUNNING="yes"
+if [ "$SCHEMA_FIX" = "1" ]; then
+    echo "▸ Repairing missing tables/columns (SCHEMA_FIX=1)..."
+    $COMPOSE run --rm -T web python manage.py check_db_schema --fix --dry-run || true
+    $COMPOSE run --rm -T web python manage.py check_db_schema --fix
+else
+    echo "▸ Checking every model table and column exists..."
+    $COMPOSE run --rm -T web python manage.py check_db_schema
+fi
+SCHEMA_CHECK_RUNNING="no"
 
 # ─── 6. Restart services ─────────────────────────────────────────────────────
 echo ""

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+{% comment %}
+The scheduled report in the body of the email, as well as attached as a PDF.
+Email clients ignore <style> blocks and SVG, so everything is inline and the
+charts stay in the PDF.
+{% endcomment %}
+<html>
+<head><meta charset="utf-8"><title>{{ gym_name }} — {{ title }}</title></head>
+<body style="margin:0;padding:0;background:#F3F4F6;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F3F4F6;">
+<tr><td align="center" style="padding:16px 8px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:640px;background:#FFFFFF;border-radius:8px;font-family:Helvetica,Arial,sans-serif;color:#111827;font-size:14px;">
+  <tr><td style="padding:20px 20px 12px;border-bottom:2px solid #06B6D4;">
+    <div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.06em;">{{ gym_name }}</div>
+    <div style="font-size:20px;font-weight:bold;margin:2px 0;">{{ title }}</div>
+    <div style="font-size:14px;color:#374151;">{{ period }}</div>
+  </td></tr>
+  <tr><td style="padding:12px 20px 0;color:#374151;">
+    <p style="margin:0 0 4px;">Hi,</p>
+    <p style="margin:0;">Here is the {{ title|lower }} for {{ period }} ({{ schedule_name }}). The full report, with charts, is attached as a PDF.</p>
+  </td></tr>
+
+  {% for section in sections %}
+  <tr><td style="padding:16px 20px 0;">
+    <div style="font-size:16px;font-weight:bold;color:#0E7490;border-bottom:1px solid #E5E7EB;padding-bottom:4px;margin-bottom:8px;">{{ section.title }}</div>
+    {% if section.error %}
+      <p style="margin:0;color:#B91C1C;background:#FEF2F2;border:1px solid #FECACA;border-radius:4px;padding:6px 8px;">{{ section.error }}</p>
+    {% else %}
+      {% if section.stats %}
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:6px;">
+        {% for label, value in section.stats %}
+        <tr>
+          <td style="padding:4px 0;color:#6B7280;">{{ label }}</td>
+          <td style="padding:4px 0;font-weight:bold;text-align:right;">{{ value }}</td>
+        </tr>
+        {% endfor %}
+      </table>
+      {% endif %}
+      {% if section.note %}<p style="margin:4px 0;color:#6B7280;font-style:italic;font-size:13px;">{{ section.note }}</p>{% endif %}
+      {% for table in section.tables %}
+      <div style="font-size:13px;font-weight:bold;color:#374151;margin:10px 0 4px;">{{ table.title }}</div>
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:12px;">
+        <tr>{% for col in table.columns %}<th align="left" style="font-size:11px;color:#6B7280;text-transform:uppercase;border-bottom:1px solid #D1D5DB;padding:4px;">{{ col }}</th>{% endfor %}</tr>
+        {% for row in table.rows %}<tr>{% for cell in row %}<td style="padding:4px;border-bottom:1px solid #F3F4F6;">{{ cell }}</td>{% endfor %}</tr>{% endfor %}
+      </table>
+      {% endfor %}
+      {% if not section.stats and not section.tables and not section.note %}
+        <p style="margin:0;color:#6B7280;font-style:italic;font-size:13px;">{% if section.charts %}See the charts in the attached PDF.{% else %}Nothing to show for this period.{% endif %}</p>
+      {% endif %}
+    {% endif %}
+  </td></tr>
+  {% empty %}
+  <tr><td style="padding:16px 20px 0;color:#6B7280;font-style:italic;">No sections were chosen for this report.</td></tr>
+  {% endfor %}
+
+  <tr><td style="padding:20px;color:#6B7280;font-size:12px;">
+    Generated {{ generated_on }}. You're receiving this because you were added to this scheduled report. A manager can change or stop it on the Reports page in FitOps.
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>

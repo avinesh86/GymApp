@@ -326,6 +326,11 @@ class TestScheduleApi:
         assert name == "daily-report-2026-11-03.pdf"
         assert mimetype == "application/pdf"
         assert content.startswith(b"%PDF")
+        # The report is in the email itself too, not only in the attachment.
+        html = dict((m, c) for c, m in message.alternatives)["text/html"]
+        assert "Summary" in html and "Classes held" in html
+        assert "Classes held" in message.body
+        assert "attached as a PDF" in message.body
         schedule.refresh_from_db()
         assert (
             schedule.last_period_start is None

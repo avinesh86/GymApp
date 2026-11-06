@@ -196,3 +196,38 @@ def test_deployment_settings_honour_the_email_backend_env_var(settings_module, t
 
     assert result.returncode == 0, result.stderr
     assert "apps.core.email_backends.ResendEmailBackend" in result.stdout
+
+
+@override_settings(RESEND_API_KEY="re_test")
+def test_attachments_are_sent(posted):
+    """A scheduled report arrived with no PDF: the payload never carried the
+    attachments, so Resend sent the body alone."""
+    import base64
+
+    message = EmailMultiAlternatives(
+        subject="Daily report",
+        body="Attached is the report",
+        from_email="FitOps <noreply@fitops.northernarena.nz>",
+        to=["ops@example.com"],
+    )
+    message.attach_alternative("<p>Attached is the report</p>", "text/html")
+    message.attach("daily-report.pdf", b"%PDF-1.7 fake", "application/pdf")
+    message.attach("notes.txt", "plain words", "text/plain")
+
+    assert ResendEmailBackend().send_messages([message]) == 1
+
+    attachments = posted[0]["payload"]["attachments"]
+    assert [a["filename"] for a in attachments] == ["daily-report.pdf", "notes.txt"]
+    assert base64.b64decode(attachments[0]["content"]) == b"%PDF-1.7 fake"
+    assert attachments[0]["content_type"] == "application/pdf"
+    assert base64.b64decode(attachments[1]["content"]) == b"plain words"
+    # The payload must still serialise as JSON for the HTTP post.
+    json.dumps(posted[0]["payload"])
+
+
+@override_settings(RESEND_API_KEY="re_test")
+def test_no_attachments_key_without_attachments(posted):
+    ResendEmailBackend().send_messages(
+        [EmailMessage(subject="Hi", body="x", from_email="a@b.com", to=["c@d.com"])]
+    )
+    assert "attachments" not in posted[0]["payload"]
