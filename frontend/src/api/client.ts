@@ -36,7 +36,8 @@ export const apiClient = axios.create({
 
 apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   // Requests that change data wait as long as the server does (see above).
-  // A call that sets its own timeout keeps it.
+  // A call that sets its own timeout keeps it, unless that timeout is exactly
+  // the 30-second default: a write can't opt back down to 30 seconds.
   const isRead = READ_METHODS.includes((config.method ?? 'get').toLowerCase())
   if (!isRead && config.timeout === REQUEST_TIMEOUT_MS) config.timeout = LONG_REQUEST_TIMEOUT_MS
 

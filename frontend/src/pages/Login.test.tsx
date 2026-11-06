@@ -62,4 +62,13 @@ describe('what signing in says when it fails', () => {
     )
     expect(await screen.findByText(/Invalid email or password/)).toBeInTheDocument()
   })
+
+  it("doesn't call the password wrong when the server itself failed", async () => {
+    const config = { headers: new AxiosHeaders() } as InternalAxiosRequestConfig
+    await signInFailing(
+      new AxiosError('Server Error', '500', config, null, { status: 500, statusText: 'Server Error', data: {}, headers: {}, config }),
+    )
+    expect(await screen.findByText(/Something went wrong on our end/)).toBeInTheDocument()
+    expect(screen.queryByText(/Invalid email or password/)).not.toBeInTheDocument()
+  })
 })

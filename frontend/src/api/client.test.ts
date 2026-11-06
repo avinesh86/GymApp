@@ -40,6 +40,7 @@ describe('API client timeouts', () => {
 
   it('keeps a timeout a call sets for itself', async () => {
     expect(await timeoutSentWith('get', LONG_REQUEST_TIMEOUT_MS)).toBe(LONG_REQUEST_TIMEOUT_MS)
+    expect(await timeoutSentWith('post', 10_000)).toBe(10_000)
   })
 
   it('gives reports and PDFs, which can be slow to build, the long limit', async () => {
