@@ -731,6 +731,32 @@ def test_dashboard_card_stays_hidden_when_checklists_are_switched_off(tenant, ow
     assert _client(owner_user).get("/api/v1/facilities/config/").data["has_checklists"] is False
 
 
+def test_setup_prompt_counts_paused_checklists_as_set_up(tenant, owner_user):
+    """The dashboard's "Set up a checklist" prompt is for gyms with none at
+    all: a gym that paused its checklists has set them up."""
+    config_url = "/api/v1/facilities/config/"
+    client = _client(owner_user)
+    assert client.get(config_url).data["has_any_checklists"] is False
+
+    t = _template(tenant, is_active=False)
+    data = client.get(config_url).data
+    assert data["has_checklists"] is False  # nothing active
+    assert data["has_any_checklists"] is True
+
+    ChecklistTemplate.objects.filter(pk=t.pk).update(is_deleted=True)
+    assert client.get(config_url).data["has_any_checklists"] is False
+
+    _template(tenant)
+    _settings(tenant, facilities_checklists_enabled=False)
+    assert client.get(config_url).data["has_any_checklists"] is False
+
+
+def test_setup_prompt_flag_ignores_other_gyms_checklists(tenant, other_tenant, owner_user):
+    _settings(other_tenant)
+    _template(other_tenant)
+    assert _client(owner_user).get("/api/v1/facilities/config/").data["has_any_checklists"] is False
+
+
 def test_dashboard_card_only_for_people_with_a_checklist_of_their_own(tenant, team_leader_user, manager_user):
     """A team leader at a gym whose only checklist is for gym managers would
     otherwise be told "All checks done" every day about checks that aren't theirs."""

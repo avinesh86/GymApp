@@ -40,8 +40,8 @@ function writeDismissed(key: string) {
 /** Checks due today (and any overdue) for people who do checklists. Hidden
  * until one of the gym's checklists is this person's to do, so nobody is
  * told "All checks done" about checklists that don't exist or aren't theirs.
- * Before the gym has any checklist, the people who set them up see a
- * prompt to do so instead, until they dismiss it. */
+ * Before the gym has any checklist (paused ones count), the people who set
+ * them up see a prompt to do so instead, until they dismiss it. */
 export function ChecksDueCard() {
   const navigate = useNavigate()
   const { user } = useAuth()
@@ -61,7 +61,7 @@ export function ChecksDueCard() {
 
   const showSetupPrompt =
     !!config?.checklists_enabled &&
-    !config.has_checklists &&
+    !config.has_any_checklists &&
     !!config.can_manage_checklists &&
     can('facilities') &&
     !!dismissKey &&

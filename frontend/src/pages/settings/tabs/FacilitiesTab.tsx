@@ -67,7 +67,17 @@ function hourLabel(h: number) {
 
 export function FacilitiesTab() {
   const queryClient = useQueryClient()
-  const { data: settings, isError } = useQuery({ queryKey: ['tenant', 'settings'], queryFn: getTenantSettings })
+  const {
+    data: settings,
+    isError,
+    isFetchedAfterMount,
+  } = useQuery({
+    queryKey: ['tenant', 'settings'],
+    queryFn: getTenantSettings,
+    // Always fetch on opening, even if another page fetched them recently:
+    // the form waits for this visit's copy.
+    refetchOnMount: 'always',
+  })
 
   const [equipment, setEquipment] = useState(true)
   const [maintenance, setMaintenance] = useState(true)
@@ -83,7 +93,9 @@ export function FacilitiesTab() {
   const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
-    if (!settings) return
+    // Wait for this visit's fetch: settings cached by another page may be
+    // out of date.
+    if (!settings || !isFetchedAfterMount) return
     setEquipment(settings.facilities_equipment_enabled ?? true)
     setMaintenance(settings.facilities_maintenance_enabled ?? true)
     setReporting(settings.fault_reporting_enabled ?? true)
@@ -94,7 +106,7 @@ export function FacilitiesTab() {
     setAlertStart(settings.facilities_alert_start_hour ?? 9)
     setAlertEnd(settings.facilities_alert_end_hour ?? 17)
     setLoaded(true)
-  }, [settings])
+  }, [settings, isFetchedAfterMount])
 
   const { mutate: save, isPending } = useMutation({
     mutationFn: () =>
@@ -165,7 +177,7 @@ export function FacilitiesTab() {
         />
         <Switch
           label="Checklists"
-          description="Scheduled checks (opening, cleaning, safety) done by the roles below. Set the checklists themselves up in Facilities → Checklists."
+          description="Scheduled checks (opening, cleaning, safety) done by the roles below. You set up the checklists in Facilities → Checklists."
           checked={checklists}
           onChange={setChecklists}
         />

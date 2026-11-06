@@ -11,8 +11,7 @@ vi.mock('../../../api/settings', () => ({
 }))
 vi.mock('react-hot-toast', () => ({ default: { success: vi.fn(), error: vi.fn() } }))
 
-function renderTab() {
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+function renderTab(client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return render(
     <QueryClientProvider client={client}>
       <FacilitiesTab />
@@ -51,6 +50,29 @@ describe('Settings → Facilities', () => {
     expect(screen.queryByRole('button', { name: 'Save Facilities Settings' })).not.toBeInTheDocument()
 
     resolve({ fault_reporting_enabled: false, facilities_maintenance_enabled: true })
+    expect(await screen.findByRole('switch', { name: 'Report a fault button' })).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('waits for fresh settings rather than showing ones cached by another page', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client.setQueryData(['tenant', 'settings'], { fault_reporting_enabled: true, facilities_maintenance_enabled: true })
+    let resolve: (value: unknown) => void = () => {}
+    vi.mocked(getTenantSettings).mockReturnValue(new Promise((r) => (resolve = r)) as never)
+    renderTab(client)
+
+    expect(screen.queryByRole('switch', { name: 'Report a fault button' })).not.toBeInTheDocument()
+
+    resolve({ fault_reporting_enabled: false, facilities_maintenance_enabled: true })
+    expect(await screen.findByRole('switch', { name: 'Report a fault button' })).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('still opens when another page fetched the settings moments ago', async () => {
+    // As in the app: cached settings count as fresh for 30 seconds.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 30_000 } } })
+    client.setQueryData(['tenant', 'settings'], { fault_reporting_enabled: true, facilities_maintenance_enabled: true })
+    vi.mocked(getTenantSettings).mockResolvedValue({ fault_reporting_enabled: false, facilities_maintenance_enabled: true } as never)
+    renderTab(client)
+
     expect(await screen.findByRole('switch', { name: 'Report a fault button' })).toHaveAttribute('aria-checked', 'false')
   })
 

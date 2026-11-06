@@ -269,10 +269,6 @@ def open_overdue_filter(now=None, prefix: str = "") -> Q:
     })
 
 
-def open_overdue_runs(runs, now=None):
-    return runs.filter(open_overdue_filter(now))
-
-
 def run_status(run: ChecklistRun, now=None) -> str:
     now = now or timezone.now()
     if run.completed_at:

@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from apps.tenants.models import Site
 
-from .checklists import can_do, checklist_roles, open_overdue_runs, run_status
+from .checklists import can_do, checklist_roles, open_overdue_filter, run_status
 from .models import ChecklistAnswer, ChecklistItem, ChecklistRun, ChecklistTemplate, Equipment, FaultReport
 
 
@@ -173,7 +173,7 @@ class ChecklistTemplateSerializer(_TenantScopedRelations, serializers.ModelSeria
         counted = getattr(obj, "open_overdue_count", None)
         if counted is not None:
             return counted
-        return open_overdue_runs(obj.runs.all()).count()
+        return obj.runs.filter(open_overdue_filter()).count()
 
     def validate_weekdays(self, value):
         if not isinstance(value, list) or any(not isinstance(d, int) or not 0 <= d <= 6 for d in value):

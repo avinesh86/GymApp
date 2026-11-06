@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { Plus, Trash2 } from 'lucide-react'
@@ -66,8 +66,12 @@ export function ChecklistModal({
   // Overdue checks a pause would drop, waiting on "Pause anyway?".
   const [pauseWarning, setPauseWarning] = useState<number | null>(null)
   const [checkingPause, setCheckingPause] = useState(false)
+  // Which opening of the form a recount belongs to: if the form is closed
+  // (or reopened) while it runs, its answer is dropped, not saved.
+  const session = useRef(0)
 
   useEffect(() => {
+    session.current += 1
     if (!isOpen) return
     if (template) {
       const { id, site_name: _site, equipment_name: _equipment, open_overdue_count: _overdue, ...rest } = template
@@ -102,14 +106,20 @@ export function ChecklistModal({
   const onSave = async () => {
     const pausing = !!template && template.is_active && !form.is_active
     if (!pausing) return save.mutate()
+    const mine = session.current
     setCheckingPause(true)
-    let overdue = template.open_overdue_count ?? 0
+    let overdue: number | null = null
     try {
-      overdue = (await getChecklist(template.id)).open_overdue_count ?? overdue
+      overdue = (await getChecklist(template.id)).open_overdue_count ?? 0
     } catch {
-      // Keep the count from the list.
+      // Unknown: don't pause without the warning it may need.
     } finally {
       setCheckingPause(false)
+    }
+    if (mine !== session.current) return // closed meanwhile: nothing to save
+    if (overdue === null) {
+      toast.error("Couldn't check for overdue checks. Try saving again.")
+      return
     }
     if (overdue > 0) setPauseWarning(overdue)
     else save.mutate()
@@ -324,13 +334,18 @@ export function ChecklistModal({
       </Modal>
       <ConfirmDialog
           isOpen={pauseWarning !== null}
-          onClose={() => setPauseWarning(null)}
+          onClose={() => {
+        // Keeping it active ticks the box again, so the next Save doesn't
+        // ask (or pause) all over again.
+        setPauseWarning(null)
+        set('is_active', true)
+      }}
           onConfirm={() => {
             setPauseWarning(null)
             save.mutate()
           }}
           title="Pause this checklist?"
-          message={`${pauseWarning} overdue check${pauseWarning === 1 ? '' : 's'} will be dropped from the dashboard and overdue alerts. Pause anyway?`}
+          message={`${pauseWarning} overdue check${pauseWarning === 1 ? '' : 's'} will be hidden from the dashboard and overdue alerts while it's paused. Pause anyway?`}
           confirmLabel="Pause anyway"
           cancelLabel="Keep it active"
         />

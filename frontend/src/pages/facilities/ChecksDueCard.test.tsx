@@ -24,6 +24,7 @@ const baseConfig: FacilitiesConfig = {
   can_do_checklists: true,
   has_checklists: true,
   has_my_checklists: true,
+  has_any_checklists: true,
   can_manage_checklists: true,
   can_manage: true,
   is_alert_recipient: true,
@@ -78,7 +79,7 @@ function renderCard(config: Partial<FacilitiesConfig>) {
   )
 }
 
-const noChecklistsYet = { has_checklists: false, has_my_checklists: false }
+const noChecklistsYet = { has_checklists: false, has_my_checklists: false, has_any_checklists: false }
 
 describe('Checks to do card', () => {
   beforeEach(() => {
@@ -179,6 +180,12 @@ describe('Checklist setup prompt', () => {
 
   it('stays hidden when checklists are switched off', () => {
     renderCard({ ...noChecklistsYet, checklists_enabled: false, can_do_checklists: false })
+
+    expect(screen.queryByTestId('checks-setup-prompt')).not.toBeInTheDocument()
+  })
+
+  it('stays hidden when all the gym\'s checklists are paused: they exist, so "Set up" would be wrong', () => {
+    renderCard({ ...noChecklistsYet, has_any_checklists: true })
 
     expect(screen.queryByTestId('checks-setup-prompt')).not.toBeInTheDocument()
   })

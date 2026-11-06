@@ -634,6 +634,9 @@ export interface FacilitiesConfig {
   has_checklists: boolean
   // At least one active checklist is this person's to do; the dashboard card waits for it.
   has_my_checklists: boolean
+  // The gym has any checklist, paused ones included; the dashboard's setup
+  // prompt shows only when it has none.
+  has_any_checklists: boolean
   /** Owner, admin and gym manager set checklists up. */
   can_manage_checklists: boolean
   can_manage: boolean

@@ -80,6 +80,12 @@ class FacilitiesConfigView(APIView):
             if config.checklists_enabled
             else []
         )
+        # Any checklist at all, paused ones too: the dashboard invites
+        # managers to set one up only when the gym has none.
+        has_any_checklists = (
+            config.checklists_enabled
+            and ChecklistTemplate.objects.filter(tenant=request.tenant, is_deleted=False).exists()
+        )
         return Response({
             "equipment_enabled": config.equipment_enabled,
             "maintenance_enabled": config.maintenance_enabled,
@@ -91,6 +97,7 @@ class FacilitiesConfigView(APIView):
             # The gym has set up at least one checklist (the Checklists tab
             # opens on its list until then).
             "has_checklists": bool(active_checklists),
+            "has_any_checklists": has_any_checklists,
             # ...and at least one of them is this person's to do. The
             # dashboard's checks card waits for this, so nobody is told "All
             # checks done" about checklists that don't exist or aren't theirs.
@@ -386,7 +393,7 @@ class ChecklistTemplateViewSet(TenantScopedMixin, viewsets.ModelViewSet):
         create_due_runs(self.request.tenant)
         # The count annotated when the checklist was loaded is out of date
         # now: recount it for the response.
-        template.open_overdue_count = None
+        template.open_overdue_count = template.runs.filter(open_overdue_filter()).count()
 
     def perform_destroy(self, instance):
         super().perform_destroy(instance)
@@ -414,7 +421,7 @@ class ChecklistRunViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
         if state == "open":
             qs = qs.filter(completed_at__isnull=True)
         elif state == "overdue":
-            qs = qs.filter(completed_at__isnull=True, due_at__lt=now)
+            qs = qs.filter(open_overdue_filter(now))
         elif state == "done":
             qs = qs.filter(completed_at__isnull=False)
         if params.get("template", "").isascii() and params.get("template", "").isdigit():

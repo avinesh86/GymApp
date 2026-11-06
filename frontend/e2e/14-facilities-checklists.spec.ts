@@ -37,31 +37,30 @@ async function openChecklistList(page: Page) {
   await page.getByRole('button', { name: 'Checklists', exact: true }).click()
 }
 
-/** Untick Active and save, answering "Pause anyway" if it's asked. */
-async function pauseChecklist(page: Page, row: ReturnType<Page['getByRole']>) {
-  await row.click()
-  const edit = page.getByRole('dialog', { name: 'Edit checklist' })
-  await edit.getByRole('checkbox', { name: /Active/ }).uncheck()
-  await edit.getByRole('button', { name: 'Save' }).click()
-  const pauseAnyway = page.getByRole('button', { name: 'Pause anyway' })
-  await expect.poll(async () => (await pauseAnyway.isVisible()) || !(await edit.isVisible())).toBe(true)
-  if (await pauseAnyway.isVisible()) await pauseAnyway.click()
-  await expect(edit).toBeHidden()
-  await expectNoErrorToast(page)
-}
 
 test.describe.serial('facilities: checklists and equipment QR', () => {
-  // The first test needs a gym with no active checklist. CI starts from an
-  // empty database, but a local re-run or a retry (which reruns the whole
-  // group) finds the last run's checklists, so pause them first, by clicking.
+  // The first test needs a gym with no checklists. CI starts from an empty
+  // database, but a local re-run or a retry (which reruns the whole group)
+  // finds the last run's, so remove them first, by clicking.
   test.beforeAll(async ({ browser }) => {
     const page = await browser.newPage()
     await signIn(page)
     await openChecklistList(page)
-    // Wait for the list (or its empty state) before counting rows.
-    await expect(page.getByRole('table').or(page.getByText('No checklists yet'))).toBeVisible()
-    const active = page.getByRole('row').filter({ has: page.getByText('Active', { exact: true }) })
-    while ((await active.count()) > 0) await pauseChecklist(page, active.first())
+    const empty = page.getByText('No checklists yet')
+    const rows = page.getByRole('row').filter({ has: page.getByRole('cell') })
+    for (let tries = 0; ; tries++) {
+      await expect(page.getByRole('table').or(empty)).toBeVisible() // loaded
+      if (await empty.isVisible()) break
+      expect(tries, 'leftover checklists should all be removed').toBeLessThan(60)
+      const count = await rows.count()
+      await rows.first().click()
+      const edit = page.getByRole('dialog', { name: 'Edit checklist' })
+      await edit.getByRole('button', { name: 'Remove', exact: true }).click()
+      await expect(edit).toBeHidden()
+      await expectNoErrorToast(page)
+      // Let the list refresh before the next click.
+      await expect(count > 1 ? rows : empty).toHaveCount(count > 1 ? count - 1 : 1)
+    }
     await page.close()
   })
 
@@ -203,11 +202,15 @@ test.describe.serial('facilities: checklists and equipment QR', () => {
     await edit.getByRole('button', { name: 'Save' }).click()
 
     const confirm = page.getByRole('dialog', { name: 'Pause this checklist?' })
-    await expect(confirm).toContainText('1 overdue check will be dropped from the dashboard and overdue alerts. Pause anyway?')
+    await expect(confirm).toContainText(
+      "1 overdue check will be hidden from the dashboard and overdue alerts while it's paused. Pause anyway?",
+    )
     await confirm.getByRole('button', { name: 'Keep it active' }).click()
     await expect(confirm).toBeHidden()
     await expect(edit).toBeVisible() // nothing saved yet
+    await expect(edit.getByRole('checkbox', { name: /Active/ })).toBeChecked()
 
+    await edit.getByRole('checkbox', { name: /Active/ }).uncheck()
     await edit.getByRole('button', { name: 'Save' }).click()
     await confirm.getByRole('button', { name: 'Pause anyway' }).click()
     await expectToast(page, 'Checklist saved')
