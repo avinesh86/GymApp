@@ -6,8 +6,9 @@ import { PageSpinner } from '../../components/ui/Spinner'
 import { useFacilitiesConfig } from '../../hooks/useFacilitiesConfig'
 import { EquipmentTab } from './EquipmentTab'
 import { MaintenanceTab } from './MaintenanceTab'
+import { ChecklistsTab } from './ChecklistsTab'
 
-type TabKey = 'maintenance' | 'equipment'
+type TabKey = 'maintenance' | 'checklists' | 'equipment'
 
 /** Facilities: owner, admin, gym manager, team leader and payroll. */
 export function FacilitiesPage() {
@@ -19,6 +20,7 @@ export function FacilitiesPage() {
 
   const tabs: { key: TabKey; label: string }[] = [
     ...(config.maintenance_enabled ? [{ key: 'maintenance' as const, label: 'Maintenance' }] : []),
+    ...(config.checklists_enabled ? [{ key: 'checklists' as const, label: 'Checklists' }] : []),
     ...(config.equipment_enabled ? [{ key: 'equipment' as const, label: 'Equipment' }] : []),
   ]
   const active = tabs.find((t) => t.key === chosen)?.key ?? tabs[0]?.key
@@ -31,7 +33,7 @@ export function FacilitiesPage() {
       {tabs.length === 0 ? (
         <EmptyState
           title="Facilities is switched off"
-          description="Turn on equipment inventory or maintenance tracking in Settings → Facilities."
+          description="Turn on maintenance tracking, checklists or equipment inventory in Settings → Facilities."
         />
       ) : (
         <>
@@ -68,6 +70,7 @@ export function FacilitiesPage() {
           </div>
 
           {active === 'maintenance' && <MaintenanceTab site={siteId} />}
+          {active === 'checklists' && <ChecklistsTab site={siteId} />}
           {active === 'equipment' && <EquipmentTab site={siteId} />}
         </>
       )}

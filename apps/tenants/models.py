@@ -91,6 +91,11 @@ def default_facilities_alert_roles():
     return ["owner", "admin", "gym_manager"]
 
 
+def default_checklist_roles():
+    """Team leader and above do the checks unless a gym chooses otherwise."""
+    return ["owner", "admin", "gym_manager", "team_leader"]
+
+
 class TenantSettings(models.Model):
     class InvoiceFrequency(models.TextChoices):
         WEEKLY = "weekly", "Weekly"
@@ -157,6 +162,20 @@ class TenantSettings(models.Model):
     # and by email only if facilities_alert_email is on. Never WhatsApp.
     facilities_alert_roles = models.JSONField(default=default_facilities_alert_roles, blank=True)
     facilities_alert_email = models.BooleanField(default=False)
+    # Checklists: the scheduled checks (opening, cleaning, safety...).
+    # db_default (here and below): the database fills these in when older code,
+    # which doesn't know them, inserts a row; e.g. after a rollback. Changing
+    # checklist_roles' db_default needs a hand-written migration like 0013:
+    # MySQL 8 rejects Django's ALTER COLUMN SET DEFAULT on a JSON column.
+    facilities_checklists_enabled = models.BooleanField(default=True, db_default=True)
+    # Roles that do checklists. Instructors and PTs never see them.
+    checklist_roles = models.JSONField(
+        default=default_checklist_roles, db_default=default_checklist_roles(), blank=True
+    )
+    # Overdue-check alerts are held until these gym-local hours (start
+    # inclusive, end exclusive): 9 and 17 mean 9am–5pm.
+    facilities_alert_start_hour = models.PositiveSmallIntegerField(default=9, db_default=9)
+    facilities_alert_end_hour = models.PositiveSmallIntegerField(default=17, db_default=17)
     # Outgoing email configuration for notifications
     notification_from_email = models.EmailField(blank=True, default="")
     notification_from_name = models.CharField(max_length=100, blank=True, default="")

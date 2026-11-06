@@ -61,6 +61,10 @@ class TenantSettingsSerializer(serializers.ModelSerializer):
             "fault_reporting_enabled",
             "facilities_alert_roles",
             "facilities_alert_email",
+            "facilities_checklists_enabled",
+            "checklist_roles",
+            "facilities_alert_start_hour",
+            "facilities_alert_end_hour",
             "notification_from_email",
             "notification_from_name",
             "notification_email_password",
@@ -83,6 +87,20 @@ class TenantSettingsSerializer(serializers.ModelSerializer):
         if any(r not in allowed for r in value):
             raise serializers.ValidationError("Only roles that can open Facilities can receive its alerts.")
         return list(dict.fromkeys(value))
+
+    def validate_checklist_roles(self, value):
+        # Same rule as alerts: only roles that can open Facilities.
+        return self.validate_facilities_alert_roles(value)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        start = attrs.get("facilities_alert_start_hour", getattr(self.instance, "facilities_alert_start_hour", 9))
+        end = attrs.get("facilities_alert_end_hour", getattr(self.instance, "facilities_alert_end_hour", 17))
+        if not (0 <= start < end <= 24):
+            raise serializers.ValidationError(
+                {"facilities_alert_end_hour": "Alert hours must start before they end, between 0 and 24."}
+            )
+        return attrs
 
     def get_email_sending_managed(self, obj: TenantSettings) -> bool:
         """Whether the server sends mail on the gym's behalf.

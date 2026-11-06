@@ -72,6 +72,10 @@ export interface TenantSettings {
   fault_reporting_enabled?: boolean
   facilities_alert_roles?: UserRole[]
   facilities_alert_email?: boolean
+  facilities_checklists_enabled?: boolean
+  checklist_roles?: UserRole[]
+  facilities_alert_start_hour?: number
+  facilities_alert_end_hour?: number
 }
 
 /** How strongly a class's own colour shows on its timetable tile. */
@@ -623,6 +627,15 @@ export interface FacilitiesConfig {
   maintenance_enabled: boolean
   /** Already false when maintenance tracking is off. */
   fault_reporting_enabled: boolean
+  checklists_enabled: boolean
+  /** In the gym's checklist roles (and checklists are on). */
+  can_do_checklists: boolean
+  // The gym has at least one active checklist.
+  has_checklists: boolean
+  // At least one active checklist is this person's to do; the dashboard card waits for it.
+  has_my_checklists: boolean
+  /** Owner, admin and gym manager set checklists up. */
+  can_manage_checklists: boolean
   can_manage: boolean
   is_alert_recipient: boolean
   sites: { id: number; name: string }[]
@@ -724,4 +737,112 @@ export interface FacilitiesSummary {
     status: FaultStatus
     created_at: string
   }[]
+}
+
+// ─── Facilities: checklists ──────────────────────────────────────────────────
+
+export type ChecklistCategory = 'opening' | 'closing' | 'cleaning' | 'safety' | 'pool' | 'equipment' | 'other'
+export type ChecklistFrequency = 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'yearly' | 'every_n_days'
+
+export interface ChecklistItem {
+  id?: number
+  text: string
+  equipment: number | null
+  equipment_name?: string
+}
+
+export interface ChecklistTemplate {
+  id: number
+  site: number | null
+  site_name: string
+  name: string
+  category: ChecklistCategory
+  description: string
+  equipment: number | null
+  equipment_name: string
+  frequency: ChecklistFrequency
+  /** 0 = Monday … 6 = Sunday */
+  weekdays: number[]
+  interval_days: number
+  start_date: string
+  /** "HH:MM:SS", gym-local */
+  due_time: string
+  assigned_roles: UserRole[]
+  is_active: boolean
+  items: ChecklistItem[]
+}
+
+export type ChecklistRunStatus = 'due' | 'overdue' | 'done' | 'late'
+
+export interface ChecklistAnswer {
+  id: number
+  item: number | null
+  item_text: string
+  equipment: number | null
+  equipment_name: string
+  passed: boolean
+  note: string
+  photo: string | null
+  fault: number | null
+  fault_status: string
+}
+
+export interface ChecklistRun {
+  id: number
+  template: number
+  template_name: string
+  category: ChecklistCategory
+  site: number | null
+  site_name: string
+  due_date: string
+  due_at: string
+  status: ChecklistRunStatus
+  completed_at: string | null
+  completed_by_name: string
+  notes: string
+  can_complete: boolean
+  items: ChecklistItem[]
+  answers: ChecklistAnswer[]
+  failed_count: number
+}
+
+export interface EquipmentScan {
+  id: number
+  name: string
+  location: string
+  site_name: string
+  asset_tag: string
+  status: EquipmentStatus
+  open_faults: FaultBoardItem[]
+  can_report: boolean
+  can_see_history: boolean
+}
+
+export type EquipmentHistoryEvent =
+  | {
+      kind: 'fault'
+      id: number
+      at: string
+      title: string
+      status: FaultStatus
+      severity: FaultSeverity
+      detail: string
+      status_note: string
+      by: string
+      resolved_at: string | null
+      resolved_by: string
+      repair_cost: string | null
+    }
+  | {
+      kind: 'check'
+      id: number
+      at: string
+      title: string
+      by: string
+      lines: { text: string; passed: boolean; note: string; photo: string | null }[]
+    }
+
+export interface EquipmentHistory {
+  equipment: Equipment
+  events: EquipmentHistoryEvent[]
 }

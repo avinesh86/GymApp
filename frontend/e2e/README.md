@@ -2,7 +2,9 @@
 
 Driven the way a person drives the app: every test navigates by clicking menu
 items and buttons. No test visits a URL beyond the front door, and none calls
-the API directly.
+the API directly. The one exception: a test may open the address held in a QR
+label it produced earlier, read from the label (scanning a code is how people
+really arrive there; see `14-facilities-checklists.spec.ts`).
 
 That constraint is the point. The Cover Board's Accept button spent months
 posting to a route that did not exist — a test that reached the page by URL and
