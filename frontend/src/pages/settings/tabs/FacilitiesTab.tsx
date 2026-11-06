@@ -4,9 +4,8 @@ import toast from 'react-hot-toast'
 import { getTenantSettings, updateTenantSettings } from '../../../api/settings'
 import { Button } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
-import { EmptyState } from '../../../components/ui/EmptyState'
-import { PageSpinner } from '../../../components/ui/Spinner'
 import type { TenantSettings, UserRole } from '../../../types'
+import { WhenLoaded } from './WhenLoaded'
 
 const ALERT_ROLES: { role: UserRole; label: string }[] = [
   { role: 'owner', label: 'Owner' },
@@ -67,26 +66,15 @@ function hourLabel(h: number) {
 }
 
 /** Loads the gym's settings, then shows the form. The form only exists once
- * the real settings do, so there are never placeholder values on screen to
- * read or to save over the gym's real settings. */
+ * the real, current settings do, so there are never placeholder or
+ * out-of-date values on screen to read or to save over the gym's settings. */
 export function FacilitiesTab() {
-  const { data: settings, isError, isStale, isFetchedAfterMount, refetch } = useQuery({
-    queryKey: ['tenant', 'settings'],
-    queryFn: getTenantSettings,
-  })
-  if (isError && !settings) {
-    return (
-      <EmptyState
-        title="Couldn't load the Facilities settings"
-        description="Check your connection and try again."
-        action={{ label: 'Try again', onClick: () => refetch() }}
-      />
-    )
-  }
-  // An out-of-date cached copy would seed the form with old values, and Save
-  // would then undo someone else's change: wait for the fresh one.
-  if (!settings || (isStale && !isFetchedAfterMount && !isError)) return <PageSpinner />
-  return <FacilitiesForm settings={settings} />
+  const query = useQuery({ queryKey: ['tenant', 'settings'], queryFn: getTenantSettings })
+  return (
+    <WhenLoaded query={query} savesKey={['tenant', 'settings']} what="the Facilities settings">
+      {(settings) => <FacilitiesForm settings={settings} />}
+    </WhenLoaded>
+  )
 }
 
 function FacilitiesForm({ settings }: { settings: TenantSettings }) {
@@ -108,6 +96,7 @@ function FacilitiesForm({ settings }: { settings: TenantSettings }) {
   const [alertEnd, setAlertEnd] = useState(settings.facilities_alert_end_hour ?? 17)
 
   const { mutate: save, isPending } = useMutation({
+    mutationKey: ['tenant', 'settings'],
     mutationFn: () =>
       updateTenantSettings({
         facilities_equipment_enabled: equipment,
