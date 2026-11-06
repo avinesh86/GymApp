@@ -770,6 +770,9 @@ export interface ChecklistTemplate {
   assigned_roles: UserRole[]
   is_active: boolean
   items: ChecklistItem[]
+  /** Checks past their due time and not done. Pausing drops them from the
+   * dashboard and overdue alerts. */
+  open_overdue_count: number
 }
 
 export type ChecklistRunStatus = 'due' | 'overdue' | 'done' | 'late'

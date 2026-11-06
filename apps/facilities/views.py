@@ -18,7 +18,16 @@ from apps.core.permissions import TenantPermission
 from apps.core.timezones import local_today
 from apps.tenants.models import Site
 
-from .checklists import ChecklistError, can_do, checklist_roles, complete_run, create_due_runs, due_at, is_due_on
+from .checklists import (
+    ChecklistError,
+    can_do,
+    checklist_roles,
+    complete_run,
+    create_due_runs,
+    due_at,
+    is_due_on,
+    open_overdue_filter,
+)
 from .models import ChecklistAnswer, ChecklistRun, ChecklistTemplate, Equipment, FaultReport
 from .permissions import (
     CanManageChecklists,
@@ -342,7 +351,12 @@ class ChecklistTemplateViewSet(TenantScopedMixin, viewsets.ModelViewSet):
     search_fields = ["name"]
 
     def get_queryset(self):
-        qs = super().get_queryset().select_related("site", "equipment").prefetch_related("items__equipment")
+        qs = (
+            super().get_queryset()
+            .select_related("site", "equipment")
+            .prefetch_related("items__equipment")
+            .annotate(open_overdue_count=Count("runs", filter=open_overdue_filter(prefix="runs__")))
+        )
         return _filter_site(qs.order_by("name", "id"), self.request)
 
     def perform_create(self, serializer):
@@ -370,6 +384,9 @@ class ChecklistTemplateViewSet(TenantScopedMixin, viewsets.ModelViewSet):
             run.site = template.site
             run.save(update_fields=["due_at", "site", "updated_at"])
         create_due_runs(self.request.tenant)
+        # The count annotated when the checklist was loaded is out of date
+        # now: recount it for the response.
+        template.open_overdue_count = None
 
     def perform_destroy(self, instance):
         super().perform_destroy(instance)

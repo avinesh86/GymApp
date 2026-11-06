@@ -8,7 +8,7 @@ import logging
 from datetime import date, datetime, timedelta
 
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Q
 from django.db.models.functions import Coalesce
 from django.utils import timezone
 
@@ -257,6 +257,20 @@ def complete_run(run: ChecklistRun, user, answers: list[dict], notes: str = "") 
         sync_equipment_status(fault.equipment)
         transaction.on_commit(lambda f=fault: notify_fault_reported(f))
     return run
+
+
+def open_overdue_filter(now=None, prefix: str = "") -> Q:
+    """Checks past their due time and not done. ``prefix`` reaches them
+    through a relation, e.g. ``"runs__"`` from a checklist."""
+    return Q(**{
+        f"{prefix}is_deleted": False,
+        f"{prefix}completed_at__isnull": True,
+        f"{prefix}due_at__lt": now or timezone.now(),
+    })
+
+
+def open_overdue_runs(runs, now=None):
+    return runs.filter(open_overdue_filter(now))
 
 
 def run_status(run: ChecklistRun, now=None) -> str:

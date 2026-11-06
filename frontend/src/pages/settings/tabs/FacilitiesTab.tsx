@@ -4,6 +4,7 @@ import toast from 'react-hot-toast'
 import { getTenantSettings, updateTenantSettings } from '../../../api/settings'
 import { Button } from '../../../components/ui/Button'
 import { Card } from '../../../components/ui/Card'
+import { PageSpinner } from '../../../components/ui/Spinner'
 import type { UserRole } from '../../../types'
 
 const ALERT_ROLES: { role: UserRole; label: string }[] = [
@@ -66,7 +67,7 @@ function hourLabel(h: number) {
 
 export function FacilitiesTab() {
   const queryClient = useQueryClient()
-  const { data: settings } = useQuery({ queryKey: ['tenant', 'settings'], queryFn: getTenantSettings })
+  const { data: settings, isError } = useQuery({ queryKey: ['tenant', 'settings'], queryFn: getTenantSettings })
 
   const [equipment, setEquipment] = useState(true)
   const [maintenance, setMaintenance] = useState(true)
@@ -77,6 +78,9 @@ export function FacilitiesTab() {
   const [checklistRoles, setChecklistRoles] = useState<UserRole[]>([])
   const [alertStart, setAlertStart] = useState(9)
   const [alertEnd, setAlertEnd] = useState(17)
+  // The form waits for the gym's settings: its defaults shown meanwhile could
+  // be saved over them.
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     if (!settings) return
@@ -89,6 +93,7 @@ export function FacilitiesTab() {
     setChecklistRoles(settings.checklist_roles ?? ['owner', 'admin', 'gym_manager', 'team_leader'])
     setAlertStart(settings.facilities_alert_start_hour ?? 9)
     setAlertEnd(settings.facilities_alert_end_hour ?? 17)
+    setLoaded(true)
   }, [settings])
 
   const { mutate: save, isPending } = useMutation({
@@ -117,6 +122,16 @@ export function FacilitiesTab() {
   const toggleChecklistRole = (role: UserRole) =>
     setChecklistRoles((roles) => (roles.includes(role) ? roles.filter((r) => r !== role) : [...roles, role]))
   const hoursValid = alertStart < alertEnd
+
+  if (!loaded) {
+    return isError ? (
+      <p className="text-sm text-red-600" role="alert">
+        Couldn't load the Facilities settings. Refresh to try again.
+      </p>
+    ) : (
+      <PageSpinner />
+    )
+  }
 
   return (
     <div className="max-w-xl flex flex-col gap-6">
@@ -150,7 +165,7 @@ export function FacilitiesTab() {
         />
         <Switch
           label="Checklists"
-          description="Scheduled checks (opening, cleaning, safety) done by the roles below."
+          description="Scheduled checks (opening, cleaning, safety) done by the roles below. Set the checklists themselves up in Facilities → Checklists."
           checked={checklists}
           onChange={setChecklists}
         />
@@ -160,7 +175,7 @@ export function FacilitiesTab() {
         <Card>
           <h3 className="text-sm font-semibold text-gray-900 mb-1">Who does checklists</h3>
           <p className="text-xs text-gray-500 mb-3">
-            These roles see checks due on their dashboard and can complete them. Instructors and PTs never see checklists.
+            These roles see checks due on their dashboard and can complete them. Instructors and PTs never see checklists. Each checklist can narrow this further: set that up in Facilities → Checklists.
           </p>
           <fieldset className="flex flex-wrap gap-x-5 gap-y-2">
             <legend className="sr-only">Roles that do checklists</legend>

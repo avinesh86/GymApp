@@ -40,6 +40,28 @@ beforeEach(() => {
 })
 
 describe('Settings → Facilities', () => {
+  it("shows no switches until the gym's settings have loaded", async () => {
+    let resolve: (value: unknown) => void = () => {}
+    vi.mocked(getTenantSettings).mockReturnValue(new Promise((r) => (resolve = r)) as never)
+    renderTab()
+
+    // Showing the defaults (all on) meanwhile would let a quick Save write
+    // them over the gym's real settings.
+    expect(screen.queryByRole('switch', { name: 'Report a fault button' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save Facilities Settings' })).not.toBeInTheDocument()
+
+    resolve({ fault_reporting_enabled: false, facilities_maintenance_enabled: true })
+    expect(await screen.findByRole('switch', { name: 'Report a fault button' })).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('says so if the settings could not be loaded, rather than spinning or showing defaults', async () => {
+    vi.mocked(getTenantSettings).mockRejectedValue(new Error('offline'))
+    renderTab()
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load the Facilities settings")
+    expect(screen.queryByRole('switch', { name: 'Report a fault button' })).not.toBeInTheDocument()
+  })
+
   it('shows the saved switches and alert roles', async () => {
     renderTab()
     await waitFor(() => expect(alerted().getByRole('checkbox', { name: 'Gym Manager' })).toBeChecked())
