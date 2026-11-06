@@ -40,6 +40,17 @@ beforeEach(() => {
 })
 
 describe('Settings → Facilities', () => {
+  it('says so and offers to try again when the settings cannot be loaded', async () => {
+    vi.mocked(getTenantSettings).mockRejectedValueOnce(new Error('offline'))
+    renderTab()
+
+    expect(await screen.findByText("Couldn't load the Facilities settings")).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save Facilities Settings' })).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByRole('button', { name: 'Save Facilities Settings' })).toBeInTheDocument()
+  })
+
   it("shows nothing to change or save until the gym's real settings have loaded", async () => {
     // Saving the form's starting defaults would switch a gym's "off"
     // settings back on (and a test reading a switch too early sees "on").
