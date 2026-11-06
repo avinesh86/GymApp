@@ -123,6 +123,57 @@ def test_adding_nullable_then_making_it_required_in_the_same_release_is_flagged(
     assert len(found) == 1
 
 
+def test_adding_nullable_then_required_in_one_migration_is_flagged():
+    # field_before is the state before the whole migration: no column yet.
+    found = _check(
+        _migration(
+            _add("level", models.IntegerField(null=True)), _alter("level", _required())
+        )
+    )
+    assert len(found) == 1
+
+
+def _sdas(database=(), state=()):
+    return migrations.SeparateDatabaseAndState(
+        database_operations=list(database), state_operations=list(state)
+    )
+
+
+def _claims_db_default():
+    return _alter("level", models.IntegerField(default=1, db_default=1))
+
+
+@pytest.mark.parametrize(
+    "fix",
+    [
+        _sdas(state=[_claims_db_default()]),
+        _sdas(state=[_alter("level", models.IntegerField(null=True))]),
+    ],
+    ids=["db_default", "nullable"],
+)
+def test_a_state_only_claim_with_no_database_step_fixes_nothing(fix):
+    later = _migration(fix, name="0100_claim")
+    assert len(_check(_migration(_add("level", _required())), later)) == 1
+
+
+def test_state_side_cant_cancel_its_own_database_side():
+    op = _sdas(
+        database=[_add("level", _required())],
+        state=[_add("level", models.IntegerField(default=1, db_default=1))],
+    )
+    assert len(_check(_migration(op))) == 1
+
+
+def test_a_state_claim_with_a_database_step_fixes_it():
+    # The tenants.0013 pattern: hand-written SQL plus the state AlterField.
+    fix = _sdas(
+        database=[migrations.RunSQL("ALTER TABLE ...", migrations.RunSQL.noop)],
+        state=[_claims_db_default()],
+    )
+    later = _migration(fix, name="0100_fix")
+    assert _check(_migration(_add("level", _required())), later) == []
+
+
 # ─── what passes ─────────────────────────────────────────────────────────────
 
 
@@ -266,9 +317,11 @@ def test_a_squash_of_migrations_already_on_the_base_is_not_new(monkeypatch):
 
     both = {f"{folder}/0011_x.py", f"{folder}/0012_y.py"}
     assert command.new_migrations(loader, both, repo_root) == []
-    # One of them isn't live yet: the squash carries new operations.
+    # One of them isn't live yet: what it adds can't be checked through the
+    # squash (its CreateModel would hide later columns), so it's refused.
     only_one = {f"{folder}/0011_x.py"}
-    assert len(command.new_migrations(loader, only_one, repo_root)) == 1
+    with pytest.raises(CommandError, match="already released"):
+        command.new_migrations(loader, only_one, repo_root)
 
 
 # ─── the command ─────────────────────────────────────────────────────────────

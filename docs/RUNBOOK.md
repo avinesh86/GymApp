@@ -342,8 +342,10 @@ if each change adds its own.
    If a column truly can't have one, list it on the migration as
    `allow_without_db_default = {"model.field": "reason"}` and say why in the
    pull request. It can't see columns added with `RunSQL`, edits to a
-   migration that's already on `main`, or removed and renamed columns (older
-   code still uses the old name): check those by hand. CI also runs the
+   migration that's already on `main`, removed and renamed columns (older
+   code still uses the old name), or a model deleted and re-created under
+   the same name: check those by hand. Only squash migrations that are
+   already on `main`; the check refuses a squash of unreleased ones. CI also runs the
    migrations and the rollback tests on MySQL 8 (the **MySQL Tests** job),
    since SQLite accepts some changes production's MySQL rejects.
 

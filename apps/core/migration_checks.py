@@ -18,8 +18,9 @@ i.e. what production runs). The new migrations are replayed in order:
   a db_default) or removes it. Renames are followed.
 - Models a new migration creates are fine: older code never writes to them.
 
-Not checked (see RUNBOOK §8 rule 5): columns added with RunSQL, and edits to
-a migration file that is already on the base ref.
+Not checked (see RUNBOOK §8 rule 5): columns added with RunSQL, edits to a
+migration file that is already on the base ref, removed or renamed columns
+that exist there, and a model deleted and re-created under the same name.
 """
 
 from dataclasses import dataclass
@@ -64,19 +65,20 @@ MADE_REQUIRED = (
 )
 
 
-def _operations(operations, touches_db=True):
-    """(operation, touches_db) pairs, unpacking SeparateDatabaseAndState.
+def _operations(operations, touches_db=True, group=None):
+    """(operation, touches_db, group) triples, unpacking SeparateDatabaseAndState.
 
-    Only operations that touch the database can create a problem. A fix can
-    come from either side: a hand-written database step (RunPython/RunSQL)
-    paired with a state AlterField that records the db_default, as in
-    tenants.0013."""
+    ``group`` is the SeparateDatabaseAndState an operation came from (or
+    None). Only operations that touch the database raise a problem. A state
+    operation can fix one only when its SeparateDatabaseAndState also has a
+    database step (RunPython/RunSQL doing the real change, as in
+    tenants.0013), and not a problem raised in that same block."""
     for operation in operations:
         if isinstance(operation, SeparateDatabaseAndState):
-            yield from _operations(operation.database_operations, touches_db)
-            yield from _operations(operation.state_operations, False)
+            yield from _operations(operation.database_operations, touches_db, operation)
+            yield from _operations(operation.state_operations, False, operation)
         else:
-            yield operation, touches_db
+            yield operation, touches_db, group
 
 
 def _has_db_default(field) -> bool:
@@ -138,18 +140,20 @@ def find_unsafe_columns(new_migrations, field_before) -> list[Problem]:
     # (app_label, model_name, field_name lowercased) -> Problem, until fixed.
     open_problems: dict[tuple[str, str, str], Problem] = {}
     other_problems: list[Problem] = []
+    # The SeparateDatabaseAndState block each open problem was raised in.
+    raised_in: dict[tuple[str, str, str], object] = {}
 
     for app_label, migration, path in new_migrations:
         operations = list(_operations(migration.operations))
         touched = {
             (op.model_name_lower, op.name_lower)
-            for op, _ in operations
+            for op, _, _ in operations
             if isinstance(op, (AddField, AlterField))
         }
         problems, exempt = _exemptions(migration, path, app_label, touched)
         other_problems += problems
 
-        for op, touches_db in operations:
+        for op, touches_db, group in operations:
             if isinstance(op, CreateModel):
                 created.add((app_label, op.name_lower))
             elif isinstance(op, DeleteModel):
@@ -164,7 +168,9 @@ def find_unsafe_columns(new_migrations, field_before) -> list[Problem]:
                     created.discard((app_label, old))
                     created.add((app_label, new))
                 for key in [k for k in open_problems if k[:2] == (app_label, old)]:
-                    open_problems[(app_label, new, key[2])] = open_problems.pop(key)
+                    new_key = (app_label, new, key[2])
+                    open_problems[new_key] = open_problems.pop(key)
+                    raised_in[new_key] = raised_in.pop(key, None)
             elif isinstance(op, RemoveField):
                 open_problems.pop((app_label, op.model_name_lower, op.name_lower), None)
             elif isinstance(op, RenameField):
@@ -172,12 +178,19 @@ def find_unsafe_columns(new_migrations, field_before) -> list[Problem]:
                 if old_key in open_problems:
                     new_key = (app_label, op.model_name_lower, op.new_name_lower)
                     open_problems[new_key] = open_problems.pop(old_key)
+                    raised_in[new_key] = raised_in.pop(old_key, None)
             elif isinstance(op, (AddField, AlterField)):
                 key = (app_label, op.model_name_lower, op.name_lower)
                 if (app_label, op.model_name_lower) in created:
                     continue
                 if not is_required_column(op.field):
-                    open_problems.pop(key, None)  # fixed by this change
+                    real_fix = touches_db or (
+                        group is not None
+                        and group.database_operations
+                        and raised_in.get(key) is not group
+                    )
+                    if real_fix:
+                        open_problems.pop(key, None)
                     continue
                 if not touches_db:
                     continue
@@ -189,12 +202,16 @@ def find_unsafe_columns(new_migrations, field_before) -> list[Problem]:
                     before = field_before(
                         app_label, migration.name, op.model_name_lower, op.name
                     )
-                    if before is None or is_required_column(before):
+                    if before is None:
+                        what = ADDED  # added earlier in this same migration
+                    elif is_required_column(before):
                         continue  # was already required: nothing new
-                    what = MADE_REQUIRED
+                    else:
+                        what = MADE_REQUIRED
                 open_problems[key] = Problem(
                     path, app_label, op.model_name_lower, op.name, what
                 )
+                raised_in[key] = group
 
     return other_problems + list(open_problems.values())
 

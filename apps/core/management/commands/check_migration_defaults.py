@@ -58,7 +58,8 @@ def new_migrations(loader, on_base: set[str], repo_root: Path):
     migrations whose files aren't on the base ref, in the order they apply.
 
     A squashed migration counts as already live when every migration it
-    replaces is on the base ref (its operations ran there already)."""
+    replaces is on the base ref (its operations ran there already); one that
+    replaces unreleased migrations is refused."""
     plan = []
     for leaf in sorted(loader.graph.leaf_nodes()):
         plan += loader.graph.forwards_plan(leaf)
@@ -84,12 +85,17 @@ def new_migrations(loader, on_base: set[str], repo_root: Path):
             for app_label, name in (migration.replaces or [])
             if app_label == node[0]
         ]
-        if (
-            replaced
-            and len(replaced) == len(migration.replaces)
-            and all(path in on_base for path in replaced)
-        ):
-            continue
+        if migration.replaces:
+            if len(replaced) == len(migration.replaces) and all(
+                path in on_base for path in replaced
+            ):
+                continue
+            # Its replaced migrations aren't loaded (no database), so what
+            # they add can't be checked through the squash.
+            raise CommandError(
+                f"{relative.as_posix()} squashes migrations that aren't on the "
+                "base yet. Only squash migrations that are already released."
+            )
         found.append((node[0], migration, relative.as_posix()))
     return found
 
