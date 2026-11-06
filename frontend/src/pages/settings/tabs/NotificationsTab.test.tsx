@@ -105,27 +105,30 @@ describe('Settings → Notifications', () => {
     expect(updateWhatsAppAccount).not.toHaveBeenCalled()
   })
 
-  it("shows the gym's saved email and WhatsApp settings and saves them unchanged", async () => {
+  it("shows the gym's saved email and WhatsApp settings and saves only what was changed", async () => {
     renderTab()
 
-    expect(await screen.findByLabelText('Sender Name')).toHaveValue('Harbour Gym')
+    const senderName = await screen.findByLabelText('Sender Name')
+    expect(senderName).toHaveValue('Harbour Gym')
+    await userEvent.clear(senderName)
+    await userEvent.type(senderName, 'Harbour Fitness')
     await userEvent.click(screen.getByRole('button', { name: 'Save Email Settings' }))
     await waitFor(() =>
       expect(updateTenantSettings).toHaveBeenCalledWith({
-        notification_from_email: 'hello@harbourgym.co.nz',
-        notification_from_name: 'Harbour Gym',
+        notification_from_name: 'Harbour Fitness',
+        expected: { notification_from_name: 'Harbour Gym' },
       }),
     )
 
-    expect(await screen.findByLabelText('Phone Number ID')).toHaveValue('1098765')
+    const numberId = await screen.findByLabelText('Phone Number ID')
+    expect(numberId).toHaveValue('1098765')
+    await userEvent.clear(numberId)
+    await userEvent.type(numberId, '2223333')
     await userEvent.click(screen.getByRole('button', { name: 'Save WhatsApp Settings' }))
     await waitFor(() =>
       expect(updateWhatsAppAccount).toHaveBeenCalledWith({
-        business_phone_number: '+64221234567',
-        display_name: 'Harbour Gym',
-        phone_number_id: '1098765',
-        waba_id: '5550001',
-        webhook_verify_token: 'harbour-secret',
+        phone_number_id: '2223333',
+        expected: { phone_number_id: '1098765' },
       }),
     )
   })
@@ -208,5 +211,74 @@ describe('Settings → Notifications', () => {
 
     await waitFor(() => expect(updateTenantSettings).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(channelSwitches()).toEqual(['false', 'true', 'true', 'true']))
+  })
+
+  it("warns instead of saving over someone else's email settings, and can load theirs", async () => {
+    renderTab()
+    expect(await screen.findByLabelText('Sender Name')).toHaveValue('Harbour Gym')
+    vi.mocked(getTenantSettings).mockResolvedValue({ ...SETTINGS, notification_from_name: 'Harbour Fitness' } as never)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save Email Settings' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Sender Name (now: Harbour Fitness)')
+    expect(updateTenantSettings).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Use their values' }))
+    expect(await screen.findByLabelText('Sender Name')).toHaveValue('Harbour Fitness')
+  })
+
+  it("warns instead of saving over someone else's WhatsApp settings, without showing the secret token", async () => {
+    renderTab()
+    expect(await screen.findByLabelText('Business Phone Number')).toHaveValue('+64221234567')
+    vi.mocked(getWhatsAppAccount).mockResolvedValue({ ...WA_ACCOUNT, webhook_verify_token: 'their-new-secret' } as never)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save WhatsApp Settings' }))
+    const warning = await screen.findByRole('alert')
+    expect(warning).toHaveTextContent('Webhook Verify Token (changed)')
+    expect(warning).not.toHaveTextContent('their-new-secret')
+    expect(updateWhatsAppAccount).not.toHaveBeenCalled()
+  })
+
+  it('treats what was typed during a save as not yet saved, and keeps a password typed meanwhile', async () => {
+    renderTab()
+    const senderName = await screen.findByLabelText('Sender Name')
+    let finishSave: (value: unknown) => void = () => {}
+    vi.mocked(updateTenantSettings).mockReturnValueOnce(new Promise((resolve) => (finishSave = resolve)) as never)
+    await userEvent.clear(senderName)
+    await userEvent.type(senderName, 'Gym One')
+    await userEvent.click(screen.getByRole('button', { name: 'Save Email Settings' }))
+    await waitFor(() => expect(updateTenantSettings).toHaveBeenCalledTimes(1))
+
+    // Typed while that save was still on its way.
+    await userEvent.type(senderName, ' Two')
+    await userEvent.type(screen.getByLabelText(/Gmail App Password/), 'abcd efgh')
+    finishSave({ ...SETTINGS, notification_from_name: 'Gym One' })
+    await waitFor(() => expect(screen.getByLabelText(/Gmail App Password/)).toHaveValue('abcd efgh'))
+    expect(senderName).toHaveValue('Gym One Two')
+
+    vi.mocked(getTenantSettings).mockResolvedValue({ ...SETTINGS, notification_from_name: 'Gym One' } as never)
+    await userEvent.click(screen.getByRole('button', { name: 'Save Email Settings' }))
+    await waitFor(() =>
+      expect(updateTenantSettings).toHaveBeenLastCalledWith({
+        notification_from_name: 'Gym One Two',
+        notification_email_password: 'abcd efgh',
+        expected: { notification_from_name: 'Gym One' },
+      }),
+    )
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it("doesn't send a field the server holds as empty just because the form shows it blank", async () => {
+    vi.mocked(getWhatsAppAccount).mockResolvedValue({ ...WA_ACCOUNT, waba_id: null } as never)
+    renderTab()
+    const display = await screen.findByLabelText('Display Name')
+    await userEvent.type(display, '!')
+    await userEvent.click(screen.getByRole('button', { name: 'Save WhatsApp Settings' }))
+
+    await waitFor(() =>
+      expect(updateWhatsAppAccount).toHaveBeenCalledWith({
+        display_name: 'Harbour Gym!',
+        expected: { display_name: 'Harbour Gym' },
+      }),
+    )
   })
 })

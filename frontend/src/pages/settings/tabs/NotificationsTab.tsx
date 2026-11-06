@@ -7,6 +7,7 @@ import { Card } from '../../../components/ui/Card'
 import { Input } from '../../../components/ui/Input'
 import type { TenantSettings, WhatsAppAccount } from '../../../types'
 import { WhenLoaded, useLoadState } from './WhenLoaded'
+import { SaveConflictWarning, useGuardedSave, type ConflictField } from './SaveConflict'
 
 function Toggle({
   label,
@@ -79,6 +80,19 @@ export function NotificationsTab() {
   )
 }
 
+/** Labelled as on the form, which depends on how the gym's email is sent. */
+const emailFields = (managed: boolean): ConflictField<TenantSettings>[] => [
+  { key: 'notification_from_name', label: 'Sender Name' },
+  { key: 'notification_from_email', label: managed ? 'Reply-to Address' : 'Sender Email' },
+]
+const WHATSAPP_FIELDS: ConflictField<WhatsAppAccount>[] = [
+  { key: 'business_phone_number', label: 'Business Phone Number' },
+  { key: 'display_name', label: 'Display Name' },
+  { key: 'phone_number_id', label: 'Phone Number ID' },
+  { key: 'waba_id', label: 'WhatsApp Business Account ID (WABA)' },
+  { key: 'webhook_verify_token', label: 'Webhook Verify Token', secret: true },
+]
+
 function ChannelsAndEmailForm({ settings }: { settings: TenantSettings }) {
   const queryClient = useQueryClient()
 
@@ -132,22 +146,23 @@ function ChannelsAndEmailForm({ settings }: { settings: TenantSettings }) {
   }
 
   // ── Save email settings ──────────────────────────────────────────────────────
-  const { mutate: saveEmail, isPending: savingEmail } = useMutation({
-    mutationKey: ['tenant', 'settings'],
-    mutationFn: () => {
-      const payload: Record<string, unknown> = {
-        notification_from_email: fromEmail,
-        notification_from_name: fromName,
-      }
-      if (emailPassword) payload.notification_email_password = emailPassword
-      return updateTenantSettings(payload)
+  const emailSave = useGuardedSave({
+    data: settings,
+    fields: emailFields(emailSendingManaged),
+    queryKey: ['tenant', 'settings'],
+    queryFn: getTenantSettings,
+    send: updateTenantSettings,
+    current: () => ({ notification_from_email: fromEmail, notification_from_name: fromName }),
+    apply: (v) => {
+      if (v.notification_from_email !== undefined) setFromEmail(v.notification_from_email ?? '')
+      if (v.notification_from_name !== undefined) setFromName(v.notification_from_name ?? '')
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tenant', 'settings'] })
-      setEmailPassword('')
-      toast.success('Email settings saved')
-    },
-    onError: () => toast.error('Failed to save email settings'),
+    // A newly typed password is always sent; it's only ever a deliberate change.
+    extra: () => (emailPassword ? { notification_email_password: emailPassword } : {}),
+    // Clear it only if it's the one that was saved, not one typed since.
+    onSaved: (_saved, sent) => setEmailPassword((typed) => (typed === sent.notification_email_password ? '' : typed)),
+    savedMessage: 'Email settings saved',
+    failedMessage: 'Failed to save email settings',
   })
 
   return (
@@ -242,7 +257,16 @@ function ChannelsAndEmailForm({ settings }: { settings: TenantSettings }) {
           )}
         </div>
         <div className="mt-5">
-          <Button onClick={() => saveEmail()} isLoading={savingEmail}>Save Email Settings</Button>
+          <div className="mb-3">
+            <SaveConflictWarning
+              conflict={emailSave.conflict}
+              onLoadTheirs={emailSave.loadTheirs}
+              onSaveMine={emailSave.saveMine}
+            />
+          </div>
+          <Button onClick={() => void emailSave.save()} isLoading={emailSave.isSaving} disabled={emailSave.saveBlocked}>
+            Save Email Settings
+          </Button>
         </div>
       </Card>
     </>
@@ -250,7 +274,6 @@ function ChannelsAndEmailForm({ settings }: { settings: TenantSettings }) {
 }
 
 function WhatsAppForm({ account }: { account: WhatsAppAccount }) {
-  const queryClient = useQueryClient()
 
   const [waBusinessNumber, setWaBusinessNumber]   = useState(account.business_phone_number ?? '')
   const [waDisplayName, setWaDisplayName]         = useState(account.display_name ?? '')
@@ -262,25 +285,32 @@ function WhatsAppForm({ account }: { account: WhatsAppAccount }) {
   // Read from the latest account, so it shows as saved after a save.
   const waTokenSet = account.access_token_set ?? false
 
-  const { mutate: saveWhatsApp, isPending: savingWhatsApp } = useMutation({
-    mutationKey: ['tenant', 'whatsapp-account'],
-    mutationFn: () => {
-      const payload: Record<string, unknown> = {
-        business_phone_number: waBusinessNumber,
-        display_name: waDisplayName,
-        phone_number_id: waPhoneNumberId,
-        waba_id: waWabaId,
-        webhook_verify_token: waWebhookToken,
-      }
-      if (waAccessToken) payload.access_token = waAccessToken
-      return updateWhatsAppAccount(payload)
+  const whatsAppSave = useGuardedSave({
+    data: account,
+    fields: WHATSAPP_FIELDS,
+    queryKey: ['tenant', 'whatsapp-account'],
+    queryFn: getWhatsAppAccount,
+    send: updateWhatsAppAccount,
+    current: () => ({
+      business_phone_number: waBusinessNumber,
+      display_name: waDisplayName,
+      phone_number_id: waPhoneNumberId,
+      waba_id: waWabaId,
+      webhook_verify_token: waWebhookToken,
+    }),
+    apply: (v) => {
+      if (v.business_phone_number !== undefined) setWaBusinessNumber(v.business_phone_number ?? '')
+      if (v.display_name !== undefined) setWaDisplayName(v.display_name ?? '')
+      if (v.phone_number_id !== undefined) setWaPhoneNumberId(v.phone_number_id ?? '')
+      if (v.waba_id !== undefined) setWaWabaId(v.waba_id ?? '')
+      if (v.webhook_verify_token !== undefined) setWaWebhookToken(v.webhook_verify_token ?? '')
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tenant', 'whatsapp-account'] })
-      setWaAccessToken('')
-      toast.success('WhatsApp settings saved')
-    },
-    onError: () => toast.error('Failed to save WhatsApp settings'),
+    // A newly typed access token is always sent; it's only ever a deliberate change.
+    extra: () => (waAccessToken ? { access_token: waAccessToken } : {}),
+    // Clear it only if it's the one that was saved, not one typed since.
+    onSaved: (_saved, sent) => setWaAccessToken((typed) => (typed === sent.access_token ? '' : typed)),
+    savedMessage: 'WhatsApp settings saved',
+    failedMessage: 'Failed to save WhatsApp settings',
   })
 
   return (
@@ -337,7 +367,16 @@ function WhatsAppForm({ account }: { account: WhatsAppAccount }) {
         />
       </div>
       <div className="mt-5">
-        <Button onClick={() => saveWhatsApp()} isLoading={savingWhatsApp}>Save WhatsApp Settings</Button>
+        <div className="mb-3">
+          <SaveConflictWarning
+            conflict={whatsAppSave.conflict}
+            onLoadTheirs={whatsAppSave.loadTheirs}
+            onSaveMine={whatsAppSave.saveMine}
+          />
+        </div>
+        <Button onClick={() => void whatsAppSave.save()} isLoading={whatsAppSave.isSaving} disabled={whatsAppSave.saveBlocked}>
+          Save WhatsApp Settings
+        </Button>
       </div>
     </>
   )

@@ -41,7 +41,7 @@ export function useLoadState<T>(query: LoadQuery<T>, savesKey: QueryKey): LoadSt
   return state
 }
 
-function errorDescription(error: unknown, offline: boolean) {
+export function errorDescription(error: unknown, offline: boolean) {
   if (offline || (isAxiosError(error) && !error.response)) return 'Check your connection and try again.'
   if (isAxiosError(error) && error.response?.status === 403) return "Your account doesn't have access to these settings."
   return 'Something went wrong on our end. Try again, and tell us if it keeps happening.'
