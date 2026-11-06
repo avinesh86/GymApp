@@ -76,6 +76,7 @@ cd "$PROJECT_DIR"
 PREVIOUS_COMMIT=""
 BACKUP_FILE=""
 MIGRATIONS_APPLIED="no"
+SCHEMA_CHECK_RUNNING="no"
 
 banner() {
     echo ""
@@ -111,7 +112,14 @@ rollback() {
 
     echo "  Rolled back and healthy at $(git log --oneline -1)"
 
-    if [ "$MIGRATIONS_APPLIED" = "yes" ]; then
+    if [ "$SCHEMA_CHECK_RUNNING" = "yes" ]; then
+        echo ""
+        echo "⚠ The database is missing tables/columns the models need, and they"
+        echo "  could not all be added (see the check_db_schema output above)."
+        echo "  Do NOT restore the dump: the database is behind the code, not ahead."
+        echo "  Add the listed columns by hand (sqlmigrate <app> <migration> shows"
+        echo "  the SQL), then run the deploy again."
+    elif [ "$MIGRATIONS_APPLIED" = "yes" ]; then
         echo ""
         echo "⚠ Migrations ran before the failure. The schema is NEWER than the"
         echo "  code now running. If the old code errors against it, restore the"
@@ -215,10 +223,16 @@ $COMPOSE run --rm -T web python manage.py migrate --noinput
 
 # A migration can be recorded as applied without its SQL having run (faked,
 # or a database copied from another server). That passes every check above
-# and then 500s on the first query, so compare the models with the live tables.
+# and then 500s on the first query, so compare the models with the live tables
+# and add anything missing. The models were checked against the migration
+# files above, so this only completes what the recorded migrations promised.
+# It never drops or alters anything; it fails (and rolls back) if a missing
+# column cannot be added, e.g. NOT NULL with no default on a table with rows.
 echo ""
 echo "▸ Checking the database schema matches the models..."
-$COMPOSE run --rm -T web python manage.py check_db_schema
+SCHEMA_CHECK_RUNNING="yes"
+$COMPOSE run --rm -T web python manage.py check_db_schema --fix
+SCHEMA_CHECK_RUNNING="no"
 
 # ─── 6. Restart services ─────────────────────────────────────────────────────
 echo ""
