@@ -76,6 +76,16 @@ describe('Settings → Facilities', () => {
     expect(await screen.findByRole('switch', { name: 'Report a fault button' })).toHaveAttribute('aria-checked', 'false')
   })
 
+  it("shows the error, not settings cached by another page, when this visit's fetch fails", async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    client.setQueryData(['tenant', 'settings'], { fault_reporting_enabled: true, facilities_maintenance_enabled: true })
+    vi.mocked(getTenantSettings).mockRejectedValue(new Error('offline'))
+    renderTab(client)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent("Couldn't load the Facilities settings")
+    expect(screen.queryByRole('switch', { name: 'Report a fault button' })).not.toBeInTheDocument()
+  })
+
   it('says so if the settings could not be loaded, rather than spinning or showing defaults', async () => {
     vi.mocked(getTenantSettings).mockRejectedValue(new Error('offline'))
     renderTab()

@@ -94,8 +94,8 @@ export function FacilitiesTab() {
 
   useEffect(() => {
     // Wait for this visit's fetch: settings cached by another page may be
-    // out of date.
-    if (!settings || !isFetchedAfterMount) return
+    // out of date, so if the fetch fails, don't fall back to them.
+    if (!settings || !isFetchedAfterMount || isError) return
     setEquipment(settings.facilities_equipment_enabled ?? true)
     setMaintenance(settings.facilities_maintenance_enabled ?? true)
     setReporting(settings.fault_reporting_enabled ?? true)
@@ -106,7 +106,7 @@ export function FacilitiesTab() {
     setAlertStart(settings.facilities_alert_start_hour ?? 9)
     setAlertEnd(settings.facilities_alert_end_hour ?? 17)
     setLoaded(true)
-  }, [settings, isFetchedAfterMount])
+  }, [settings, isFetchedAfterMount, isError])
 
   const { mutate: save, isPending } = useMutation({
     mutationFn: () =>

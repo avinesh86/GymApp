@@ -69,9 +69,16 @@ export function ChecklistModal({
   // Which opening of the form a recount belongs to: if the form is closed
   // (or reopened) while it runs, its answer is dropped, not saved.
   const session = useRef(0)
+  const recounting = useRef(false)
 
+  // A new opening (or another checklist): any recount still on its way
+  // belongs to the old one. Keyed on the id, as a refreshed list hands over
+  // a new object for the same checklist.
   useEffect(() => {
     session.current += 1
+  }, [isOpen, template?.id])
+
+  useEffect(() => {
     if (!isOpen) return
     if (template) {
       const { id, site_name: _site, equipment_name: _equipment, open_overdue_count: _overdue, ...rest } = template
@@ -106,6 +113,8 @@ export function ChecklistModal({
   const onSave = async () => {
     const pausing = !!template && template.is_active && !form.is_active
     if (!pausing) return save.mutate()
+    if (recounting.current) return // a second click while counting
+    recounting.current = true
     const mine = session.current
     setCheckingPause(true)
     let overdue: number | null = null
@@ -114,11 +123,12 @@ export function ChecklistModal({
     } catch {
       // Unknown: don't pause without the warning it may need.
     } finally {
+      recounting.current = false
       setCheckingPause(false)
     }
     if (mine !== session.current) return // closed meanwhile: nothing to save
     if (overdue === null) {
-      toast.error("Couldn't check for overdue checks. Try saving again.")
+      toast.error("Checklist not saved: couldn't count its overdue checks. Try again.")
       return
     }
     if (overdue > 0) setPauseWarning(overdue)
@@ -345,7 +355,7 @@ export function ChecklistModal({
             save.mutate()
           }}
           title="Pause this checklist?"
-          message={`${pauseWarning} overdue check${pauseWarning === 1 ? '' : 's'} will be hidden from the dashboard and overdue alerts while it's paused. Pause anyway?`}
+          message={`${pauseWarning} overdue check${pauseWarning === 1 ? '' : 's'} will be dropped from the dashboard and overdue alerts. Pause anyway?`}
           confirmLabel="Pause anyway"
           cancelLabel="Keep it active"
         />

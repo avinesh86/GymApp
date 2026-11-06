@@ -61,7 +61,8 @@ export function ChecksDueCard() {
 
   const showSetupPrompt =
     !!config?.checklists_enabled &&
-    !config.has_any_checklists &&
+    // Strictly false: an older server without the flag must not show it.
+    config.has_any_checklists === false &&
     !!config.can_manage_checklists &&
     can('facilities') &&
     !!dismissKey &&

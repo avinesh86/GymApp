@@ -57,7 +57,16 @@ function renderModal(template: ChecklistTemplate) {
     </QueryClientProvider>
   )
   const view = render(ui(true))
-  return { close: () => view.rerender(ui(false)) }
+  return {
+    close: () => view.rerender(ui(false)),
+    // The list refreshed: same checklist, new object.
+    refreshed: () =>
+      view.rerender(
+        <QueryClientProvider client={client}>
+          <ChecklistModal template={{ ...template }} isOpen site="" onClose={vi.fn()} />
+        </QueryClientProvider>,
+      ),
+  }
 }
 
 async function pauseAndSave() {
@@ -78,7 +87,7 @@ describe('Pausing a checklist with overdue checks', () => {
     await pauseAndSave()
 
     expect(
-      await screen.findByText("2 overdue checks will be hidden from the dashboard and overdue alerts while it's paused. Pause anyway?"),
+      await screen.findByText('2 overdue checks will be dropped from the dashboard and overdue alerts. Pause anyway?'),
     ).toBeInTheDocument()
     expect(getChecklist).toHaveBeenCalledWith(5)
     expect(updateChecklist).not.toHaveBeenCalled()
@@ -96,7 +105,7 @@ describe('Pausing a checklist with overdue checks', () => {
 
     await pauseAndSave()
 
-    expect(await screen.findByText(/^1 overdue check will be hidden/)).toBeInTheDocument()
+    expect(await screen.findByText(/^1 overdue check will be dropped/)).toBeInTheDocument()
   })
 
   it('keeps it active and unsaved when they back out, with Active ticked again', async () => {
@@ -141,13 +150,38 @@ describe('Pausing a checklist with overdue checks', () => {
     expect(screen.queryByText(/Pause anyway\?/)).not.toBeInTheDocument()
   })
 
+  it('still asks when the checklist list refreshes during the count', async () => {
+    let answer: (t: ChecklistTemplate) => void = () => {}
+    vi.mocked(getChecklist).mockReturnValue(new Promise((r) => (answer = r)))
+    const { refreshed } = renderModal(opening)
+
+    await pauseAndSave()
+    refreshed()
+    answer({ ...opening, open_overdue_count: 2 })
+
+    expect(await screen.findByText(/^2 overdue checks will be dropped/)).toBeInTheDocument()
+  })
+
+  it('counts once when Save is clicked twice', async () => {
+    vi.mocked(getChecklist).mockResolvedValue({ ...opening, open_overdue_count: 0 })
+    renderModal(opening)
+
+    await userEvent.click(screen.getByRole('checkbox', { name: /Active/ }))
+    const save = screen.getByRole('button', { name: 'Save' })
+    save.click()
+    save.click()
+
+    await waitFor(() => expect(updateChecklist).toHaveBeenCalledTimes(1))
+    expect(getChecklist).toHaveBeenCalledTimes(1)
+  })
+
   it("doesn't pause unwarned if the count can't be checked", async () => {
     vi.mocked(getChecklist).mockRejectedValue(new Error('offline'))
     renderModal({ ...opening, open_overdue_count: 0 })
 
     await pauseAndSave()
 
-    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Couldn't check for overdue checks. Try saving again."))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Checklist not saved: couldn't count its overdue checks. Try again."))
     expect(updateChecklist).not.toHaveBeenCalled()
   })
 

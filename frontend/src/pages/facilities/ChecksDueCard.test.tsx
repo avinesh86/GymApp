@@ -190,6 +190,12 @@ describe('Checklist setup prompt', () => {
     expect(screen.queryByTestId('checks-setup-prompt')).not.toBeInTheDocument()
   })
 
+  it('stays hidden if the server is older and does not send the flag', () => {
+    renderCard({ ...noChecklistsYet, has_any_checklists: undefined as unknown as boolean })
+
+    expect(screen.queryByTestId('checks-setup-prompt')).not.toBeInTheDocument()
+  })
+
   it('gives way to the checks card once the gym has a checklist', async () => {
     renderCard({})
 

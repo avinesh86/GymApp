@@ -52,14 +52,14 @@ test.describe.serial('facilities: checklists and equipment QR', () => {
       await expect(page.getByRole('table').or(empty)).toBeVisible() // loaded
       if (await empty.isVisible()) break
       expect(tries, 'leftover checklists should all be removed').toBeLessThan(60)
-      const count = await rows.count()
+      const name = (await rows.first().getByRole('cell').first().innerText()).trim()
       await rows.first().click()
       const edit = page.getByRole('dialog', { name: 'Edit checklist' })
       await edit.getByRole('button', { name: 'Remove', exact: true }).click()
       await expect(edit).toBeHidden()
       await expectNoErrorToast(page)
       // Let the list refresh before the next click.
-      await expect(count > 1 ? rows : empty).toHaveCount(count > 1 ? count - 1 : 1)
+      await expect(page.getByRole('row').filter({ hasText: name })).toHaveCount(0)
     }
     await page.close()
   })
@@ -203,7 +203,7 @@ test.describe.serial('facilities: checklists and equipment QR', () => {
 
     const confirm = page.getByRole('dialog', { name: 'Pause this checklist?' })
     await expect(confirm).toContainText(
-      "1 overdue check will be hidden from the dashboard and overdue alerts while it's paused. Pause anyway?",
+      '1 overdue check will be dropped from the dashboard and overdue alerts. Pause anyway?',
     )
     await confirm.getByRole('button', { name: 'Keep it active' }).click()
     await expect(confirm).toBeHidden()
