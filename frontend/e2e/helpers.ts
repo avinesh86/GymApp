@@ -24,7 +24,8 @@ export const RUN_ID = process.env.E2E_RUN_ID ?? String(Date.now()).slice(-6)
 
 export const named = (label: string) => `E2E ${label} ${RUN_ID}`
 
-/** Signs in from the front door. The one place a URL is typed. */
+/** Signs in from the front door. The one place a URL is typed (apart from
+ * opening a QR label's address, which a test reads from the label). */
 export async function signIn(page: Page, who = OWNER) {
   await page.goto('/')
 
