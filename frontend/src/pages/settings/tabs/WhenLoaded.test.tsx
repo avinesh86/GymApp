@@ -133,6 +133,15 @@ describe('WhenLoaded', () => {
     expect(await screen.findByText('Value: new')).toBeInTheDocument()
   })
 
+  it('says to check the connection when a request times out', async () => {
+    // What the API client's timeout turns a request that never answers into.
+    const timedOut = new AxiosError('timeout of 30000ms exceeded', AxiosError.ECONNABORTED)
+    renderProbe(() => Promise.reject(timedOut))
+
+    expect(await screen.findByText('Check your connection and try again.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument()
+  })
+
   it('says to check the connection when offline, rather than spinning', async () => {
     onlineManager.setOnline(false)
     renderProbe(() => Promise.resolve('value'))

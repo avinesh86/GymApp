@@ -1,4 +1,4 @@
-import apiClient from './client'
+import apiClient, { LONG_REQUEST_TIMEOUT_MS } from './client'
 import type {
   AttendanceReport,
   InstructorReliabilityReport,
@@ -25,6 +25,7 @@ export async function getAttendanceReport(
 ): Promise<AttendanceReport> {
   const response = await apiClient.get<AttendanceReport>('reports/attendance/', {
     params: { from, to, ...(classType ? { class_type: classType } : {}) },
+    timeout: LONG_REQUEST_TIMEOUT_MS,
   })
   return response.data
 }
@@ -35,7 +36,7 @@ export async function getInstructorReliabilityReport(
 ): Promise<InstructorReliabilityReport[]> {
   const response = await apiClient.get<InstructorReliabilityReport[] | PaginatedResponse<InstructorReliabilityReport>>(
     'reports/instructor-reliability/',
-    { params: { from, to } }
+    { params: { from, to }, timeout: LONG_REQUEST_TIMEOUT_MS }
   )
   return unwrapList(response.data)
 }
@@ -47,6 +48,7 @@ export async function getInstructorCharts(
 ): Promise<InstructorChartsReport> {
   const response = await apiClient.get<InstructorChartsReport>('reports/instructor-charts/', {
     params: { from, to, instructor },
+    timeout: LONG_REQUEST_TIMEOUT_MS,
   })
   return response.data
 }
@@ -58,6 +60,7 @@ export async function getPayrollReport(
 ): Promise<PayrollReport> {
   const response = await apiClient.get<PayrollReport>('reports/payroll/', {
     params: { from, to, instructor },
+    timeout: LONG_REQUEST_TIMEOUT_MS,
   })
   return response.data
 }
@@ -68,6 +71,7 @@ export async function getClassViabilityReport(
 ): Promise<ClassViabilityReport> {
   const response = await apiClient.get<ClassViabilityReport>('reports/class-viability/', {
     params: { from, to },
+    timeout: LONG_REQUEST_TIMEOUT_MS,
   })
   return response.data
 }
@@ -79,6 +83,7 @@ export async function getClassesReport(
 ): Promise<ClassesReport> {
   const response = await apiClient.get<ClassesReport>('reports/classes/', {
     params: { from, to, class_type: classType },
+    timeout: LONG_REQUEST_TIMEOUT_MS,
   })
   return response.data
 }
@@ -98,7 +103,10 @@ export async function getClassTypes(): Promise<ClassTypeOption[]> {
 
 /** Past classes with no attendance recorded, grouped by class, day and time. */
 export async function getUnrecordedReport(from: string, to: string): Promise<UnrecordedReport> {
-  const response = await apiClient.get<UnrecordedReport>('reports/unrecorded/', { params: { from, to } })
+  const response = await apiClient.get<UnrecordedReport>('reports/unrecorded/', {
+    params: { from, to },
+    timeout: LONG_REQUEST_TIMEOUT_MS,
+  })
   return response.data
 }
 
