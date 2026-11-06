@@ -268,7 +268,7 @@ to deploy a specific version.
 | Deploy rolls back but the site looks fine | Health check was refused with "DisallowedHost" | Check `ALLOWED_HOSTS` in the server's `.env` (see `README.md` → Deploying) |
 | Times or dates off by several hours | Timezone: the database stores UTC, the gym is not UTC | Ask Claude to check the gym's timezone handling on that page |
 | CI fails on "Check for missing migrations" | A model changed without a migration | Ask Claude to create the migration |
-| 500 on every page of one area (e.g. Invoices), even with no data | A migration was recorded as applied but its SQL never ran, so a table is missing columns | The deploy adds missing columns automatically (`check_db_schema --fix`). If it says a column can't be added safely, add it by hand with the SQL from `python manage.py sqlmigrate <app> <migration>`, then deploy again. **Don't** restore the backup for this. |
+| 500 on every page of one area (e.g. Invoices), even with no data | A migration was recorded as applied but its SQL never ran, so a table or column is missing | The deploy fails and lists what's missing (`check_db_schema`). **Don't** restore the backup: the database is behind the code. Check the list, then **Actions → Deploy → Run workflow** with **Repair missing tables/columns** ticked. It only adds; anything it can't add safely is listed and must be added by hand (`python manage.py sqlmigrate <app> <migration>` shows the SQL). Note: the check covers tables and columns only, not indexes or column types. |
 | Frontend change not showing after deploy | Browser cached the old version | Hard refresh (Ctrl+Shift+R / Cmd+Shift+R) |
 
 ---

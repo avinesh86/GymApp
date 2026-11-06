@@ -20,6 +20,11 @@ models. It never drops, renames or alters anything. Run it only after
 ``makemigrations --check`` passes and ``migrate`` has finished, so the models
 are exactly the schema the recorded migrations promised. It does not replay
 data steps (``RunPython``) from a skipped migration; review those by hand.
+
+Limits: only tables and columns are compared. Missing indexes, unique
+constraints and foreign keys, and wrong column types or nullability, are NOT
+detected, so a clean result means "every column exists", not "the schema is
+identical".
 """
 
 from dataclasses import dataclass, field
@@ -44,7 +49,10 @@ class TableDrift:
 def find_schema_drift(app_labels=None, db_connection=connection) -> list[TableDrift]:
     """Return one entry per managed model whose table or columns are missing."""
     with db_connection.cursor() as cursor:
-        existing_tables = set(db_connection.introspection.table_names(cursor))
+        # MySQL and SQLite names are case-insensitive.
+        existing_tables = {
+            t.lower() for t in db_connection.introspection.table_names(cursor)
+        }
         drifts = []
         for model in _managed_concrete_models(app_labels):
             drift = _drift_for_model(model, existing_tables, cursor, db_connection)
@@ -59,41 +67,47 @@ def repair_schema_drift(
     """
     Add the missing tables and columns described by ``drifts``.
 
-    Returns the SQL that was run (or, with ``collect_sql``, would be run).
-    Tables are created before columns are added, and an auto-created
-    many-to-many table is skipped when creating its parent model already made it.
+    Everything that can't be done safely is refused up front, before any
+    change. Then missing tables are created together (so foreign keys between
+    them resolve), and their constraints and indexes are written before any
+    column is touched. Each table's columns are then added in their own step,
+    so a failure on one table can't lose another table's constraints (MySQL
+    commits every schema change as it goes).
+
+    Returns the SQL that was run, or with ``collect_sql`` would be run.
     """
-    unsafe = find_unsafe_repairs(drifts, db_connection)
-    if unsafe:
+    problems = find_unsafe_repairs(drifts, db_connection)
+    if problems:
         raise UnsafeRepair(
-            "Not repaired, because the right value for existing rows is unknown "
-            "(the skipped migration may have used a one-off default): "
-            + "; ".join(unsafe)
-            + ". Add these by hand with the SQL from `sqlmigrate`."
+            "Nothing was changed. These can't be repaired from the models alone: "
+            + "; ".join(problems)
+            + ". Add them by hand (`sqlmigrate <app> <migration>` shows the SQL)."
         )
-    # Parents first: create_model() also creates their auto-created M2M tables.
-    ordered = sorted(
-        drifts,
-        key=lambda d: (not d.table_missing, d.model._meta.auto_created is not False),
-    )
-    with db_connection.schema_editor(collect_sql=collect_sql) as editor:
+
+    statements: list[str] = []
+    missing_tables = [d for d in drifts if d.table_missing]
+    if missing_tables:
+        # Parents first: create_model() also creates their auto-created M2M tables.
+        missing_tables.sort(key=lambda d: d.model._meta.auto_created is not False)
         created: set[str] = set()
-        for drift in ordered:
-            model = drift.model
-            if drift.table_missing:
+        with db_connection.schema_editor(collect_sql=collect_sql) as editor:
+            for drift in missing_tables:
                 if drift.table in created:
                     continue
-                editor.create_model(model)
+                editor.create_model(drift.model)
                 created.add(drift.table)
-                created.update(
-                    m2m.remote_field.through._meta.db_table
-                    for m2m in model._meta.local_many_to_many
-                    if m2m.remote_field.through._meta.auto_created
-                )
-                continue
-            for model_field in _fields_for_columns(model, drift.missing_columns):
-                editor.add_field(model, model_field)
-        return list(editor.collected_sql) if collect_sql else []
+                created.update(_auto_m2m_tables(drift.model))
+        # Read after the block: constraints and indexes are only added on exit.
+        statements += getattr(editor, "collected_sql", [])
+
+    for drift in drifts:
+        if drift.table_missing:
+            continue
+        with db_connection.schema_editor(collect_sql=collect_sql) as editor:
+            for model_field in _fields_for_columns(drift.model, drift.missing_columns):
+                editor.add_field(drift.model, model_field)
+        statements += getattr(editor, "collected_sql", [])
+    return statements if collect_sql else []
 
 
 class UnsafeRepair(Exception):
@@ -102,16 +116,31 @@ class UnsafeRepair(Exception):
 
 def find_unsafe_repairs(drifts, db_connection=connection) -> list[str]:
     """
-    Missing columns that cannot be added safely from the model alone.
+    What ``repair_schema_drift`` must not attempt.
 
-    A NOT NULL column with no model default may have been filled by a one-off
-    default that only the migration file knows, so on a table that already has
-    rows the model cannot say what value it should hold. Blank text fields are
-    fine: Django fills those with '' exactly as the migration would have.
+    - On a table that already has rows, a NOT NULL column whose value the
+      model can't supply: the skipped migration may have filled it with a
+      one-off default only the migration file knows. A callable default
+      (``timezone.now``, ``uuid4``) is no better: every existing row would get
+      the repair's own timestamp, or the same "unique" value. Blank text
+      fields are fine: the migration filled those with '' too.
+    - A missing table whose many-to-many table still exists: creating the
+      table would try to create that one again and fail half-way.
     """
-    unsafe = []
+    problems = []
+    with db_connection.cursor() as cursor:
+        existing_tables = {
+            t.lower() for t in db_connection.introspection.table_names(cursor)
+        }
     for drift in drifts:
         if drift.table_missing:
+            leftover = [
+                t for t in _auto_m2m_tables(drift.model) if t.lower() in existing_tables
+            ]
+            if leftover:
+                problems.append(
+                    f"table `{drift.table}` is missing but `{', '.join(leftover)}` still exists"
+                )
             continue
         fields = [
             f
@@ -119,18 +148,29 @@ def find_unsafe_repairs(drifts, db_connection=connection) -> list[str]:
             if not _safe_to_add_to_existing_rows(f)
         ]
         if fields and _table_has_rows(drift.table, db_connection):
-            unsafe.append(f"`{drift.table}`.{', '.join(f.column for f in fields)}")
-    return unsafe
+            problems.append(
+                f"`{drift.table}`.{', '.join(f.column for f in fields)} "
+                "(NOT NULL with no fixed default, on a table with rows)"
+            )
+    return problems
 
 
 def _safe_to_add_to_existing_rows(model_field) -> bool:
-    if model_field.null or model_field.has_default():
+    if model_field.null:
         return True
-    return (
-        model_field.blank
-        and model_field.empty_strings_allowed
-        and not model_field.unique
-    )
+    if model_field.unique:
+        return False
+    if model_field.has_default():
+        return not callable(model_field.default)
+    return model_field.blank and model_field.empty_strings_allowed
+
+
+def _auto_m2m_tables(model) -> list[str]:
+    return [
+        m2m.remote_field.through._meta.db_table
+        for m2m in model._meta.local_many_to_many
+        if m2m.remote_field.through._meta.auto_created
+    ]
 
 
 def _table_has_rows(table, db_connection) -> bool:
@@ -151,11 +191,11 @@ def _managed_concrete_models(app_labels):
 
 def _drift_for_model(model, existing_tables, cursor, db_connection):
     table = model._meta.db_table
-    if table not in existing_tables:
+    if table.lower() not in existing_tables:
         return TableDrift(model=model, table=table, table_missing=True)
 
     live_columns = {
-        column.name
+        column.name.lower()
         for column in db_connection.introspection.get_table_description(cursor, table)
     }
     expected_columns = [
@@ -163,7 +203,9 @@ def _drift_for_model(model, existing_tables, cursor, db_connection):
         for model_field in model._meta.local_concrete_fields
         if model_field.column
     ]
-    missing = [column for column in expected_columns if column not in live_columns]
+    missing = [
+        column for column in expected_columns if column.lower() not in live_columns
+    ]
     if not missing:
         return None
     return TableDrift(model=model, table=table, missing_columns=missing)
@@ -197,7 +239,11 @@ class Command(BaseCommand):
         drifts = find_schema_drift(app_labels)
 
         if not drifts:
-            self.stdout.write(self.style.SUCCESS("Database schema matches the models."))
+            self.stdout.write(
+                self.style.SUCCESS(
+                    "All model tables and columns exist in the database."
+                )
+            )
             return
 
         for drift in drifts:
@@ -206,8 +252,9 @@ class Command(BaseCommand):
         if not options["fix"]:
             raise CommandError(
                 f"{len(drifts)} table(s) do not match the models. "
-                "Check `showmigrations` for migrations recorded but not applied, "
-                "or run `check_db_schema --fix --dry-run` to see the repair."
+                "Check `showmigrations` for migrations recorded but not applied. "
+                "`check_db_schema --fix --dry-run` shows the repair; to apply it on "
+                "production, run Actions > Deploy with 'Repair missing tables/columns' ticked."
             )
 
         if options["dry_run"]:
@@ -239,7 +286,7 @@ class Command(BaseCommand):
             )
         self.stdout.write(
             self.style.SUCCESS(
-                f"Repaired {len(drifts)} table(s). Database schema now matches the models. "
+                f"Repaired {len(drifts)} table(s); all model tables and columns now exist. "
                 "Check whether the skipped migrations had data steps (RunPython)."
             )
         )

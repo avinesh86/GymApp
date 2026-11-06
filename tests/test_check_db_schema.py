@@ -5,10 +5,17 @@ with --fix adds them back, only when that is safe.
 """
 
 import pytest
+from django.contrib.auth.models import Group
 from django.core.management import CommandError, call_command
 from django.db import OperationalError, ProgrammingError, connection
 
-from apps.core.management.commands.check_db_schema import find_schema_drift
+from pathlib import Path
+
+from apps.core.management.commands.check_db_schema import (
+    TableDrift,
+    find_schema_drift,
+    find_unsafe_repairs,
+)
 from apps.invoices.models import Invoice, InvoiceApproval
 from tests.factories import InvoiceFactory
 
@@ -44,7 +51,7 @@ def _tables():
 def test_matching_schema_reports_no_drift(capsys):
     call_command("check_db_schema")
 
-    assert "matches the models" in capsys.readouterr().out
+    assert "All model tables and columns exist" in capsys.readouterr().out
 
 
 @pytest.mark.django_db(transaction=True)
@@ -140,10 +147,80 @@ def test_fix_adds_not_null_column_without_default_when_table_is_empty():
         _restore_field(Invoice, "period_start")
 
 
-def test_deploy_repairs_schema_after_migrate():
-    script = open("scripts/deploy.sh").read()
+@pytest.mark.django_db(transaction=True)
+def test_fix_refuses_callable_default_on_table_with_rows(tenant):
+    # approved_at defaults to timezone.now: repairing it would stamp every
+    # existing approval with the time of the repair.
+    invoice = InvoiceFactory(tenant=tenant)
+    InvoiceApproval.objects.create(invoice=invoice, role="manager", action="approve")
+    _remove_field(InvoiceApproval, "approved_at")
+    try:
+        with pytest.raises(CommandError, match="approved_at"):
+            call_command("check_db_schema", "--fix")
+
+        assert "approved_at" not in _columns("invoice_approval")
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute("DELETE FROM invoice_approval")
+            cursor.execute("DELETE FROM invoice")
+        _restore_field(InvoiceApproval, "approved_at")
+
+
+@pytest.mark.django_db(transaction=True)
+def test_dry_run_shows_the_indexes_and_constraints_too(capsys):
+    with connection.schema_editor() as editor:
+        editor.delete_model(InvoiceApproval)
+    try:
+        with pytest.raises(CommandError, match="Dry run"):
+            call_command("check_db_schema", "--fix", "--dry-run")
+
+        out = capsys.readouterr().out
+        assert "CREATE TABLE" in out
+        # The constraint/index SQL is only produced when the editor closes.
+        assert "ADD CONSTRAINT" in out or "CREATE INDEX" in out
+        assert "invoice_approval" not in _tables()
+    finally:
+        if "invoice_approval" not in _tables():
+            with connection.schema_editor() as editor:
+                editor.create_model(InvoiceApproval)
+
+
+@pytest.mark.django_db
+def test_missing_table_whose_m2m_table_survived_is_refused_before_any_change():
+    drift = TableDrift(model=Group, table="auth_group", table_missing=True)
+
+    problems = find_unsafe_repairs([drift])
+
+    assert problems and "auth_group_permissions" in problems[0]
+
+
+@pytest.mark.django_db(transaction=True)
+def test_column_name_case_is_not_drift():
+    # MySQL column names are case-insensitive; the ORM works either way.
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "ALTER TABLE invoice RENAME COLUMN rejection_reason TO Rejection_Reason"
+        )
+    try:
+        assert find_schema_drift({"invoices"}) == []
+    finally:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "ALTER TABLE invoice RENAME COLUMN Rejection_Reason TO rejection_reason"
+            )
+
+
+DEPLOY_SH = Path(__file__).resolve().parent.parent / "scripts" / "deploy.sh"
+
+
+def test_deploy_checks_schema_after_migrate_and_repairs_only_when_asked():
+    script = DEPLOY_SH.read_text()
 
     migrate = script.index("manage.py migrate --noinput")
-    repair = script.index("manage.py check_db_schema --fix")
+    check = script.index("manage.py check_db_schema\n")
     restart = script.index("Restart services")
-    assert migrate < repair < restart
+    assert migrate < check < restart
+    # The repair runs only under SCHEMA_FIX=1, which refuses SKIP_BACKUP=1.
+    fix = script.index("manage.py check_db_schema --fix\n")
+    assert script.rfind('if [ "$SCHEMA_FIX" = "1" ]; then', 0, fix) > migrate
+    assert 'if [ "$SCHEMA_FIX" = "1" ] && [ "$SKIP_BACKUP" = "1" ]' in script
