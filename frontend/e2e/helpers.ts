@@ -95,6 +95,82 @@ export async function expectNoErrorToast(page: Page) {
 
 
 /**
+ * The gym's timezone. `seed_e2e_owner` gives the test gym this zone, and the
+ * timetable shows weeks and "today" in it.
+ */
+export const GYM_TIMEZONE = 'Pacific/Auckland'
+
+/**
+ * The gym's calendar date `days` from today, as YYYY-MM-DD (what a date input
+ * takes).
+ *
+ * Worked out in the gym's zone, not this Node process's. On CI the process
+ * runs in UTC, which is on the previous day for the first half of every
+ * Auckland day, and `new Date()` there gives UTC's date.
+ */
+export function gymDate(days = 0, now: Date = new Date()): string {
+  const [year, month, day] = new Intl.DateTimeFormat('en-CA', {
+    timeZone: GYM_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+    .format(now)
+    .split('-')
+    .map(Number)
+  // Plain calendar arithmetic: UTC has no daylight saving to skip a day.
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10)
+}
+
+/**
+ * The day the suite's class goes on (03 creates it, 04 asks for cover on it):
+ * tomorrow at the gym, so it is upcoming — a candidate for cover rather than
+ * for attendance.
+ *
+ * On a Sunday that is next week's Monday, so look for it with `showWeekOf`.
+ */
+export const upcomingClassDate = (now: Date = new Date()) => gymDate(1, now)
+
+const DAY_MS = 24 * 60 * 60 * 1000
+
+/** The Monday starting the timetable week that holds `date` (weeks start on Monday). */
+function mondayOf(date: string): Date {
+  const day = new Date(`${date}T00:00:00Z`)
+  return new Date(day.getTime() - ((day.getUTCDay() + 6) % 7) * DAY_MS)
+}
+
+/** Weeks between the gym's current week and the one holding `date`: 0 this week, 1 next. */
+export function weeksFromThisWeek(date: string, now: Date = new Date()): number {
+  return Math.round((mondayOf(date).getTime() - mondayOf(gymDate(0, now)).getTime()) / (7 * DAY_MS))
+}
+
+/** The timetable's heading for the week holding `date`, e.g. "Nov 2026 · 9–15 Nov". */
+export function weekLabel(date: string): string {
+  const monday = mondayOf(date)
+  const sunday = new Date(monday.getTime() + 6 * DAY_MS)
+  const month = (d: Date) => d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })
+  return `${month(monday)} ${monday.getUTCFullYear()} · ${monday.getUTCDate()}–${sunday.getUTCDate()} ${month(sunday)}`
+}
+
+/**
+ * Moves the open timetable to the week holding `date`, by clicking its own
+ * week arrows, then checks the heading says so.
+ *
+ * The timetable opens on the gym's current week. A class made for "tomorrow"
+ * on a Sunday is in next week, so without this a test looking for it finds an
+ * empty week every Sunday.
+ */
+export async function showWeekOf(page: Page, date: string, now: Date = new Date()) {
+  const weeks = weeksFromThisWeek(date, now)
+  const arrow = page.getByRole('button', { name: weeks > 0 ? 'Next week' : 'Previous week' })
+  for (let i = 0; i < Math.abs(weeks); i++) await arrow.click()
+  await expect(
+    page.getByText(weekLabel(date), { exact: true }),
+    `the timetable should be showing the week of ${date}`,
+  ).toBeVisible()
+}
+
+/**
  * Opens the first class shown on the timetable.
  *
  * Targets the card's title element specifically. Matching the class name

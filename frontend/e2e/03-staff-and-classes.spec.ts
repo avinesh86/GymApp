@@ -1,5 +1,12 @@
 import { expect, test } from '@playwright/test'
-import { expectToast, goToSection, named, signIn } from './helpers'
+import {
+  expectToast,
+  goToSection,
+  named,
+  showWeekOf,
+  signIn,
+  upcomingClassDate,
+} from './helpers'
 
 /**
  * Adding an instructor, qualifying them, and putting a class on the timetable.
@@ -17,6 +24,8 @@ const EMAIL = `e2e-instructor-${Date.now()}@example.com`
 
 /** The class type the timetable test picked, so the next test can look for it. */
 let scheduledClassType = ''
+/** The day it went on, so the next test looks in that week. */
+let scheduledDate = ''
 
 test.describe.serial('staff and the timetable', () => {
   test('an instructor can be added and qualified in one go', async ({ page }) => {
@@ -109,16 +118,10 @@ test.describe.serial('staff and the timetable', () => {
       (await page.getByLabel('Class Type').locator('option:checked').textContent())?.trim() ?? ''
     expect(scheduledClassType, 'a class type should have been selected').not.toBe('')
 
-    // Tomorrow: upcoming, so it is a candidate for cover rather than for
-    // attendance.
-    // The local calendar date: toISOString() is UTC's, a day behind for the
-    // first half of an Auckland day.
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    const pad = (n: number) => String(n).padStart(2, '0')
-    await page.getByLabel('Date').fill(
-      `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`,
-    )
+    // Tomorrow at the gym: upcoming, so it is a candidate for cover rather
+    // than for attendance.
+    scheduledDate = upcomingClassDate()
+    await page.getByLabel('Date').fill(scheduledDate)
 
     await page.getByRole('button', { name: /^Add Class$/ }).last().click()
 
@@ -128,6 +131,8 @@ test.describe.serial('staff and the timetable', () => {
   test('the new class shows on the timetable', async ({ page }) => {
     await signIn(page)
     await goToSection(page, 'Timetable')
+    // The timetable opens on this week; on a Sunday, tomorrow is next week's.
+    await showWeekOf(page, scheduledDate)
 
     // Scoped to a paragraph so it matches the card title rather than the
     // filter dropdown, which lists every class type as an <option>.

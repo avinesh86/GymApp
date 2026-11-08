@@ -1,5 +1,5 @@
-import { expect, test } from '@playwright/test'
-import { goToSection, openFirstClass, signIn } from './helpers'
+import { expect, test, type Page } from '@playwright/test'
+import { goToSection, openFirstClass, showWeekOf, signIn, upcomingClassDate } from './helpers'
 
 /**
  * Cover, end to end through the interface.
@@ -12,6 +12,18 @@ import { goToSection, openFirstClass, signIn } from './helpers'
  * need a browser clicking the button.
  */
 
+/**
+ * Opens the class 03 put on the timetable.
+ *
+ * It is tomorrow's, which on a Sunday is in next week, so move to its week
+ * first. If the gym's midnight passes between 03 and here, this looks a day
+ * late — a window of the minutes between the two files, once a week.
+ */
+async function openUpcomingClass(page: Page) {
+  await showWeekOf(page, upcomingClassDate())
+  await openFirstClass(page)
+}
+
 test.describe.serial('cover', () => {
   test('a class can be given an instructor', async ({ page }) => {
     // Cover means someone who was teaching now cannot, so the class needs an
@@ -19,7 +31,7 @@ test.describe.serial('cover', () => {
     await signIn(page)
     await goToSection(page, 'Timetable')
 
-    await openFirstClass(page)
+    await openUpcomingClass(page)
     await page.getByRole('button', { name: 'Manage', exact: true }).click()
 
     await page.getByLabel('Assign Instructor').selectOption({ index: 1 })
@@ -35,7 +47,7 @@ test.describe.serial('cover', () => {
     await signIn(page)
     await goToSection(page, 'Timetable')
 
-    await openFirstClass(page)
+    await openUpcomingClass(page)
     await page.getByRole('button', { name: 'Manage', exact: true }).click()
     await page.getByRole('button', { name: /Create Cover Request/i }).click()
 
@@ -53,7 +65,7 @@ test.describe.serial('cover', () => {
     const before = await page.getByRole('button', { name: 'View Details' }).count()
 
     await goToSection(page, 'Timetable')
-    await openFirstClass(page)
+    await openUpcomingClass(page)
     await page.getByRole('button', { name: 'Manage', exact: true }).click()
     await page.getByRole('button', { name: /Create Cover Request/i }).click()
     await expect(page.getByText('Cover request created')).toBeVisible()
