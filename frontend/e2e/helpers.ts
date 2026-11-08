@@ -95,6 +95,56 @@ export async function expectNoErrorToast(page: Page) {
 
 
 /**
+ * The day the shared test class is scheduled for: tomorrow, so it is upcoming
+ * (a candidate for cover rather than for attendance).
+ *
+ * One definition for every file that looks for that class, so they all agree
+ * on the date it was given.
+ */
+export function upcomingClassDate(): Date {
+  const date = new Date()
+  date.setDate(date.getDate() + 1)
+  return date
+}
+
+/** `date` as YYYY-MM-DD from its calendar fields, for date inputs. */
+export function isoDay(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+}
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+/**
+ * Moves the timetable's week view forward, by clicking Next week, until it
+ * shows `date`.
+ *
+ * The timetable opens on the current week. A class tomorrow is in next week's
+ * view whenever today is the last day of the week (a Sunday, with weeks
+ * starting on Monday), so a test that only looks at the opening week fails
+ * every Sunday.
+ */
+export async function showWeekOf(page: Page, date: Date) {
+  const dayHeader = page.locator('div.rounded-lg.p-2.text-center')
+  // The week's day headers are drawn before its classes load.
+  await expect(dayHeader.first(), 'the timetable should show a week').toBeVisible()
+  const target = dayHeader
+    .filter({ has: page.locator('p', { hasText: new RegExp(`^${WEEKDAYS[date.getDay()]}$`, 'i') }) })
+    .filter({ has: page.locator('p', { hasText: new RegExp(`^${date.getDate()}$`) }) })
+  // The range shown beside the arrows, e.g. "Nov 2026 · 2–8 Nov".
+  const range = page.getByText(/ · \d+–\d+ /)
+  for (let step = 0; step < 2 && !(await target.isVisible()); step++) {
+    const before = await range.textContent()
+    await page.getByRole('button', { name: 'Next week' }).click()
+    // Wait for the next week to be drawn before checking again: the range
+    // changes at once, but the days are hidden while its classes load.
+    await expect(range).not.toHaveText(before ?? '')
+    await expect(dayHeader.first()).toBeVisible()
+  }
+  await expect(target, `the timetable should reach the week of ${isoDay(date)}`).toBeVisible()
+}
+
+/**
  * Opens the first class shown on the timetable.
  *
  * Targets the card's title element specifically. Matching the class name

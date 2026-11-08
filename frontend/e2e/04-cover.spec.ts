@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { goToSection, openFirstClass, signIn } from './helpers'
+import { goToSection, openFirstClass, showWeekOf, signIn, upcomingClassDate } from './helpers'
 
 /**
  * Cover, end to end through the interface.
@@ -18,6 +18,8 @@ test.describe.serial('cover', () => {
     // instructor before asking for one makes sense.
     await signIn(page)
     await goToSection(page, 'Timetable')
+    // The class from 03 is tomorrow: next week's view on the last day of a week.
+    await showWeekOf(page, upcomingClassDate())
 
     await openFirstClass(page)
     await page.getByRole('button', { name: 'Manage', exact: true }).click()
@@ -34,6 +36,8 @@ test.describe.serial('cover', () => {
   test('a cover request can be raised from a class', async ({ page }) => {
     await signIn(page)
     await goToSection(page, 'Timetable')
+    // The class from 03 is tomorrow: next week's view on the last day of a week.
+    await showWeekOf(page, upcomingClassDate())
 
     await openFirstClass(page)
     await page.getByRole('button', { name: 'Manage', exact: true }).click()
@@ -53,6 +57,7 @@ test.describe.serial('cover', () => {
     const before = await page.getByRole('button', { name: 'View Details' }).count()
 
     await goToSection(page, 'Timetable')
+    await showWeekOf(page, upcomingClassDate())
     await openFirstClass(page)
     await page.getByRole('button', { name: 'Manage', exact: true }).click()
     await page.getByRole('button', { name: /Create Cover Request/i }).click()

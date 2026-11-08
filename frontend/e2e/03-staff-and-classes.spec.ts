@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { expectToast, goToSection, named, signIn } from './helpers'
+import { expectToast, goToSection, isoDay, named, showWeekOf, signIn, upcomingClassDate } from './helpers'
 
 /**
  * Adding an instructor, qualifying them, and putting a class on the timetable.
@@ -110,15 +110,9 @@ test.describe.serial('staff and the timetable', () => {
     expect(scheduledClassType, 'a class type should have been selected').not.toBe('')
 
     // Tomorrow: upcoming, so it is a candidate for cover rather than for
-    // attendance.
-    // The local calendar date: toISOString() is UTC's, a day behind for the
-    // first half of an Auckland day.
-    const tomorrow = new Date()
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    const pad = (n: number) => String(n).padStart(2, '0')
-    await page.getByLabel('Date').fill(
-      `${tomorrow.getFullYear()}-${pad(tomorrow.getMonth() + 1)}-${pad(tomorrow.getDate())}`,
-    )
+    // attendance. From its calendar fields: toISOString() is UTC's, a day
+    // behind for the first half of an Auckland day.
+    await page.getByLabel('Date').fill(isoDay(upcomingClassDate()))
 
     await page.getByRole('button', { name: /^Add Class$/ }).last().click()
 
@@ -128,6 +122,8 @@ test.describe.serial('staff and the timetable', () => {
   test('the new class shows on the timetable', async ({ page }) => {
     await signIn(page)
     await goToSection(page, 'Timetable')
+    // On the last day of the week, tomorrow is in next week's view.
+    await showWeekOf(page, upcomingClassDate())
 
     // Scoped to a paragraph so it matches the card title rather than the
     // filter dropdown, which lists every class type as an <option>.
