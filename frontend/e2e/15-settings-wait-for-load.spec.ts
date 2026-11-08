@@ -75,3 +75,15 @@ test("an open settings form keeps what's been typed once its data is 30 seconds 
   await expect(frequency).toHaveValue(edited)
   await expect(page.getByRole('button', { name: 'Save Invoice Settings' })).toBeVisible()
 })
+
+test('a settings request that never answers ends in "Check your connection", not an endless spinner', async ({ page }) => {
+  test.setTimeout(90_000)
+  await signIn(page)
+  // Swallow the request: no answer ever comes back.
+  await page.route('**/api/v1/tenants/settings/', () => {})
+
+  await openSettingsTab(page, 'Invoices')
+  await expect(page.getByText("Couldn't load the invoice settings")).toBeVisible({ timeout: 45_000 })
+  await expect(page.getByText('Check your connection and try again.')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Save Invoice Settings' })).toBeHidden()
+})

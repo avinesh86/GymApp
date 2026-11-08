@@ -1,5 +1,5 @@
 import axios from 'axios'
-import apiClient from './client'
+import apiClient, { REQUEST_TIMEOUT_MS } from './client'
 import type { AuthUser, TokenPair } from '../types'
 
 export interface LoginCredentials {
@@ -47,6 +47,7 @@ export async function login(credentials: LoginCredentials): Promise<LoginRespons
   // Step 2: fetch user profile using the new token directly (store not yet updated)
   const userRes = await axios.get<AuthUser>('/api/v1/users/me/', {
     headers: { Authorization: `Bearer ${access}` },
+    timeout: REQUEST_TIMEOUT_MS,
   })
 
   return { access, refresh, user: userRes.data }

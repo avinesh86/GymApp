@@ -1,4 +1,4 @@
-import apiClient from './client'
+import apiClient, { LONG_REQUEST_TIMEOUT_MS } from './client'
 import type { Invoice, PaginatedResponse } from '../types'
 
 export interface InvoiceFilters {
@@ -34,7 +34,10 @@ export async function rejectInvoice(id: number, notes: string): Promise<Invoice>
 }
 
 export async function downloadInvoicePdf(id: number): Promise<Blob> {
-  const response = await apiClient.get(`invoices/${id}/pdf/`, { responseType: 'blob' })
+  const response = await apiClient.get(`invoices/${id}/pdf/`, {
+    responseType: 'blob',
+    timeout: LONG_REQUEST_TIMEOUT_MS,
+  })
   return response.data
 }
 

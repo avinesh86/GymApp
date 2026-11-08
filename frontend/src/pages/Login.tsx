@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
+import { isAxiosError } from 'axios'
 import { login, isGymSelection, type Gym } from '../api/auth'
 import { useAuth } from '../hooks/useAuth'
 import { Button } from '../components/ui/Button'
@@ -56,8 +57,17 @@ export function LoginPage() {
       }
       storeLogin({ access: response.access, refresh: response.refresh }, response.user)
       navigate(afterLoginPath(location.state), { replace: true })
-    } catch {
-      setError('Invalid email or password. Please try again.')
+    } catch (err) {
+      // Only an answer from the server means the details were wrong; no
+      // answer (a timeout, a dropped connection) says nothing about them.
+      const status = isAxiosError(err) ? err.response?.status : undefined
+      if (status === 400 || status === 401) {
+        setError('Invalid email or password. Please try again.')
+      } else if (status === undefined) {
+        setError("Couldn't reach the server. Check your connection and try again.")
+      } else {
+        setError('Something went wrong on our end. Try again, and tell us if it keeps happening.')
+      }
       toast.error('Login failed')
     } finally {
       setIsLoading(false)

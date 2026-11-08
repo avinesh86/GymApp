@@ -5,6 +5,7 @@ import { Elements, CardElement, useStripe, useElements } from '@stripe/react-str
 import axios from 'axios'
 import toast from 'react-hot-toast'
 import { signupTenant } from '../../api/signup'
+import { REQUEST_TIMEOUT_MS } from '../../api/client'
 import { useAuth } from '../../hooks/useAuth'
 import type { AuthUser } from '../../types'
 
@@ -81,6 +82,7 @@ function SignupForm() {
 
       const userResponse = await axios.get<AuthUser>('/api/v1/users/me/', {
         headers: { Authorization: `Bearer ${result.access}` },
+        timeout: REQUEST_TIMEOUT_MS,
       })
       login({ access: result.access, refresh: result.refresh }, userResponse.data)
 
