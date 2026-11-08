@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -8,6 +9,58 @@ from apps.core.permissions import IsAdmin, IsOwner, TenantPermission
 from .models import Site, TenantBranding, TenantSettings
 from .serializers import SiteSerializer, TenantBrandingSerializer, TenantSettingsSerializer
 
+
+
+def guarded_patch(request, model, instance, serializer_class, **save_kwargs):
+    """Apply a PATCH unless it would overwrite a change made since the form opened.
+
+    Settings forms send, alongside the fields they change, ``expected``: the
+    values those fields had when the form opened. If any has changed since (by
+    another admin), nothing is saved and the answer is 409 with the fields that
+    changed and the current values, so the form can say so. The row is locked
+    while checking and saving, so a save can't slip in between the two.
+    Requests without ``expected`` save as before.
+    """
+    if not hasattr(request.data, "items"):
+        return Response(
+            {"non_field_errors": ["Send the settings as an object of field: value."]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    data = request.data.copy()
+    expected = data.pop("expected", None)
+    if isinstance(expected, list) and hasattr(request.data, "getlist"):
+        expected = expected[-1]  # a form-encoded body
+    if expected is not None and not isinstance(expected, dict):
+        return Response(
+            {"expected": ["Send the values the form opened with, as field: value."]},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    with transaction.atomic():
+        locked = model.objects.select_for_update().get(pk=instance.pk)
+        if expected:
+            current = serializer_class(locked).data
+            # Changed since the form opened, and not already set to what this
+            # save sends (then there's nothing to choose between).
+            changed = [
+                field
+                for field, value in expected.items()
+                if field in current
+                and current[field] != value
+                and not (field in data and current[field] == data[field])
+            ]
+            if changed:
+                return Response(
+                    {
+                        "detail": "These settings were changed by someone else since you opened them.",
+                        "changed": changed,
+                        "current": current,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+        serializer = serializer_class(locked, data=data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(**save_kwargs)
+    return Response(serializer_class(locked).data)
 
 class TenantSetupStatusView(APIView):
     """Returns whether the tenant has completed minimum setup (location + class type)."""
@@ -58,12 +111,12 @@ class CurrentWhatsAppAccountView(APIView):
         return Response(WhatsAppAccountSerializer(account).data)
 
     def patch(self, request):
+        from apps.whatsapp.models import WhatsAppAccount
         from apps.whatsapp.serializers import WhatsAppAccountSerializer
         account = self._get_or_create_account(request)
-        serializer = WhatsAppAccountSerializer(account, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save(updated_by=request.user)
-        return Response(WhatsAppAccountSerializer(account).data)
+        return guarded_patch(
+            request, WhatsAppAccount, account, WhatsAppAccountSerializer, updated_by=request.user
+        )
 
 
 class CurrentTenantBrandingView(APIView):
@@ -78,10 +131,7 @@ class CurrentTenantBrandingView(APIView):
 
     def patch(self, request):
         branding, _ = TenantBranding.objects.get_or_create(tenant=request.tenant)
-        serializer = TenantBrandingSerializer(branding, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
+        return guarded_patch(request, TenantBranding, branding, TenantBrandingSerializer)
 
 
 class CurrentTenantSettingsView(APIView):
@@ -96,10 +146,7 @@ class CurrentTenantSettingsView(APIView):
 
     def patch(self, request):
         settings_obj, _ = TenantSettings.objects.get_or_create(tenant=request.tenant)
-        serializer = TenantSettingsSerializer(settings_obj, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
+        return guarded_patch(request, TenantSettings, settings_obj, TenantSettingsSerializer)
 
 
 class TimetableDisplayView(APIView):

@@ -1,12 +1,13 @@
 import React, { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import toast from 'react-hot-toast'
+import { useQuery } from '@tanstack/react-query'
+import { format, parseISO } from 'date-fns'
 import { getTenantSettings, updateTenantSettings } from '../../../api/settings'
 import { Button } from '../../../components/ui/Button'
 import { Select } from '../../../components/ui/Select'
 import { Card } from '../../../components/ui/Card'
 import type { TenantSettings } from '../../../types'
 import { WhenLoaded } from './WhenLoaded'
+import { SaveConflictWarning, useGuardedSave, type ConflictField } from './SaveConflict'
 
 const FREQUENCY_OPTIONS = [
   { value: 'weekly',       label: 'Weekly' },
@@ -59,25 +60,47 @@ export function InvoicesTab() {
   )
 }
 
+const FIELDS: ConflictField<TenantSettings>[] = [
+  {
+    key: 'invoice_frequency',
+    label: 'Invoice Frequency',
+    show: (v) => FREQUENCY_OPTIONS.find((o) => o.value === v)?.label ?? String(v),
+  },
+  {
+    key: 'pay_period_anchor_date',
+    label: 'Pay Period Start Date',
+    show: (v) => (typeof v === 'string' && v ? format(parseISO(v), 'd MMM yyyy') : '(blank)'),
+  },
+  {
+    key: 'payroll_approval_required',
+    label: 'Payroll Approval Required',
+  },
+]
+
 function InvoicesForm({ settings }: { settings: TenantSettings }) {
-  const queryClient = useQueryClient()
   const [frequency, setFrequency] = useState<string>(settings.invoice_frequency)
   const [anchorDate, setAnchorDate] = useState(settings.pay_period_anchor_date ?? '')
   const [approvalRequired, setApprovalRequired] = useState(settings.payroll_approval_required)
 
-  const { mutate: save, isPending } = useMutation({
-    mutationKey: ['tenant', 'settings'],
-    mutationFn: () =>
-      updateTenantSettings({
-        invoice_frequency: frequency as never,
-        ...(anchorDate ? { pay_period_anchor_date: anchorDate } : {}),
-        payroll_approval_required: approvalRequired,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tenant', 'settings'] })
-      toast.success('Invoice settings saved')
+  const guard = useGuardedSave({
+    data: settings,
+    fields: FIELDS,
+    queryKey: ['tenant', 'settings'],
+    queryFn: getTenantSettings,
+    send: updateTenantSettings,
+    current: () => ({
+      invoice_frequency: frequency as TenantSettings['invoice_frequency'],
+      // A blank date isn't sent: clearing it isn't supported.
+      pay_period_anchor_date: anchorDate || undefined,
+      payroll_approval_required: approvalRequired,
+    }),
+    apply: (v) => {
+      if (v.invoice_frequency !== undefined) setFrequency(v.invoice_frequency)
+      if (v.pay_period_anchor_date !== undefined) setAnchorDate(v.pay_period_anchor_date ?? '')
+      if (v.payroll_approval_required !== undefined) setApprovalRequired(v.payroll_approval_required)
     },
-    onError: () => toast.error('Failed to save invoice settings'),
+    savedMessage: 'Invoice settings saved',
+    failedMessage: 'Failed to save invoice settings',
   })
 
   return (
@@ -116,7 +139,13 @@ function InvoicesForm({ settings }: { settings: TenantSettings }) {
             />
           </div>
 
-          <Button onClick={() => save()} isLoading={isPending} className="w-fit">
+          <SaveConflictWarning conflict={guard.conflict} onLoadTheirs={guard.loadTheirs} onSaveMine={guard.saveMine} />
+          <Button
+            onClick={() => void guard.save()}
+            isLoading={guard.isSaving}
+            disabled={guard.saveBlocked}
+            className="w-fit"
+          >
             Save Invoice Settings
           </Button>
         </div>

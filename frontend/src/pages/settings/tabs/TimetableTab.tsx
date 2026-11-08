@@ -1,12 +1,12 @@
 import React, { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import toast from 'react-hot-toast'
+import { useQuery } from '@tanstack/react-query'
 import { getTenantSettings, updateTenantSettings } from '../../../api/settings'
 import { Button } from '../../../components/ui/Button'
 import { Select } from '../../../components/ui/Select'
 import { Card } from '../../../components/ui/Card'
 import type { TenantSettings, TimetableTileStyle } from '../../../types'
 import { WhenLoaded } from './WhenLoaded'
+import { SaveConflictWarning, useGuardedSave, type ConflictField } from './SaveConflict'
 
 const DAY_OPTIONS = [
   { value: 0, label: 'Sunday' },
@@ -50,26 +50,36 @@ export function TimetableTab() {
   )
 }
 
+const FIELDS: ConflictField<TenantSettings>[] = [
+  { key: 'week_start_day', label: 'Week Start Day', show: (v) => DAY_OPTIONS.find((d) => d.value === v)?.label ?? String(v) },
+  { key: 'default_timetable_view', label: 'Default View', show: (v) => VIEW_OPTIONS.find((o) => o.value === v)?.label ?? String(v) },
+  { key: 'timetable_tile_style', label: 'Class Tile Colour', show: (v) => TILE_STYLES.find((o) => o.value === v)?.label ?? String(v) },
+]
+
 function TimetableForm({ settings }: { settings: TenantSettings }) {
-  const queryClient = useQueryClient()
   const [weekStart, setWeekStart] = useState(String(settings.week_start_day ?? 1))
   const [defaultView, setDefaultView] = useState<string>(settings.default_timetable_view ?? 'week')
   const [tileStyle, setTileStyle] = useState<TimetableTileStyle>(settings.timetable_tile_style ?? 'tint')
 
-  const { mutate: save, isPending } = useMutation({
-    mutationKey: ['tenant', 'settings'],
-    mutationFn: () =>
-      updateTenantSettings({
-        week_start_day: Number(weekStart),
-        default_timetable_view: defaultView as 'week' | 'list',
-        timetable_tile_style: tileStyle,
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tenant', 'settings'] })
-      queryClient.invalidateQueries({ queryKey: ['timetable-display'] })
-      toast.success('Timetable settings saved')
+  const guard = useGuardedSave({
+    data: settings,
+    fields: FIELDS,
+    queryKey: ['tenant', 'settings'],
+    queryFn: getTenantSettings,
+    send: updateTenantSettings,
+    current: () => ({
+      week_start_day: Number(weekStart),
+      default_timetable_view: defaultView as 'week' | 'list',
+      timetable_tile_style: tileStyle,
+    }),
+    apply: (v) => {
+      if (v.week_start_day !== undefined) setWeekStart(String(v.week_start_day))
+      if (v.default_timetable_view !== undefined) setDefaultView(v.default_timetable_view)
+      if (v.timetable_tile_style !== undefined) setTileStyle(v.timetable_tile_style)
     },
-    onError: () => toast.error('Failed to save settings'),
+    alsoRefresh: [['timetable-display']],
+    savedMessage: 'Timetable settings saved',
+    failedMessage: 'Failed to save settings',
   })
 
   return (
@@ -121,7 +131,13 @@ function TimetableForm({ settings }: { settings: TenantSettings }) {
               ))}
             </div>
           </fieldset>
-          <Button onClick={() => save()} isLoading={isPending} className="w-fit">
+          <SaveConflictWarning conflict={guard.conflict} onLoadTheirs={guard.loadTheirs} onSaveMine={guard.saveMine} />
+          <Button
+            onClick={() => void guard.save()}
+            isLoading={guard.isSaving}
+            disabled={guard.saveBlocked}
+            className="w-fit"
+          >
             Save Preferences
           </Button>
         </div>
