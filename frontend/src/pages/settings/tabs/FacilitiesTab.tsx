@@ -155,7 +155,7 @@ function FacilitiesForm({ settings }: { settings: TenantSettings }) {
         />
         <Switch
           label="Checklists"
-          description="Scheduled checks (opening, cleaning, safety) done by the roles below."
+          description="Scheduled checks (opening, cleaning, safety) done by the roles below. You set up the checklists in Facilities → Checklists."
           checked={checklists}
           onChange={setChecklists}
         />
@@ -165,7 +165,7 @@ function FacilitiesForm({ settings }: { settings: TenantSettings }) {
         <Card>
           <h3 className="text-sm font-semibold text-gray-900 mb-1">Who does checklists</h3>
           <p className="text-xs text-gray-500 mb-3">
-            These roles see checks due on their dashboard and can complete them. Instructors and PTs never see checklists.
+            These roles see checks due on their dashboard and can complete them. Instructors and PTs never see checklists. Each checklist can narrow this further: set that up in Facilities → Checklists.
           </p>
           <fieldset className="flex flex-wrap gap-x-5 gap-y-2">
             <legend className="sr-only">Roles that do checklists</legend>

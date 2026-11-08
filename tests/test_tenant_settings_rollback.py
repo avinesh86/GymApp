@@ -3,35 +3,65 @@ A release must be safe to roll back.
 
 deploy.sh rolls the code back (not the database) when a deploy fails after
 `migrate`, and a reverted release runs the old code against the new schema.
-Code from before the checklists release doesn't know the columns
-tenants.0012 added, so its INSERT leaves them out: gym signup creates a
-TenantSettings row exactly like that. Without a database-level default,
-MySQL's strict mode rejects the row and signup returns 500.
+Older code doesn't know the columns added since, so its INSERT leaves them
+out: gym signup creates a TenantSettings row exactly like that. Without a
+database-level default, MySQL's strict mode rejects the row and signup
+returns 500 (this happened with tenants.0012; 0013 fixed it).
+
+These tests aren't tied to one release. A new required column must have a
+``db_default`` (RUNBOOK §8 rule 5; `check_migration_defaults` enforces that in
+CI), and then:
+
+- an insert that leaves out every column with a ``db_default`` must work and
+  give the same values new code would;
+- every ``db_default`` a model declares must really exist in the database
+  (on MySQL 8 a JSON default needs a hand-written migration, see 0013).
 """
 
 import pytest
+from django.apps import apps
 from django.core.management import call_command
-from django.db import connection
+from django.db import connection, models
 
 from apps.tenants.models import TenantSettings
 from tests.factories import TenantFactory
 
-ADDED_BY_CHECKLISTS_RELEASE = {
-    "facilities_checklists_enabled",
-    "checklist_roles",
-    "facilities_alert_start_hour",
-    "facilities_alert_end_hour",
-}
+
+def _has_db_default(field):
+    return field.db_default is not models.NOT_PROVIDED
+
+
+def _db_default_fields(model):
+    return [f for f in model._meta.local_concrete_fields if _has_db_default(f)]
+
+
+def _expected_value(field):
+    """What new code would store when it leaves the column to its default:
+    the Python ``default`` if there is one, else the ``db_default`` value.
+    None for a db_default expression (e.g. Now()) with nothing to compare."""
+    if field.has_default():
+        return field.get_default()
+    if hasattr(field.db_default, "resolve_expression"):
+        return getattr(field.db_default, "value", None)
+    return field.db_default
+
+
+def test_expected_value_handles_db_default_without_a_python_default():
+    # check_migration_defaults suggests db_default=...; a field with only
+    # that must still be compared by value, not as a DatabaseDefault object.
+    assert _expected_value(models.IntegerField(db_default=5)) == 5
+    assert _expected_value(models.IntegerField(default=7, db_default=7)) == 7
+    assert _expected_value(models.JSONField(db_default=["a"])) == ["a"]
 
 
 def _insert_like_old_code(tenant):
-    """INSERT a settings row the way pre-checklists code would: every
-    column it knew about, none of the ones added since."""
+    """INSERT a settings row the way older code would: every column except
+    the ones a newer release added (all of which have a db_default)."""
     row = TenantSettings(tenant=tenant)
     fields = [
         f
         for f in TenantSettings._meta.local_concrete_fields
-        if not f.primary_key and f.name not in ADDED_BY_CHECKLISTS_RELEASE
+        if not f.primary_key and not _has_db_default(f)
     ]
     columns = ", ".join(connection.ops.quote_name(f.column) for f in fields)
     placeholders = ", ".join(["%s"] * len(fields))
@@ -44,40 +74,79 @@ def _insert_like_old_code(tenant):
 
 
 @pytest.mark.django_db
-def test_code_from_before_checklists_can_still_create_gym_settings():
+def test_older_code_can_still_create_gym_settings():
+    left_out = _db_default_fields(TenantSettings)
+    # The checklist release's four columns at least; more as releases add them.
+    assert {f.name for f in left_out} >= {
+        "facilities_checklists_enabled",
+        "checklist_roles",
+        "facilities_alert_start_hour",
+        "facilities_alert_end_hour",
+    }
     tenant = TenantFactory()
     TenantSettings.objects.filter(tenant=tenant).delete()
 
     _insert_like_old_code(tenant)
 
-    settings = TenantSettings.objects.get(tenant=tenant)
-    assert settings.facilities_checklists_enabled is True
-    assert settings.checklist_roles == ["owner", "admin", "gym_manager", "team_leader"]
-    assert settings.facilities_alert_start_hour == 9
-    assert settings.facilities_alert_end_hour == 17
+    saved = TenantSettings.objects.get(tenant=tenant)
+    for field in left_out:
+        expected = _expected_value(field)
+        if expected is None:
+            continue
+        assert getattr(saved, field.attname) == expected, (
+            f"{field.name}: the database default differs from the model's default"
+        )
+
+
+def _column_default(table, column):
+    """The column's default as the database reports it, or None."""
+    with connection.cursor() as cursor:
+        if connection.vendor == "sqlite":
+            cursor.execute(f"PRAGMA table_info({connection.ops.quote_name(table)})")
+            rows = {row[1]: row[4] for row in cursor.fetchall()}
+            assert column in rows, f"{table}.{column} not found in the database"
+            return rows[column]
+        cursor.execute(
+            "SELECT COLUMN_DEFAULT FROM information_schema.COLUMNS "
+            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = %s AND COLUMN_NAME = %s",
+            [table, column],
+        )
+        row = cursor.fetchone()
+        assert row is not None, f"{table}.{column} not found in the database"
+        return row[0]
+
+
+@pytest.mark.django_db
+def test_every_db_default_exists_in_the_database():
+    missing = [
+        f"{model._meta.label}.{field.name}"
+        for model in apps.get_models()
+        if model._meta.managed and not model._meta.proxy
+        for field in _db_default_fields(model)
+        if _column_default(model._meta.db_table, field.column) is None
+    ]
+    assert missing == [], "db_default declared on the model but not in the database"
+
+
+# The defaults tenants.0013 added. Inherently about that one migration: its
+# reverse must put back exactly what 0012 left.
+GIVEN_BY_0013 = {
+    "facilities_checklists_enabled",
+    "checklist_roles",
+    "facilities_alert_start_hour",
+    "facilities_alert_end_hour",
+}
 
 
 def _column_has_default(column):
-    with connection.cursor() as cursor:
-        if connection.vendor == "sqlite":
-            cursor.execute("PRAGMA table_info(tenants_settings)")
-            return (
-                next(row[4] for row in cursor.fetchall() if row[1] == column)
-                is not None
-            )
-        cursor.execute(
-            "SELECT COLUMN_DEFAULT FROM information_schema.COLUMNS "
-            "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'tenants_settings' AND COLUMN_NAME = %s",
-            [column],
-        )
-        return cursor.fetchone()[0] is not None
+    return _column_default("tenants_settings", column) is not None
 
 
 @pytest.mark.django_db(transaction=True)
 def test_migration_0013_reverses_cleanly():
     """Undoing 0013 must really remove the defaults, or the database and
     Django's idea of it drift apart."""
-    assert all(_column_has_default(c) for c in ADDED_BY_CHECKLISTS_RELEASE)
+    assert all(_column_has_default(c) for c in GIVEN_BY_0013)
     # What 0012 itself leaves: on MySQL, Django keeps the default it gives a
     # JSON column, so checklist_roles has one there even before 0013.
     kept_by_0012 = (
@@ -87,8 +156,8 @@ def test_migration_0013_reverses_cleanly():
     )
     try:
         call_command("migrate", "tenants", "0012", verbosity=0)
-        for column in ADDED_BY_CHECKLISTS_RELEASE:
+        for column in GIVEN_BY_0013:
             assert _column_has_default(column) == (column in kept_by_0012), column
     finally:
         call_command("migrate", verbosity=0)
-    assert all(_column_has_default(c) for c in ADDED_BY_CHECKLISTS_RELEASE)
+    assert all(_column_has_default(c) for c in GIVEN_BY_0013)

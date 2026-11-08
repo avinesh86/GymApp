@@ -278,6 +278,9 @@ to deploy a specific version.
 | Deploy rolls back but the site looks fine | Health check was refused with "DisallowedHost" | Check `ALLOWED_HOSTS` in the server's `.env` (see `README.md` → Deploying) |
 | Times or dates off by several hours | Timezone: the database stores UTC, the gym is not UTC | Ask Claude to check the gym's timezone handling on that page |
 | CI fails on "Check for missing migrations" | A model changed without a migration | Ask Claude to create the migration |
+| CI fails on "Check new required columns have a database default" | A new migration adds a required column without `db_default`, so a rollback would break inserts (§8 rule 5) | Ask Claude to add `db_default` to the field and a migration for it |
+| CI fails on "MySQL Tests" but Python Tests passes | A migration or query works on SQLite but not on MySQL 8, which production runs | Ask Claude to fix it for MySQL; Python Tests uses SQLite and can't see this. If the log shows the MySQL service didn't start or the image couldn't be downloaded, it's not the code: **Re-run failed jobs** |
+| A merge to `main` didn't deploy | Deploy only runs when every CI job passes, including **MySQL Tests** | Fix the failing job, or if it failed for reasons outside the code, re-run it; the deploy then starts |
 | 500 on every page of one area (e.g. Invoices), even with no data | A migration was recorded as applied but its SQL never ran, so a table or column is missing | The deploy fails and lists what's missing (`check_db_schema`). **Don't** restore the backup: the database is behind the code. Check the list, then **Actions → Deploy → Run workflow** with **Repair missing tables/columns** ticked. It only adds; anything it can't add safely is listed and must be added by hand (`python manage.py sqlmigrate <app> <migration>` shows the SQL). Note: the check covers tables and columns only, not indexes or column types. |
 | Frontend change not showing after deploy | Browser cached the old version | Hard refresh (Ctrl+Shift+R / Cmd+Shift+R) |
 
@@ -331,6 +334,21 @@ if each change adds its own.
    insert fails. `tests/test_tenant_settings_rollback.py` shows how to test
    it. JSON columns on MySQL 8 need a hand-written migration (see
    `tenants/0013`).
+   **CI checks this:** `python manage.py check_migration_defaults` fails
+   when a migration not yet on `main` adds a required column (not null, no
+   `db_default`) to a model that already exists, or makes an existing column
+   required. New tables are fine (older code never writes to them), and so
+   is a column a later migration in the same release gives a `db_default`.
+   If a column truly can't have one, list it on the migration as
+   `allow_without_db_default = {"model.field": "reason"}` and say why in the
+   pull request. It can't see columns added with `RunSQL`, edits to a
+   migration that's already on `main`, removed and renamed columns (older
+   code still uses the old name), or a model deleted and re-created under
+   the same name: check those by hand. Only squash migrations that are
+   already on `main`; the check refuses a squash that includes unreleased
+   ones. A migration file that's moved or renamed counts as new. CI also runs the
+   migrations and the rollback tests on MySQL 8 (the **MySQL Tests** job),
+   since SQLite accepts some changes production's MySQL rejects.
 
 ### Which kind of test
 

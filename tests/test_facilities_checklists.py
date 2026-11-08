@@ -731,6 +731,32 @@ def test_dashboard_card_stays_hidden_when_checklists_are_switched_off(tenant, ow
     assert _client(owner_user).get("/api/v1/facilities/config/").data["has_checklists"] is False
 
 
+def test_setup_prompt_counts_paused_checklists_as_set_up(tenant, owner_user):
+    """The dashboard's "Set up a checklist" prompt is for gyms with none at
+    all: a gym that paused its checklists has set them up."""
+    config_url = "/api/v1/facilities/config/"
+    client = _client(owner_user)
+    assert client.get(config_url).data["has_any_checklists"] is False
+
+    t = _template(tenant, is_active=False)
+    data = client.get(config_url).data
+    assert data["has_checklists"] is False  # nothing active
+    assert data["has_any_checklists"] is True
+
+    ChecklistTemplate.objects.filter(pk=t.pk).update(is_deleted=True)
+    assert client.get(config_url).data["has_any_checklists"] is False
+
+    _template(tenant)
+    _settings(tenant, facilities_checklists_enabled=False)
+    assert client.get(config_url).data["has_any_checklists"] is False
+
+
+def test_setup_prompt_flag_ignores_other_gyms_checklists(tenant, other_tenant, owner_user):
+    _settings(other_tenant)
+    _template(other_tenant)
+    assert _client(owner_user).get("/api/v1/facilities/config/").data["has_any_checklists"] is False
+
+
 def test_dashboard_card_only_for_people_with_a_checklist_of_their_own(tenant, team_leader_user, manager_user):
     """A team leader at a gym whose only checklist is for gym managers would
     otherwise be told "All checks done" every day about checks that aren't theirs."""
@@ -742,3 +768,91 @@ def test_dashboard_card_only_for_people_with_a_checklist_of_their_own(tenant, te
     assert leader["has_my_checklists"] is False
 
     assert _client(manager_user).get(config_url).data["has_my_checklists"] is True
+
+
+# ─── Overdue count, for the pause warning ────────────────────────────────────
+
+
+def _rows(data):
+    return data["results"] if isinstance(data, dict) else data
+
+
+def _checklists(client):
+    return {c["name"]: c for c in _rows(client.get("/api/v1/facilities/checklists/").data)}
+
+
+def test_checklist_list_counts_its_open_overdue_checks(tenant, other_tenant, owner_user):
+    """Pausing a checklist drops these from the dashboard and alerts, so the
+    edit form warns about them. Done, not-yet-due and removed checks don't
+    count, and neither does another gym's checklist."""
+    opening = _template(tenant, name="Opening check")  # daily, due 06:00 from the 1st
+    _template(tenant, name="Closing check", due_time=time(22, 0), start_date=date(2026, 11, 3))
+    _settings(other_tenant)
+    _template(other_tenant, name="Opening check")
+    with _at(datetime(2026, 11, 3, 7, 0, tzinfo=NZ)):
+        create_due_runs(tenant)
+        create_due_runs(other_tenant)
+        runs = list(ChecklistRun.objects.filter(template=opening).order_by("due_date"))
+        assert [r.due_date.day for r in runs] == [1, 2, 3]
+        runs[0].completed_at = datetime(2026, 11, 1, 5, 0, tzinfo=NZ)  # done
+        runs[0].save()
+        runs[1].is_deleted = True  # removed
+        runs[1].save()
+        listed = _checklists(_client(owner_user))
+
+    assert listed["Opening check"]["open_overdue_count"] == 1  # only the 3rd
+    assert listed["Closing check"]["open_overdue_count"] == 0  # due at 10pm
+    assert len(listed) == 2  # not the other gym's
+
+
+def test_checklist_detail_and_update_give_a_current_overdue_count(tenant, owner_user):
+    t = _template(tenant)
+    url = f"/api/v1/facilities/checklists/{t.id}/"
+    owner = _client(owner_user)
+    with _at(datetime(2026, 11, 3, 7, 0, tzinfo=NZ)):
+        create_due_runs(tenant)
+        assert owner.get(url).data["open_overdue_count"] == 3
+        # Pausing deletes today's undone check; the response counts again
+        # rather than repeating the count from before the change.
+        response = owner.patch(url, {"is_active": False}, format="json")
+    assert response.status_code == 200, response.data
+    assert response.data["open_overdue_count"] == 2
+
+
+def test_new_checklist_reports_its_overdue_count(tenant, owner_user):
+    with _at(datetime(2026, 11, 3, 7, 0, tzinfo=NZ)):
+        response = _client(owner_user).post(
+            "/api/v1/facilities/checklists/",
+            {
+                "name": "Pool check",
+                "frequency": "daily",
+                "start_date": "2026-11-03",
+                "due_time": "06:00",
+                "items": [{"text": "Chlorine level"}],
+            },
+            format="json",
+        )
+    assert response.status_code == 201, response.data
+    assert response.data["open_overdue_count"] == 1  # today's, set up after 6am
+
+
+def test_overdue_count_cannot_be_set_by_the_client(tenant, owner_user):
+    t = _template(tenant)
+    response = _client(owner_user).patch(
+        f"/api/v1/facilities/checklists/{t.id}/", {"open_overdue_count": 99}, format="json"
+    )
+    assert response.status_code == 200
+    assert response.data["open_overdue_count"] != 99
+
+
+def test_checklist_list_stays_cheap_with_many_checklists(tenant, owner_user, django_assert_max_num_queries):
+    for i in range(10):
+        _template(tenant, name=f"Check {i}")
+    client = _client(owner_user)
+    with _at(datetime(2026, 11, 8, 7, 0, tzinfo=NZ)):
+        create_due_runs(tenant)
+        with django_assert_max_num_queries(12):
+            data = client.get("/api/v1/facilities/checklists/").data
+    rows = _rows(data)
+    assert len(rows) == 10
+    assert all(r["open_overdue_count"] == 8 for r in rows)  # the 1st to the 8th
