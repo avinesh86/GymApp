@@ -83,8 +83,16 @@ test.describe('on the timetable, with the browser\'s clock on a Sunday evening',
     expect(classType, 'a class type should have been selected').not.toBe('')
     const tomorrow = upcomingClassDate(now)
     await page.getByLabel('Date').fill(tomorrow)
+    // Saving refetches the week on screen (the Sunday's). Wait for that copy,
+    // fetched after the class exists, so the "not in this week" check below is
+    // about current data, not a list from before the class was added.
+    const monday = gymDate(daysToSunday + 12 * 7 - 6)
+    const weekAfterSave = page.waitForResponse(
+      (r) => r.url().includes('/timetable/events/week/') && r.url().includes(`from=${monday}`) && r.ok(),
+    )
     await page.getByRole('button', { name: /^Add Class$/ }).last().click()
     await expect(page.getByText(/Failed to/i)).toBeHidden()
+    await weekAfterSave
 
     // Come back the way a person would: the timetable opens on this week,
     // which does not have it.
@@ -92,8 +100,6 @@ test.describe('on the timetable, with the browser\'s clock on a Sunday evening',
     await goToSection(page, 'Timetable')
     const card = page.locator('p', { hasText: classType }).first()
     await expect(page.getByText(weekLabel(sunday), { exact: true })).toBeVisible()
-    // The colour key renders only once the week's classes have loaded, so the
-    // next check cannot pass just because nothing has arrived yet.
     await expect(page.getByLabel('Viability colours')).toBeVisible()
     await expect(card, 'a Monday class is not in the week ending Sunday').toBeHidden()
 
