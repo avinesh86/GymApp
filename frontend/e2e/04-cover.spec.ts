@@ -16,8 +16,10 @@ import { goToSection, openFirstClass, showWeekOf, signIn, upcomingClassDate } fr
  * Opens the class 03 put on the timetable.
  *
  * It is tomorrow's, which on a Sunday is in next week, so move to its week
- * first. If the gym's midnight passes between 03 and here, this looks a day
- * late — a window of the minutes between the two files, once a week.
+ * first. This works the date out again rather than reusing 03's, so if the
+ * gym's midnight between Saturday and Sunday passes between 03 and here, the
+ * class is on Sunday but this looks in next week and fails. That is a window
+ * of the few minutes between the two files, once a week.
  */
 async function openUpcomingClass(page: Page) {
   await showWeekOf(page, upcomingClassDate())

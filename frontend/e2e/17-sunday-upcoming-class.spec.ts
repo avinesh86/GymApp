@@ -92,6 +92,9 @@ test.describe('on the timetable, with the browser\'s clock on a Sunday evening',
     await goToSection(page, 'Timetable')
     const card = page.locator('p', { hasText: classType }).first()
     await expect(page.getByText(weekLabel(sunday), { exact: true })).toBeVisible()
+    // The colour key renders only once the week's classes have loaded, so the
+    // next check cannot pass just because nothing has arrived yet.
+    await expect(page.getByLabel('Viability colours')).toBeVisible()
     await expect(card, 'a Monday class is not in the week ending Sunday').toBeHidden()
 
     await showWeekOf(page, tomorrow, now)

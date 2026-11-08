@@ -22,6 +22,15 @@ npm run e2e:ui           # watch it happen
 npm run e2e:report       # last HTML report
 ```
 
+## Dates
+
+The gym is in Pacific/Auckland; CI runs Node in UTC, which is a different day
+for half of every Auckland day. Pick dates with `gymDate()` (or
+`upcomingClassDate()`) from `helpers.ts`, never `new Date()` in the spec. The
+timetable opens on the gym's current Monday–Sunday week, so to reach a class in
+another week use `showWeekOf()`, which clicks the week arrows. "Tomorrow" on a
+Sunday is next week.
+
 ## Order matters
 
 Files run one at a time, in name order, and build on each other: a class needs

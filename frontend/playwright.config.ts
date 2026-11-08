@@ -28,9 +28,10 @@ export default defineConfig({
   use: {
     baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:5173',
     // The app shows every date in the gym's timezone (seed_e2e_owner sets
-    // Pacific/Auckland). Specs work out "today" and "next week" from the
-    // browser's clock, so the browser sits in the gym's zone, as it does for
-    // someone at the gym. 13-gym-timezone moves it elsewhere on purpose.
+    // Pacific/Auckland), and the browser sits in the gym's zone, as it does
+    // for someone at the gym. 13-gym-timezone moves it elsewhere on purpose.
+    // Specs pick dates with gymDate() in e2e/helpers.ts, in the gym's zone —
+    // not new Date() in this process, which is UTC on CI.
     timezoneId: process.env.E2E_TIMEZONE ?? 'Pacific/Auckland',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',

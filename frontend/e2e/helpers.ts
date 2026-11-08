@@ -1,4 +1,5 @@
 import { expect, type Page } from '@playwright/test'
+import { format } from 'date-fns'
 
 /**
  * Shared moves for the end-to-end journey.
@@ -144,12 +145,17 @@ export function weeksFromThisWeek(date: string, now: Date = new Date()): number 
   return Math.round((mondayOf(date).getTime() - mondayOf(gymDate(0, now)).getTime()) / (7 * DAY_MS))
 }
 
-/** The timetable's heading for the week holding `date`, e.g. "Nov 2026 · 9–15 Nov". */
+/**
+ * The timetable's heading for the week holding `date`, e.g. "Nov 2026 · 9–15 Nov",
+ * built with the same date-fns patterns as TimetablePage.
+ */
 export function weekLabel(date: string): string {
   const monday = mondayOf(date)
   const sunday = new Date(monday.getTime() + 6 * DAY_MS)
-  const month = (d: Date) => d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' })
-  return `${month(monday)} ${monday.getUTCFullYear()} · ${monday.getUTCDate()}–${sunday.getUTCDate()} ${month(sunday)}`
+  // date-fns formats in this process's zone; local-midnight copies of the UTC
+  // days keep the calendar dates whatever that zone is.
+  const local = (d: Date) => new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+  return `${format(local(monday), 'MMM yyyy')} · ${format(local(monday), 'd')}–${format(local(sunday), 'd MMM')}`
 }
 
 /**
