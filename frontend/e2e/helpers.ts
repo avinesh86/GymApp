@@ -95,13 +95,18 @@ export async function expectNoErrorToast(page: Page) {
 
 
 /**
- * The day the shared test class is scheduled for: tomorrow, so it is upcoming
- * (a candidate for cover rather than for attendance).
+ * The day the shared test class is scheduled for: tomorrow at the gym, so it
+ * is upcoming (a candidate for cover rather than for attendance).
  *
- * One definition for every file that looks for that class, so they all agree
- * on the date it was given.
+ * Fixed once per run in global-setup.ts, so every file looks for the class on
+ * the day it was created, even if the run crosses midnight.
  */
 export function upcomingClassDate(): Date {
+  const fixed = process.env.E2E_CLASS_DATE
+  if (fixed) {
+    const [year, month, day] = fixed.split('-').map(Number)
+    return new Date(year, month - 1, day)
+  }
   const date = new Date()
   date.setDate(date.getDate() + 1)
   return date
@@ -116,8 +121,11 @@ export function isoDay(date: Date): string {
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 /**
- * Moves the timetable's week view forward, by clicking Next week, until it
- * shows `date`.
+ * Moves the timetable's week view forward a week, by clicking Next week, if
+ * that's where `date` is.
+ *
+ * At most one click: the dates the tests use are this week or next, and a
+ * timetable that opened on the wrong week should fail, not be walked past.
  *
  * The timetable opens on the current week. A class tomorrow is in next week's
  * view whenever today is the last day of the week (a Sunday, with weeks
@@ -133,7 +141,7 @@ export async function showWeekOf(page: Page, date: Date) {
     .filter({ has: page.locator('p', { hasText: new RegExp(`^${date.getDate()}$`) }) })
   // The range shown beside the arrows, e.g. "Nov 2026 · 2–8 Nov".
   const range = page.getByText(/ · \d+–\d+ /)
-  for (let step = 0; step < 2 && !(await target.isVisible()); step++) {
+  if (!(await target.isVisible())) {
     const before = await range.textContent()
     await page.getByRole('button', { name: 'Next week' }).click()
     // Wait for the next week to be drawn before checking again: the range

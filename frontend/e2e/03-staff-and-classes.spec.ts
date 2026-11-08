@@ -109,9 +109,9 @@ test.describe.serial('staff and the timetable', () => {
       (await page.getByLabel('Class Type').locator('option:checked').textContent())?.trim() ?? ''
     expect(scheduledClassType, 'a class type should have been selected').not.toBe('')
 
-    // Tomorrow: upcoming, so it is a candidate for cover rather than for
-    // attendance. From its calendar fields: toISOString() is UTC's, a day
-    // behind for the first half of an Auckland day.
+    // Tomorrow at the gym: upcoming, so it is a candidate for cover rather
+    // than for attendance. The tests run in the gym's timezone
+    // (playwright.config.ts), so its calendar fields are the gym's.
     await page.getByLabel('Date').fill(isoDay(upcomingClassDate()))
 
     await page.getByRole('button', { name: /^Add Class$/ }).last().click()
