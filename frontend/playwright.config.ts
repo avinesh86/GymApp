@@ -1,6 +1,18 @@
 import { defineConfig, devices } from '@playwright/test'
 
 /**
+ * The gym's timezone: the browser runs in it, and so does the test code.
+ *
+ * Specs work out "today", "tomorrow" and "next week" with Node's Date. If
+ * Node were on another zone (CI runners are on UTC) its calendar would be a
+ * day behind the gym's for half of every Auckland day, and a test would look
+ * for a class in a different week from the one it created it in.
+ * 13-gym-timezone moves the browser elsewhere on purpose and names its zones.
+ */
+const GYM_TIMEZONE = process.env.E2E_TIMEZONE ?? 'Pacific/Auckland'
+process.env.TZ = GYM_TIMEZONE
+
+/**
  * End-to-end tests, driven the way a person drives the app.
  *
  * Tests navigate by clicking menu items and buttons, never by visiting a URL
@@ -31,7 +43,7 @@ export default defineConfig({
     // Pacific/Auckland). Specs work out "today" and "next week" from the
     // browser's clock, so the browser sits in the gym's zone, as it does for
     // someone at the gym. 13-gym-timezone moves it elsewhere on purpose.
-    timezoneId: process.env.E2E_TIMEZONE ?? 'Pacific/Auckland',
+    timezoneId: GYM_TIMEZONE,
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
