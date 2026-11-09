@@ -8,10 +8,12 @@ import { useFacilitiesConfig } from '../../hooks/useFacilitiesConfig'
 import { EquipmentTab } from './EquipmentTab'
 import { MaintenanceTab } from './MaintenanceTab'
 import { ChecklistsTab } from './ChecklistsTab'
+import { LicencesTab } from './LicencesTab'
+import { SubscriptionsTab } from './SubscriptionsTab'
 
-type TabKey = 'maintenance' | 'checklists' | 'equipment'
+type TabKey = 'maintenance' | 'checklists' | 'equipment' | 'licences' | 'subscriptions'
 
-const TAB_KEYS: TabKey[] = ['maintenance', 'checklists', 'equipment']
+const TAB_KEYS: TabKey[] = ['maintenance', 'checklists', 'equipment', 'licences', 'subscriptions']
 
 /** Facilities: owner, admin, gym manager, team leader and payroll. */
 export function FacilitiesPage() {
@@ -34,6 +36,8 @@ export function FacilitiesPage() {
     ...(config.maintenance_enabled ? [{ key: 'maintenance' as const, label: 'Maintenance' }] : []),
     ...(config.checklists_enabled ? [{ key: 'checklists' as const, label: 'Checklists' }] : []),
     ...(config.equipment_enabled ? [{ key: 'equipment' as const, label: 'Equipment' }] : []),
+    ...(config.licences_enabled ? [{ key: 'licences' as const, label: 'Licences' }] : []),
+    ...(config.subscriptions_enabled ? [{ key: 'subscriptions' as const, label: 'Subscriptions' }] : []),
   ]
   const active = tabs.find((t) => t.key === chosen)?.key ?? tabs[0]?.key
   const siteId = site ? Number(site) : ''
@@ -45,7 +49,7 @@ export function FacilitiesPage() {
       {tabs.length === 0 ? (
         <EmptyState
           title="Facilities is switched off"
-          description="Turn on maintenance tracking, checklists or equipment inventory in Settings → Facilities."
+          description="Turn on maintenance, checklists, equipment, licences or subscriptions in Settings → Facilities."
         />
       ) : (
         <>
@@ -84,6 +88,8 @@ export function FacilitiesPage() {
           {active === 'maintenance' && <MaintenanceTab site={siteId} />}
           {active === 'checklists' && <ChecklistsTab site={siteId} />}
           {active === 'equipment' && <EquipmentTab site={siteId} />}
+          {active === 'licences' && <LicencesTab site={siteId} />}
+          {active === 'subscriptions' && <SubscriptionsTab site={siteId} />}
         </>
       )}
     </div>

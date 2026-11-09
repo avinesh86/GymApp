@@ -10,6 +10,8 @@ vi.mock('../../hooks/useFacilitiesConfig', () => ({ useFacilitiesConfig: vi.fn()
 vi.mock('./MaintenanceTab', () => ({ MaintenanceTab: () => <p>Maintenance content</p> }))
 vi.mock('./ChecklistsTab', () => ({ ChecklistsTab: () => <p>Checklists content</p> }))
 vi.mock('./EquipmentTab', () => ({ EquipmentTab: () => <p>Equipment content</p> }))
+vi.mock('./LicencesTab', () => ({ LicencesTab: () => <p>Licences content</p> }))
+vi.mock('./SubscriptionsTab', () => ({ SubscriptionsTab: () => <p>Subscriptions content</p> }))
 
 function Where() {
   const location = useLocation()
@@ -22,6 +24,8 @@ function renderPage(url: string) {
       maintenance_enabled: true,
       checklists_enabled: true,
       equipment_enabled: true,
+      licences_enabled: true,
+      subscriptions_enabled: true,
       sites: [],
     } as unknown as FacilitiesConfig,
     isLoading: false,
@@ -63,5 +67,17 @@ describe('Facilities tabs', () => {
 
     expect(screen.getByText('Equipment content')).toBeInTheDocument()
     expect(screen.getByTestId('where')).toHaveTextContent('?tab=equipment')
+  })
+
+  it('opens Licences and Subscriptions when clicked, and from the address', async () => {
+    renderPage('/facilities')
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Licences' }))
+    expect(screen.getByText('Licences content')).toBeInTheDocument()
+    expect(screen.getByTestId('where')).toHaveTextContent('?tab=licences')
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Subscriptions' }))
+    expect(screen.getByText('Subscriptions content')).toBeInTheDocument()
+    expect(screen.getByTestId('where')).toHaveTextContent('?tab=subscriptions')
   })
 })

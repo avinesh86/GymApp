@@ -52,3 +52,27 @@ class CanManageChecklists(TenantPermission):
         if request.method in ("GET", "HEAD", "OPTIONS"):
             return request.user.role in FACILITIES_ROLES
         return request.user.role in ("owner", "admin", "gym_manager")
+
+
+class LicencesEnabled(_FeatureOn):
+    flag = "licences_enabled"
+    message = "Licences are turned off in Settings."
+
+
+class SubscriptionsEnabled(_FeatureOn):
+    flag = "subscriptions_enabled"
+    message = "Subscriptions are turned off in Settings."
+
+
+class CanManageRecords(TenantPermission):
+    """Every Facilities role reads licences and subscriptions (costs too);
+    owner, admin and gym manager add and change them."""
+
+    message = "Only the owner, admins and gym managers can change these."
+
+    def has_permission(self, request, view):
+        if not super().has_permission(request, view):
+            return False
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return request.user.role in FACILITIES_ROLES
+        return request.user.role in ("owner", "admin", "gym_manager")
