@@ -176,6 +176,9 @@ class TenantSettings(models.Model):
     # inclusive, end exclusive): 9 and 17 mean 9am–5pm.
     facilities_alert_start_hour = models.PositiveSmallIntegerField(default=9, db_default=9)
     facilities_alert_end_hour = models.PositiveSmallIntegerField(default=17, db_default=17)
+    # Licences (music, WOF, pool...) and subscriptions, with renewal reminders.
+    facilities_licences_enabled = models.BooleanField(default=True, db_default=True)
+    facilities_subscriptions_enabled = models.BooleanField(default=True, db_default=True)
     # Outgoing email configuration for notifications
     notification_from_email = models.EmailField(blank=True, default="")
     notification_from_name = models.CharField(max_length=100, blank=True, default="")

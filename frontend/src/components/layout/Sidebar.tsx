@@ -97,7 +97,7 @@ export function Sidebar({ mobileOpen, onMobileClose }: SidebarProps) {
         {NAV_ITEMS.filter((item) => {
           if (item.permission && !can(item.permission)) return false
           if (item.roles && (!user || !item.roles.includes(user.role))) return false
-          if (item.feature === 'facilities' && !(facilities?.equipment_enabled || facilities?.maintenance_enabled || facilities?.checklists_enabled)) return false
+          if (item.feature === 'facilities' && !(facilities?.equipment_enabled || facilities?.maintenance_enabled || facilities?.checklists_enabled || facilities?.licences_enabled || facilities?.subscriptions_enabled)) return false
           // Staff who can't open Facilities only. Managers work faults from
           // Facilities → Maintenance, so a second menu item would be clutter.
           if (item.feature === 'fault_board' && (!facilities?.fault_reporting_enabled || facilities.can_manage)) return false

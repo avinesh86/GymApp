@@ -1,4 +1,9 @@
 import type {
+  BillingCycle,
+  LicenceKind,
+  LicenceStatus,
+  SubscriptionCategory,
+  SubscriptionStatus,
   ChecklistCategory,
   ChecklistFrequency,
   ChecklistRunStatus,
@@ -88,6 +93,46 @@ export function describeSchedule(t: { frequency: ChecklistFrequency; weekdays: n
   if (t.frequency === 'weekly') return `Weekly on ${t.weekdays.map((d) => WEEKDAYS[d]).join(', ')}, ${by}`
   if (t.frequency === 'every_n_days') return `Every ${t.interval_days} days, ${by}`
   return `${FREQUENCY[t.frequency]}, ${by}`
+}
+
+export const LICENCE_KIND: Record<LicenceKind, string> = {
+  music: 'Music licence',
+  building_wof: 'Building WOF',
+  pool_health: 'Pool / health certificate',
+  fire: 'Fire inspection',
+  food: 'Food licence',
+  alcohol: 'Alcohol licence',
+  group_fitness: 'Group Fitness',
+  operations: 'Operations',
+  other: 'Other',
+}
+
+export const LICENCE_STATUS: Record<LicenceStatus, { label: string; variant: BadgeVariant }> = {
+  valid: { label: 'Valid', variant: 'green' },
+  expiring: { label: 'Expiring soon', variant: 'yellow' },
+  expired: { label: 'Expired', variant: 'red' },
+  no_expiry: { label: 'No expiry', variant: 'grey' },
+}
+
+export const SUBSCRIPTION_CATEGORY: Record<SubscriptionCategory, string> = {
+  software: 'Software',
+  service: 'Service',
+  utilities: 'Utilities',
+  equipment_lease: 'Equipment lease',
+  other: 'Other',
+}
+
+export const BILLING_CYCLE: Record<BillingCycle, string> = {
+  monthly: 'Monthly',
+  quarterly: 'Quarterly',
+  yearly: 'Yearly',
+}
+
+export const SUBSCRIPTION_STATUS: Record<SubscriptionStatus, { label: string; variant: BadgeVariant }> = {
+  active: { label: 'Active', variant: 'green' },
+  renewing: { label: 'Renewing soon', variant: 'yellow' },
+  lapsed: { label: 'Lapsed', variant: 'red' },
+  cancelled: { label: 'Cancelled', variant: 'grey' },
 }
 
 export function options<K extends string>(map: Record<K, string | { label: string }>) {

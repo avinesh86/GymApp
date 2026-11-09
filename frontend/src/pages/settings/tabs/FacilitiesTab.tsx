@@ -90,8 +90,10 @@ const FIELDS: ConflictField<TenantSettings>[] = [
   { key: 'checklist_roles', label: 'Who does checklists', show: roleNames },
   { key: 'facilities_alert_roles', label: 'Who hears about new faults', show: roleNames },
   { key: 'facilities_alert_email', label: 'Also send alerts by email' },
-  { key: 'facilities_alert_start_hour', label: 'Overdue alerts from', show: (v) => hourLabel(Number(v)) },
-  { key: 'facilities_alert_end_hour', label: 'Overdue alerts until', show: (v) => hourLabel(Number(v)) },
+  { key: 'facilities_licences_enabled', label: 'Licences' },
+  { key: 'facilities_subscriptions_enabled', label: 'Subscriptions' },
+  { key: 'facilities_alert_start_hour', label: 'Alerts from', show: (v) => hourLabel(Number(v)) },
+  { key: 'facilities_alert_end_hour', label: 'Alerts until', show: (v) => hourLabel(Number(v)) },
 ]
 
 function FacilitiesForm({ settings }: { settings: TenantSettings }) {
@@ -110,6 +112,8 @@ function FacilitiesForm({ settings }: { settings: TenantSettings }) {
   )
   const [alertStart, setAlertStart] = useState(settings.facilities_alert_start_hour ?? 9)
   const [alertEnd, setAlertEnd] = useState(settings.facilities_alert_end_hour ?? 17)
+  const [licences, setLicences] = useState(settings.facilities_licences_enabled ?? true)
+  const [subscriptions, setSubscriptions] = useState(settings.facilities_subscriptions_enabled ?? true)
 
   const guard = useGuardedSave({
     data: settings,
@@ -127,6 +131,8 @@ function FacilitiesForm({ settings }: { settings: TenantSettings }) {
       checklist_roles: checklistRoles,
       facilities_alert_start_hour: alertStart,
       facilities_alert_end_hour: alertEnd,
+      facilities_licences_enabled: licences,
+      facilities_subscriptions_enabled: subscriptions,
     }),
     apply: (v) => {
       if (v.facilities_equipment_enabled !== undefined) setEquipment(v.facilities_equipment_enabled)
@@ -138,6 +144,8 @@ function FacilitiesForm({ settings }: { settings: TenantSettings }) {
       if (v.checklist_roles !== undefined) setChecklistRoles(v.checklist_roles)
       if (v.facilities_alert_start_hour !== undefined) setAlertStart(v.facilities_alert_start_hour)
       if (v.facilities_alert_end_hour !== undefined) setAlertEnd(v.facilities_alert_end_hour)
+      if (v.facilities_licences_enabled !== undefined) setLicences(v.facilities_licences_enabled)
+      if (v.facilities_subscriptions_enabled !== undefined) setSubscriptions(v.facilities_subscriptions_enabled)
     },
     alsoRefresh: [['facilities']],
     savedMessage: 'Facilities settings saved',
@@ -185,6 +193,18 @@ function FacilitiesForm({ settings }: { settings: TenantSettings }) {
           description="Scheduled checks (opening, cleaning, safety) done by the roles below. You set up the checklists in Facilities → Checklists."
           checked={checklists}
           onChange={setChecklists}
+        />
+        <Switch
+          label="Licences"
+          description="Music licence, building WOF, pool and fire certificates, with expiry reminders."
+          checked={licences}
+          onChange={setLicences}
+        />
+        <Switch
+          label="Subscriptions"
+          description="Software and services the gym pays for, with renewal reminders and monthly totals."
+          checked={subscriptions}
+          onChange={setSubscriptions}
         />
       </Card>
 
@@ -236,11 +256,11 @@ function FacilitiesForm({ settings }: { settings: TenantSettings }) {
           checked={alertEmail}
           onChange={setAlertEmail}
         />
-        {checklists && (
+        {(checklists || licences || subscriptions) && (
           <div className="pt-3 border-t border-gray-50">
-            <p className="text-sm font-medium text-gray-900">Overdue check alerts</p>
+            <p className="text-sm font-medium text-gray-900">Alert hours</p>
             <p className="text-xs text-gray-400 mt-0.5 mb-2">
-              Sent only between these hours (gym time). A check that goes overdue overnight is alerted when the window opens.
+              Overdue checks and renewal reminders are sent only between these hours (gym time). Anything due overnight is sent when the window opens.
             </p>
             <div className="flex items-center gap-2 text-sm">
               <label className="flex items-center gap-2">

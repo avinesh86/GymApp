@@ -34,6 +34,8 @@ beforeEach(() => {
     checklist_roles: ['owner', 'admin', 'gym_manager', 'team_leader'],
     facilities_alert_start_hour: 9,
     facilities_alert_end_hour: 17,
+    facilities_licences_enabled: true,
+    facilities_subscriptions_enabled: true,
   } as never)
   vi.mocked(updateTenantSettings).mockResolvedValue({} as never)
 })
@@ -195,6 +197,24 @@ describe('Settings → Facilities', () => {
           checklist_roles: ['owner', 'admin', 'gym_manager', 'team_leader', 'payroll'],
           facilities_alert_start_hour: 8,
           facilities_alert_end_hour: 18,
+        }),
+      ),
+    )
+  })
+
+  it('licences and subscriptions can each be switched off', async () => {
+    renderTab()
+    const licences = await screen.findByRole('switch', { name: 'Licences' })
+    await waitFor(() => expect(licences).toHaveAttribute('aria-checked', 'true'))
+    await userEvent.click(licences)
+    await userEvent.click(screen.getByRole('switch', { name: 'Subscriptions' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save Facilities Settings' }))
+
+    await waitFor(() =>
+      expect(updateTenantSettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          facilities_licences_enabled: false,
+          facilities_subscriptions_enabled: false,
         }),
       ),
     )
