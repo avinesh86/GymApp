@@ -29,14 +29,14 @@ class Command(BaseCommand):
 
         results = []
 
-        # 1. Generate upcoming recurring timetable events (daily)
+        # 1. Generate upcoming recurring timetable events (hourly)
         results.append(self._run_task(
             "Generate recurring events",
             "apps.timetable.tasks",
             "generate_upcoming_recurring_events",
         ))
 
-        # 2. Check unfilled classes (daily)
+        # 2. Check unfilled classes (hourly)
         results.append(self._run_task(
             "Check unfilled classes",
             "apps.timetable.tasks",
