@@ -71,10 +71,14 @@ async function clickNamed(page, name) {
   const target = named(page, name).filter({ visible: true }).first()
   const menu = page.getByRole('button', { name: 'Open menu' })
   // On a phone the sidebar sits behind the menu button.
+  // Let the current screen finish loading before deciding it isn't there.
+  await settle(page)
   try {
     await target.waitFor({ timeout: 3_000 })
   } catch {
-    if (await menu.isVisible()) await menu.click()
+    // Only open the menu when the control isn't on the page at all; opening
+    // it over a control that is merely slow would cover that control.
+    if ((await named(page, name).count()) === 0 && (await menu.isVisible())) await menu.click()
     try {
       await target.waitFor({ timeout: TIMEOUT })
     } catch {
@@ -106,6 +110,8 @@ try {
     await page.getByRole('button', { name: 'Sign in' }).click()
     const signedIn = page.getByRole('link', { name: 'Dashboard' })
       .or(page.getByRole('button', { name: 'Open menu' }))
+      // Staff without the Dashboard permission still get Sign out.
+      .or(page.getByRole('button', { name: 'Sign out' }))
       .filter({ visible: true }).first()
     try {
       await signedIn.waitFor({ timeout: TIMEOUT })

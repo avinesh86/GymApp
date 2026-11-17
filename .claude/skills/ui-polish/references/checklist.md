@@ -3,10 +3,10 @@
 Work top to bottom. Earlier sections hurt people more. For each item, the
 "why" says what goes wrong for a gym owner or instructor if it's missed.
 
-## 1. Phone (390px wide, plus 360px for small Androids)
-
 Items marked **(behaviour)** change what the app does, not only how it
 looks: they need a test and may need the owner (see SKILL.md step 3).
+
+## 1. Phone (390px wide, plus 360px for small Androids)
 
 Instructors check cover and timetables on their phones between classes, so a
 broken phone layout locks them out.
@@ -65,7 +65,7 @@ what happened and what to do next.
       least one day").
 - [ ] No raw API errors, field keys (`start_datetime`), status enums
       (`needs_cover`) or stack traces on screen. Map them to words ("Needs
-      cover").
+      Cover").
 - [ ] Match the app's casing: Title Case for buttons, headings and menu
       items. Use the same terms on every screen (pick "class" or "session"
       and keep it).
