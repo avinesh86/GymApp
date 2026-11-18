@@ -118,6 +118,14 @@ class Command(BaseCommand):
             "run_checklists",
         ))
 
+        # 9. Licence expiry and subscription renewal reminders (within the
+        #    gym's alert hours; each reminder goes once).
+        results.append(self._run_task(
+            "Send renewal reminders",
+            "apps.facilities.tasks",
+            "send_renewal_reminders",
+        ))
+
         self.stdout.write("")
         self.stdout.write("━" * 60)
         passed = sum(1 for ok, _ in results if ok)

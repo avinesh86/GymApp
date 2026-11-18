@@ -236,3 +236,103 @@ class ChecklistAnswer(models.Model):
     class Meta:
         db_table = "facilities_checklist_answer"
         ordering = ["id"]
+
+
+# ─── Licences and subscriptions ──────────────────────────────────────────────
+
+
+def default_licence_reminders():
+    return [60, 30, 7, 0]
+
+
+def default_subscription_reminders():
+    return [30, 7]
+
+
+class Licence(TenantAwareModel):
+    """A business licence or certificate the gym must keep current."""
+
+    class Kind(models.TextChoices):
+        MUSIC = "music", "Music licence"
+        BUILDING_WOF = "building_wof", "Building WOF"
+        POOL_HEALTH = "pool_health", "Pool / health certificate"
+        FIRE = "fire", "Fire inspection"
+        FOOD = "food", "Food licence"
+        ALCOHOL = "alcohol", "Alcohol licence"
+        GROUP_FITNESS = "group_fitness", "Group Fitness"
+        OPERATIONS = "operations", "Operations"
+        OTHER = "other", "Other"
+
+    site = models.ForeignKey(
+        "tenants.Site", null=True, blank=True, on_delete=models.SET_NULL, related_name="licences"
+    )
+    name = models.CharField(max_length=200)
+    kind = models.CharField(max_length=20, choices=Kind.choices, default=Kind.OTHER)
+    issuer = models.CharField(max_length=200, blank=True)
+    number = models.CharField(max_length=120, blank=True)
+    issued_on = models.DateField(null=True, blank=True)
+    expires_on = models.DateField(null=True, blank=True, db_index=True)
+    cost = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    responsible = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    document = models.FileField(upload_to="facilities/licences/", null=True, blank=True)
+    notes = models.TextField(blank=True)
+    # Days before expiry to send a reminder, chosen per licence (0 = on the day).
+    reminder_days = models.JSONField(default=default_licence_reminders, blank=True)
+    # Which of those have gone for the current expiry date.
+    reminders_sent = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        db_table = "facilities_licence"
+        ordering = ["expires_on", "name"]
+
+    def __str__(self):
+        return self.name
+
+
+class Subscription(TenantAwareModel):
+    """Software or a service the gym pays for on a cycle."""
+
+    class Category(models.TextChoices):
+        SOFTWARE = "software", "Software"
+        SERVICE = "service", "Service"
+        UTILITIES = "utilities", "Utilities"
+        EQUIPMENT_LEASE = "equipment_lease", "Equipment lease"
+        OTHER = "other", "Other"
+
+    class Cycle(models.TextChoices):
+        MONTHLY = "monthly", "Monthly"
+        QUARTERLY = "quarterly", "Quarterly"
+        YEARLY = "yearly", "Yearly"
+
+    CYCLE_MONTHS = {"monthly": 1, "quarterly": 3, "yearly": 12}
+
+    site = models.ForeignKey(
+        "tenants.Site", null=True, blank=True, on_delete=models.SET_NULL, related_name="subscriptions"
+    )
+    name = models.CharField(max_length=200)
+    provider = models.CharField(max_length=200, blank=True)
+    category = models.CharField(max_length=20, choices=Category.choices, default=Category.SOFTWARE)
+    cost = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    billing_cycle = models.CharField(max_length=10, choices=Cycle.choices, default=Cycle.MONTHLY)
+    next_renewal = models.DateField(null=True, blank=True, db_index=True)
+    auto_renew = models.BooleanField(default=True)
+    # Days' notice needed to cancel; reminders count back from the last day
+    # to give notice, so there is still time to act on them.
+    notice_days = models.PositiveSmallIntegerField(default=0)
+    responsible = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    document = models.FileField(upload_to="facilities/subscriptions/", null=True, blank=True)
+    notes = models.TextField(blank=True)
+    is_active = models.BooleanField(default=True)  # False once cancelled
+    reminder_days = models.JSONField(default=default_subscription_reminders, blank=True)
+    reminders_sent = models.JSONField(default=list, blank=True)
+
+    class Meta:
+        db_table = "facilities_subscription"
+        ordering = ["next_renewal", "name"]
+
+    def __str__(self):
+        return self.name

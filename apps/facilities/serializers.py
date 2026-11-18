@@ -1,9 +1,26 @@
+from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from apps.tenants.models import Site
 
 from .checklists import can_do, checklist_roles, open_overdue_filter, run_status
-from .models import ChecklistAnswer, ChecklistItem, ChecklistRun, ChecklistTemplate, Equipment, FaultReport
+from .models import (
+    ChecklistAnswer,
+    ChecklistItem,
+    ChecklistRun,
+    ChecklistTemplate,
+    Equipment,
+    FaultReport,
+    Licence,
+    Subscription,
+)
+from .renewals import (
+    clean_reminder_days,
+    licence_status,
+    monthly_cost,
+    subscription_deadline,
+    subscription_status,
+)
 
 
 def _person(user) -> str:
@@ -292,3 +309,138 @@ class CompleteRunSerializer(serializers.Serializer):
     answers = serializers.ListField(child=serializers.DictField(), allow_empty=False)
     notes = serializers.CharField(required=False, allow_blank=True, max_length=2000)
 
+
+
+# ─── Licences and subscriptions ──────────────────────────────────────────────
+
+
+class _RenewalRecord(_TenantScopedRelations, serializers.ModelSerializer):
+    """Shared by licences and subscriptions: site, responsible person,
+    reminder days and the attached document."""
+
+    site = serializers.PrimaryKeyRelatedField(queryset=Site.objects.all(), allow_null=True, required=False)
+    site_name = serializers.CharField(source="site.name", read_only=True, default="")
+    responsible_name = serializers.SerializerMethodField()
+    document_url = serializers.SerializerMethodField()
+    document_name = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField()
+
+    def get_responsible_name(self, obj) -> str:
+        return _person(obj.responsible)
+
+    def get_document_url(self, obj):
+        if not obj.document:
+            return None
+        return self.context["request"].build_absolute_uri(obj.document.url)
+
+    def get_document_name(self, obj) -> str:
+        return obj.document.name.rsplit("/", 1)[-1] if obj.document else ""
+
+    def validate_responsible(self, user):
+        if user is None:
+            return user
+        from .services import FACILITIES_ROLES
+
+        member = user.memberships.filter(tenant=self._tenant(), is_active=True).first()
+        if member is None or member.role not in FACILITIES_ROLES:
+            raise serializers.ValidationError("Choose someone with Facilities access at this gym.")
+        return user
+
+    def validate_reminder_days(self, value):
+        try:
+            return clean_reminder_days(value)
+        except ValueError as exc:
+            raise serializers.ValidationError(str(exc))
+
+    def update(self, instance, validated_data):
+        # A new date, or new reminder days, starts the reminders again.
+        watched = self.Meta.reminder_reset_fields
+        if any(f in validated_data and validated_data[f] != getattr(instance, f) for f in watched):
+            validated_data["reminders_sent"] = []
+        return super().update(instance, validated_data)
+
+    def _today(self):
+        from apps.core.timezones import local_today
+
+        return local_today(self._tenant())
+
+
+class LicenceSerializer(_RenewalRecord):
+    responsible = serializers.PrimaryKeyRelatedField(
+        queryset=get_user_model().objects.all(), allow_null=True, required=False
+    )
+    days_left = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Licence
+        fields = [
+            "id", "site", "site_name", "name", "kind", "issuer", "number", "issued_on",
+            "expires_on", "cost", "responsible", "responsible_name", "document_url",
+            "document_name", "notes", "reminder_days", "status", "days_left",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = [
+            "id", "site_name", "responsible_name", "document_url", "document_name",
+            "status", "days_left", "created_at", "updated_at",
+        ]
+        reminder_reset_fields = ("expires_on", "reminder_days")
+
+    def get_status(self, obj) -> str:
+        return licence_status(obj, self._today())
+
+    def get_days_left(self, obj):
+        return (obj.expires_on - self._today()).days if obj.expires_on else None
+
+    def validate(self, attrs):
+        issued = attrs.get("issued_on", getattr(self.instance, "issued_on", None))
+        expires = attrs.get("expires_on", getattr(self.instance, "expires_on", None))
+        if issued and expires and expires < issued:
+            raise serializers.ValidationError({"expires_on": "Expiry can't be before the issue date."})
+        return attrs
+
+
+class SubscriptionSerializer(_RenewalRecord):
+    responsible = serializers.PrimaryKeyRelatedField(
+        queryset=get_user_model().objects.all(), allow_null=True, required=False
+    )
+    monthly_cost = serializers.SerializerMethodField()
+    act_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Subscription
+        fields = [
+            "id", "site", "site_name", "name", "provider", "category", "cost", "billing_cycle",
+            "next_renewal", "auto_renew", "notice_days", "act_by", "responsible",
+            "responsible_name", "document_url", "document_name", "notes", "is_active",
+            "reminder_days", "status", "monthly_cost", "created_at", "updated_at",
+        ]
+        read_only_fields = [
+            "id", "site_name", "act_by", "responsible_name", "document_url", "document_name",
+            "status", "monthly_cost", "created_at", "updated_at",
+        ]
+        reminder_reset_fields = ("next_renewal", "notice_days", "reminder_days", "is_active")
+
+    def get_status(self, obj) -> str:
+        return subscription_status(obj, self._today())
+
+    def get_monthly_cost(self, obj) -> str:
+        return str(monthly_cost(obj))
+
+    def get_act_by(self, obj):
+        deadline = subscription_deadline(obj)
+        return deadline.isoformat() if deadline else None
+
+    # Unless chosen, reminders suit the cycle: a monthly subscription that
+    # reminded 30 days out would remind every month.
+    DEFAULT_REMINDERS = {"monthly": [], "quarterly": [14], "yearly": [30, 7]}
+
+    def create(self, validated_data):
+        if "reminder_days" not in validated_data:
+            cycle = validated_data.get("billing_cycle", Subscription.Cycle.MONTHLY)
+            validated_data["reminder_days"] = list(self.DEFAULT_REMINDERS[cycle])
+        return super().create(validated_data)
+
+    def validate_notice_days(self, value):
+        if value > 365:
+            raise serializers.ValidationError("At most 365 days.")
+        return value

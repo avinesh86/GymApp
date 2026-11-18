@@ -65,6 +65,8 @@ class TenantSettingsSerializer(serializers.ModelSerializer):
             "checklist_roles",
             "facilities_alert_start_hour",
             "facilities_alert_end_hour",
+            "facilities_licences_enabled",
+            "facilities_subscriptions_enabled",
             "notification_from_email",
             "notification_from_name",
             "notification_email_password",

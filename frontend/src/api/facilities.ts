@@ -10,7 +10,10 @@ import type {
   FacilitiesSummary,
   FaultBoardItem,
   FaultReport,
+  Licence,
   PaginatedResponse,
+  Subscription,
+  SubscriptionTotals,
 } from '../types'
 
 function unwrapList<T>(data: T[] | PaginatedResponse<T>): T[] {
@@ -194,4 +197,65 @@ export async function uploadCheckPhoto(answerId: number, file: File): Promise<vo
   await apiClient.post(`facilities/checklist-answers/${answerId}/photo/`, body, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
+}
+
+// ─── Licences and subscriptions ───────────────────────────────────────────────
+
+export async function listFacilitiesPeople(): Promise<{ id: number; name: string }[]> {
+  const response = await apiClient.get<{ id: number; name: string }[]>('facilities/people/')
+  return response.data
+}
+
+type RecordKind = 'licences' | 'subscriptions'
+
+async function listRecords<T>(kind: RecordKind, filters: SiteFilter): Promise<T[]> {
+  const response = await apiClient.get<T[] | PaginatedResponse<T>>(`facilities/${kind}/`, {
+    params: { page_size: 200, ...siteParams(filters) },
+  })
+  return unwrapList(response.data)
+}
+
+async function saveRecord<T>(kind: RecordKind, id: number | undefined, data: object): Promise<T> {
+  const response = id
+    ? await apiClient.patch<T>(`facilities/${kind}/${id}/`, data)
+    : await apiClient.post<T>(`facilities/${kind}/`, data)
+  return response.data
+}
+
+async function attachDocument<T>(kind: RecordKind, id: number, file: File): Promise<T> {
+  const body = new FormData()
+  body.append('document', file)
+  const response = await apiClient.post<T>(`facilities/${kind}/${id}/document/`, body, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return response.data
+}
+
+async function removeDocument<T>(kind: RecordKind, id: number): Promise<T> {
+  const response = await apiClient.delete<T>(`facilities/${kind}/${id}/document/`)
+  return response.data
+}
+
+export type LicenceInput = Partial<Omit<Licence, 'id' | 'site_name' | 'responsible_name' | 'document_url' | 'document_name' | 'status' | 'days_left'>>
+export type SubscriptionInput = Partial<Omit<Subscription, 'id' | 'site_name' | 'responsible_name' | 'document_url' | 'document_name' | 'status' | 'monthly_cost' | 'act_by'>>
+
+export const listLicences = (filters: SiteFilter = {}) => listRecords<Licence>('licences', filters)
+export const saveLicence = (id: number | undefined, data: LicenceInput) => saveRecord<Licence>('licences', id, data)
+export const deleteLicence = (id: number) => apiClient.delete(`facilities/licences/${id}/`)
+export const attachLicenceDocument = (id: number, file: File) => attachDocument<Licence>('licences', id, file)
+export const removeLicenceDocument = (id: number) => removeDocument<Licence>('licences', id)
+
+export const listSubscriptions = (filters: SiteFilter = {}) => listRecords<Subscription>('subscriptions', filters)
+export const saveSubscription = (id: number | undefined, data: SubscriptionInput) =>
+  saveRecord<Subscription>('subscriptions', id, data)
+export const deleteSubscription = (id: number) => apiClient.delete(`facilities/subscriptions/${id}/`)
+export const attachSubscriptionDocument = (id: number, file: File) =>
+  attachDocument<Subscription>('subscriptions', id, file)
+export const removeSubscriptionDocument = (id: number) => removeDocument<Subscription>('subscriptions', id)
+
+export async function getSubscriptionTotals(filters: SiteFilter = {}): Promise<SubscriptionTotals> {
+  const response = await apiClient.get<SubscriptionTotals>('facilities/subscriptions/totals/', {
+    params: siteParams(filters),
+  })
+  return response.data
 }

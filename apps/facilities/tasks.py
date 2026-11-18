@@ -21,3 +21,20 @@ def run_checklists():
         except Exception:
             logger.exception("Checklist run failed for tenant %s", tenant.pk)
     return {"created": created, "alerted": alerted}
+
+
+@shared_task(name="facilities.send_renewal_reminders")
+def send_renewal_reminders():
+    """Hourly: licence expiry and subscription renewal reminders, on the
+    days each record asks for, within each gym's alert hours."""
+    from apps.tenants.models import Tenant
+
+    from .renewals import send_renewal_reminders as send_for
+
+    sent = 0
+    for tenant in Tenant.objects.filter(is_active=True):
+        try:
+            sent += send_for(tenant)
+        except Exception:
+            logger.exception("Renewal reminders failed for tenant %s", tenant.pk)
+    return {"sent": sent}

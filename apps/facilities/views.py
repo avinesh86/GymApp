@@ -1,5 +1,6 @@
 import uuid
 from datetime import timedelta
+from decimal import Decimal
 
 from django.core.files import File
 from django.db import transaction
@@ -28,14 +29,18 @@ from .checklists import (
     is_due_on,
     open_overdue_filter,
 )
-from .models import ChecklistAnswer, ChecklistRun, ChecklistTemplate, Equipment, FaultReport
+from .models import ChecklistAnswer, ChecklistRun, ChecklistTemplate, Equipment, FaultReport, Licence, Subscription
+from .renewals import monthly_cost
 from .permissions import (
     CanManageChecklists,
     CanManageFacilities,
+    CanManageRecords,
     ChecklistsEnabled,
     EquipmentEnabled,
     FaultReportingEnabled,
+    LicencesEnabled,
     MaintenanceEnabled,
+    SubscriptionsEnabled,
 )
 from .serializers import (
     ChecklistRunSerializer,
@@ -44,6 +49,8 @@ from .serializers import (
     EquipmentSerializer,
     FaultBoardSerializer,
     FaultReportSerializer,
+    LicenceSerializer,
+    SubscriptionSerializer,
 )
 from .services import apply_status_change, can_manage_facilities, get_config, notify_fault_reported, sync_equipment_status
 
@@ -91,6 +98,9 @@ class FacilitiesConfigView(APIView):
             "maintenance_enabled": config.maintenance_enabled,
             "fault_reporting_enabled": config.fault_reporting_enabled,
             "checklists_enabled": config.checklists_enabled,
+            "licences_enabled": config.licences_enabled,
+            "subscriptions_enabled": config.subscriptions_enabled,
+            "can_manage_records": request.user.role in ("owner", "admin", "gym_manager"),
             # Only roles that can open Facilities ever do checklists.
             "can_do_checklists": can_do_checklists,
             "can_manage_checklists": request.user.role in ("owner", "admin", "gym_manager"),
@@ -528,3 +538,101 @@ class ChecklistAnswerPhotoView(APIView):
         answer.photo.save(f"{uuid.uuid4().hex}.{ext}", File(photo), save=False)
         answer.save(update_fields=["photo"])
         return Response({"id": answer.id, "photo": request.build_absolute_uri(answer.photo.url)})
+
+
+# ─── Licences and subscriptions ──────────────────────────────────────────────
+
+DOCUMENT_TYPES = ("application/pdf", "image/")
+MAX_DOCUMENT_BYTES = 15 * 1024 * 1024
+
+
+class _DocumentMixin:
+    """POST a file to .../document/ to attach it; DELETE to remove it."""
+
+    @action(detail=True, methods=["post", "delete"], url_path="document")
+    def document(self, request, pk=None):
+        record = self.get_object()
+        if request.method == "DELETE":
+            record.document.delete(save=False)
+            record.document = None
+            record.save(update_fields=["document", "updated_at"])
+            return Response(self.get_serializer(record).data)
+        upload = request.FILES.get("document")
+        if upload is None:
+            return Response({"detail": "Choose a file."}, status=400)
+        content_type = upload.content_type or ""
+        if not (content_type == "application/pdf" or content_type.startswith("image/")):
+            return Response({"detail": "Upload a PDF or a photo."}, status=400)
+        if upload.size > MAX_DOCUMENT_BYTES:
+            return Response({"detail": "Files must be under 15 MB."}, status=400)
+        if record.document:
+            record.document.delete(save=False)
+        record.document = upload
+        record.save(update_fields=["document", "updated_at"])
+        return Response(self.get_serializer(record).data)
+
+
+class LicenceViewSet(_DocumentMixin, TenantScopedMixin, viewsets.ModelViewSet):
+    serializer_class = LicenceSerializer
+    permission_classes = [CanManageRecords, LicencesEnabled]
+    queryset = Licence.objects.all()
+    filterset_fields = ["kind"]
+    search_fields = ["name", "issuer", "number"]
+
+    def get_queryset(self):
+        qs = super().get_queryset().select_related("site", "responsible")
+        # Undated ones last, soonest expiry first.
+        from django.db.models import F
+
+        qs = qs.order_by(F("expires_on").asc(nulls_last=True), "name", "id")
+        return _filter_site(qs, self.request)
+
+
+class SubscriptionViewSet(_DocumentMixin, TenantScopedMixin, viewsets.ModelViewSet):
+    serializer_class = SubscriptionSerializer
+    permission_classes = [CanManageRecords, SubscriptionsEnabled]
+    queryset = Subscription.objects.all()
+    filterset_fields = ["category", "billing_cycle", "is_active"]
+    search_fields = ["name", "provider"]
+
+    def get_queryset(self):
+        from django.db.models import F
+
+        qs = super().get_queryset().select_related("site", "responsible")
+        qs = qs.order_by("-is_active", F("next_renewal").asc(nulls_last=True), "name", "id")
+        return _filter_site(qs, self.request)
+
+    @action(detail=False, methods=["get"])
+    def totals(self, request):
+        """What active subscriptions cost, per month and per year."""
+        subs = self.get_queryset().filter(is_active=True)
+        month = sum((monthly_cost(s) for s in subs), Decimal("0"))
+        return Response({
+            "count": subs.count(),
+            "per_month": str(month.quantize(Decimal("0.01"))),
+            "per_year": str((month * 12).quantize(Decimal("0.01"))),
+        })
+
+
+class FacilitiesPeopleView(APIView):
+    """People who can be made responsible for a licence or subscription:
+    active staff with Facilities access at this gym."""
+
+    permission_classes = [CanManageFacilities]
+
+    def get(self, request):
+        from apps.users.models import User
+
+        from .services import FACILITIES_ROLES
+
+        users = (
+            User.objects.filter(
+                memberships__tenant=request.tenant,
+                memberships__is_active=True,
+                memberships__role__in=FACILITIES_ROLES,
+                is_active=True,
+            )
+            .distinct()
+            .order_by("first_name", "last_name", "email")
+        )
+        return Response([{"id": u.id, "name": u.full_name or u.email} for u in users])

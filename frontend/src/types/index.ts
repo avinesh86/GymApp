@@ -76,6 +76,8 @@ export interface TenantSettings {
   checklist_roles?: UserRole[]
   facilities_alert_start_hour?: number
   facilities_alert_end_hour?: number
+  facilities_licences_enabled?: boolean
+  facilities_subscriptions_enabled?: boolean
 }
 
 /** How strongly a class's own colour shows on its timetable tile. */
@@ -639,6 +641,10 @@ export interface FacilitiesConfig {
   has_any_checklists: boolean
   /** Owner, admin and gym manager set checklists up. */
   can_manage_checklists: boolean
+  licences_enabled: boolean
+  subscriptions_enabled: boolean
+  /** Owner, admin and gym manager change licences and subscriptions. */
+  can_manage_records: boolean
   can_manage: boolean
   is_alert_recipient: boolean
   sites: { id: number; name: string }[]
@@ -851,4 +857,75 @@ export type EquipmentHistoryEvent =
 export interface EquipmentHistory {
   equipment: Equipment
   events: EquipmentHistoryEvent[]
+}
+
+// ─── Facilities: licences and subscriptions ──────────────────────────────────
+
+export type LicenceKind =
+  | 'music'
+  | 'building_wof'
+  | 'pool_health'
+  | 'fire'
+  | 'food'
+  | 'alcohol'
+  | 'group_fitness'
+  | 'operations'
+  | 'other'
+export type LicenceStatus = 'valid' | 'expiring' | 'expired' | 'no_expiry'
+
+export interface Licence {
+  id: number
+  site: number | null
+  site_name: string
+  name: string
+  kind: LicenceKind
+  issuer: string
+  number: string
+  issued_on: string | null
+  expires_on: string | null
+  cost: string | null
+  responsible: number | null
+  responsible_name: string
+  document_url: string | null
+  document_name: string
+  notes: string
+  /** Days before expiry to remind; 0 = on the day. */
+  reminder_days: number[]
+  status: LicenceStatus
+  days_left: number | null
+}
+
+export type SubscriptionCategory = 'software' | 'service' | 'utilities' | 'equipment_lease' | 'other'
+export type BillingCycle = 'monthly' | 'quarterly' | 'yearly'
+export type SubscriptionStatus = 'active' | 'renewing' | 'lapsed' | 'cancelled'
+
+export interface Subscription {
+  id: number
+  site: number | null
+  site_name: string
+  name: string
+  provider: string
+  category: SubscriptionCategory
+  cost: string | null
+  billing_cycle: BillingCycle
+  next_renewal: string | null
+  auto_renew: boolean
+  notice_days: number
+  /** Last day to give notice (renewal less the notice period). */
+  act_by: string | null
+  responsible: number | null
+  responsible_name: string
+  document_url: string | null
+  document_name: string
+  notes: string
+  is_active: boolean
+  reminder_days: number[]
+  status: SubscriptionStatus
+  monthly_cost: string
+}
+
+export interface SubscriptionTotals {
+  count: number
+  per_month: string
+  per_year: string
 }
