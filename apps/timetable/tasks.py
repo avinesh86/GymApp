@@ -16,11 +16,13 @@ logger = logging.getLogger(__name__)
 @shared_task(name="timetable.generate_upcoming_recurring_events")
 def generate_upcoming_recurring_events():
     """
-    Runs daily.  Generates timetable events for the next 4 weeks for every
+    Runs hourly.  Generates timetable events for the next 4 weeks for every
     active recurring rule across all active tenants.
     """
     rules = (
-        RecurringTimetableRule.objects.filter(is_active=True, tenant__is_active=True)
+        RecurringTimetableRule.objects.filter(
+            is_active=True, is_deleted=False, class_type__is_deleted=False, tenant__is_active=True,
+        )
         .select_related("tenant", "class_type", "site", "instructor")
     )
 
@@ -42,7 +44,7 @@ def generate_upcoming_recurring_events():
 @shared_task(name="timetable.check_unfilled_classes")
 def check_unfilled_classes():
     """
-    Runs daily.  Flags upcoming events that have no instructor assigned.
+    Runs hourly.  Flags upcoming events that have no instructor assigned.
     """
     count = 0
     for tenant in Tenant.objects.filter(is_active=True).select_related("settings"):

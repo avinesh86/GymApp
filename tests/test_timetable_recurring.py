@@ -176,3 +176,83 @@ class RecurringEventGenerationTest(TestCase):
             event_date = event.start_datetime.date()
             self.assertGreaterEqual(event_date, next_monday)
             self.assertLessEqual(event_date, next_monday + timedelta(days=6))
+
+
+class RecurringGenerationKeepsManagersChangesTest(TestCase):
+    """The generator runs hourly, so it must not undo what managers did."""
+
+    def setUp(self):
+        self.tenant = TenantFactory()
+        TenantDomainFactory(tenant=self.tenant)
+        self.admin = UserFactory(tenant=self.tenant, role="admin")
+        self.class_type = ClassTypeFactory(tenant=self.tenant, duration_minutes=60)
+        self.instructor = StaffProfileFactory(tenant=self.tenant)
+        today = date.today()
+        self.monday = today + timedelta(days=(0 - today.weekday()) % 7 or 7)
+
+    def _rule(self):
+        from apps.timetable.models import RecurringTimetableRule
+
+        return RecurringTimetableRule.objects.create(
+            tenant=self.tenant, class_type=self.class_type, day_of_week=0,
+            start_time=time(9, 0), instructor=self.instructor,
+            valid_from=self.monday, is_active=True,
+            created_by=self.admin, updated_by=self.admin,
+        )
+
+    def test_class_moved_to_another_day_is_not_made_again_on_its_old_day(self):
+        from apps.timetable.models import TimetableEvent
+        from apps.timetable.services import generate_recurring_events
+
+        rule = self._rule()
+        generate_recurring_events(rule, self.monday, self.monday)
+        # bulk_create leaves pk unset on MySQL, so fetch the saved class.
+        event = TimetableEvent.objects.get(recurring_rule=rule)
+        # A manager moves this one class from Monday to Tuesday.
+        TimetableEvent.objects.filter(pk=event.pk).update(
+            start_datetime=event.start_datetime + timedelta(days=1),
+            end_datetime=event.end_datetime + timedelta(days=1),
+        )
+
+        again = generate_recurring_events(rule, self.monday, self.monday + timedelta(days=6))
+
+        self.assertEqual(again, [])
+        self.assertEqual(TimetableEvent.objects.filter(recurring_rule=rule).count(), 1)
+
+    def test_generated_class_records_the_day_it_was_made_for(self):
+        from apps.timetable.services import generate_recurring_events
+
+        (event,) = generate_recurring_events(self._rule(), self.monday, self.monday)
+        self.assertEqual(event.occurrence_date, self.monday)
+
+    def test_class_from_before_occurrence_date_existed_is_still_counted(self):
+        from apps.timetable.models import TimetableEvent
+        from apps.timetable.services import generate_recurring_events
+
+        rule = self._rule()
+        generate_recurring_events(rule, self.monday, self.monday)
+        TimetableEvent.objects.filter(recurring_rule=rule).update(occurrence_date=None)
+
+        self.assertEqual(generate_recurring_events(rule, self.monday, self.monday), [])
+
+    def test_deleted_rule_makes_no_classes(self):
+        from apps.timetable.models import TimetableEvent
+        from apps.timetable.tasks import generate_upcoming_recurring_events
+
+        rule = self._rule()
+        rule.soft_delete(deleted_by=self.admin)
+
+        generate_upcoming_recurring_events()
+
+        self.assertFalse(TimetableEvent.objects.filter(recurring_rule=rule).exists())
+
+    def test_rule_for_deleted_class_type_makes_no_classes(self):
+        from apps.timetable.models import TimetableEvent
+        from apps.timetable.services import generate_recurring_events
+
+        rule = self._rule()
+        self.class_type.soft_delete(deleted_by=self.admin)
+        rule.refresh_from_db()
+
+        self.assertEqual(generate_recurring_events(rule, self.monday, self.monday + timedelta(days=13)), [])
+        self.assertFalse(TimetableEvent.objects.filter(recurring_rule=rule).exists())

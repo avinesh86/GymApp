@@ -178,6 +178,36 @@ class TestUpdateSeries:
         assert rules.count() == 4
         assert {r.series_id for r in rules} == {series[0].series_id}
 
+    @pytest.mark.parametrize("moved, days", [(6, -13), (2, 10)], ids=["moved-back-past-cutoff", "moved-on-past-cutoff"])
+    def test_following_split_keeps_a_moved_class_with_the_rule_for_its_day(
+        self, nz_tenant, admin_user, series, moved, days,
+    ):
+        """A class moved across the split day stays with the rule that covers
+        the day it was made for, so neither rule makes it again."""
+        events = _events(nz_tenant)
+        pivot = events[4]  # third Monday
+        TimetableEvent.objects.filter(pk=events[moved].pk).update(
+            start_datetime=events[moved].start_datetime + timedelta(days=days),
+            end_datetime=events[moved].end_datetime + timedelta(days=days),
+        )
+
+        _post(nz_tenant, admin_user, "update-series", pivot.pk, {"scope": "following", "start_time": "18:00"})
+        _regenerate(nz_tenant)
+
+        assert len(_events(nz_tenant)) == 8
+
+    def test_following_split_to_an_earlier_time_does_not_duplicate_the_class(
+        self, nz_tenant, admin_user, series,
+    ):
+        """The class the edit starts from moves before its old start time; it
+        must still go to the new rule, or that rule makes it again."""
+        pivot = _events(nz_tenant)[4]
+        _post(nz_tenant, admin_user, "update-series", pivot.pk, {"scope": "following", "start_time": "06:00"})
+
+        _regenerate(nz_tenant)
+
+        assert len(_events(nz_tenant)) == 8
+
     def test_only_sent_fields_change(self, nz_tenant, admin_user, series):
         events = _events(nz_tenant)
         moved = events[1]

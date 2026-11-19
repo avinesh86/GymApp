@@ -191,6 +191,15 @@ class TimetableEvent(TenantAwareModel):
         db_index=True,
         help_text="Groups all instances of a recurring series.",
     )
+    occurrence_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text=(
+            "The gym-local day the recurring rule generated this class for. "
+            "Kept when the class is moved to another day, so the generator "
+            "doesn't make a new class on the old day."
+        ),
+    )
     # Per-event viability overrides (null = use ClassType thresholds)
     amber_threshold_override = models.PositiveIntegerField(null=True, blank=True)
     green_threshold_override = models.PositiveIntegerField(null=True, blank=True)

@@ -38,7 +38,9 @@ def generate_recurring_events(rule: RecurringTimetableRule, from_date: date, to_
     """
     from apps.timetable.models import ClassType
 
-    if not rule.is_active:
+    # A deleted rule (or one for a deleted class type) is gone from the
+    # timetable screens, so it must stop making classes.
+    if not rule.is_active or rule.is_deleted or rule.class_type.is_deleted:
         return []
 
     effective_from = max(from_date, rule.valid_from)
@@ -51,11 +53,21 @@ def generate_recurring_events(rule: RecurringTimetableRule, from_date: date, to_
     # dates in the gym's timezone, not UTC.
     tz = tenant_timezone(rule.tenant)
     range_start, range_end = local_day_bounds(rule.tenant, effective_from, effective_to)
-    existing_dates = {
+    # A day is taken once a class was generated for it, wherever that class
+    # sits now: a manager may have moved it to another day, and making a new
+    # one on the old day would duplicate it. Cancelled and deleted classes
+    # count too, so they stay gone.
+    rule_events = TimetableEvent.objects.filter(tenant=rule.tenant, recurring_rule=rule)
+    existing_dates = set(
+        rule_events.filter(
+            occurrence_date__gte=effective_from, occurrence_date__lte=effective_to,
+        ).values_list("occurrence_date", flat=True)
+    )
+    # Classes from before occurrence_date existed go by the day they're on.
+    existing_dates |= {
         timezone.localtime(start, tz).date()
-        for start in TimetableEvent.objects.filter(
-            tenant=rule.tenant,
-            recurring_rule=rule,
+        for start in rule_events.filter(
+            occurrence_date__isnull=True,
             start_datetime__gte=range_start,
             start_datetime__lt=range_end,
         ).values_list("start_datetime", flat=True)
@@ -83,6 +95,7 @@ def generate_recurring_events(rule: RecurringTimetableRule, from_date: date, to_
                     ),
                     recurring_rule=rule,
                     recurring_pattern_id=rule.series_id,
+                    occurrence_date=current,
                 )
             )
         current += timedelta(days=1)
@@ -269,9 +282,14 @@ def _update_series_rules(event: TimetableEvent, scope: str, rule_changes: dict, 
             rule.updated_by = updated_by
             rule.save(update_fields=["valid_to", "updated_by", "updated_at"])
             # Later classes now belong to the new rule, so generating for it
-            # finds them and does not create duplicates.
-            TimetableEvent.objects.filter(
-                tenant=event.tenant, recurring_rule=rule, start_datetime__gte=event.start_datetime,
+            # finds them and does not create duplicates. "Later" is the day a
+            # class was made for, not where it sits now: one moved across the
+            # cutoff must stay with the rule that covers its day.
+            from django.db.models import Q
+
+            TimetableEvent.objects.filter(tenant=event.tenant, recurring_rule=rule).filter(
+                Q(occurrence_date__gte=cutoff)
+                | Q(occurrence_date__isnull=True, start_datetime__gte=event.start_datetime)
             ).update(recurring_rule=new_rule)
         else:
             for field, value in rule_changes.items():
